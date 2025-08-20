@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { useAuthStore } from "@/stores/auth";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Trash2, Reply, User } from "lucide-react";
+import { ArrowLeft, Trash2, Reply } from "lucide-react";
 import { MessageWithUsers } from "@/types/message";
 import { toast } from "sonner";
 import Link from "next/link";
@@ -19,13 +19,7 @@ export default function MessageDetailPage() {
   const [message, setMessage] = useState<MessageWithUsers | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (user && params.id) {
-      loadMessage();
-    }
-  }, [user, params.id]);
-
-  const loadMessage = async () => {
+  const loadMessage = useCallback(async () => {
     try {
       setLoading(true);
       const response = await fetch(`/api/messages/${params.id}`);
@@ -44,7 +38,13 @@ export default function MessageDetailPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [params.id, router]);
+
+  useEffect(() => {
+    if (user && params.id) {
+      loadMessage();
+    }
+  }, [user, params.id, loadMessage]);
 
   const deleteMessage = async () => {
     if (!message) return;
@@ -171,7 +171,7 @@ export default function MessageDetailPage() {
               <UserAvatar
                 userId={sender.id}
                 username={sender.username}
-                avatarUrl={sender.avatar_url}
+                avatarUrl={sender.avatar_url ?? null}
                 size="md"
                 showActions={true}
                 isOwner={false}

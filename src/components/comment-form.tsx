@@ -416,7 +416,13 @@ export function CommentForm({
         }
       }
 
-      const commentData: any = {
+      const commentData: {
+        post_id: string;
+        author_id: string;
+        body: string;
+        parent_id?: string;
+        images?: string[];
+      } = {
         post_id: postId,
         author_id: user.id,
         body: body.trim(),
@@ -447,8 +453,13 @@ export function CommentForm({
 
       // 콜백 함수 호출
       onSuccess?.();
-    } catch (error: any) {
-      toast.error(error.message || "댓글 작성 중 오류가 발생했습니다");
+    } catch (error: unknown) {
+      const message =
+        error && typeof error === "object" && "message" in error
+          ? ((error as { message?: string }).message ??
+            "댓글 작성 중 오류가 발생했습니다")
+          : "댓글 작성 중 오류가 발생했습니다";
+      toast.error(message);
     } finally {
       setLoading(false);
     }

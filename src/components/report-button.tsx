@@ -5,7 +5,7 @@ import { Flag, Check } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useAuthStore } from "@/stores/auth";
 import { toast } from "sonner";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
   Dialog,
   DialogContent,
@@ -26,14 +26,14 @@ export function ReportButton({
   const supabase = createSupabaseBrowserClient();
   const user = useAuthStore((s) => s.user);
   const [hasReported, setHasReported] = useState(false);
-  const [reportId, setReportId] = useState<string | null>(null);
+  // reportId는 현재 UI에서 사용하지 않으므로 상태 제거
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const hasChecked = useRef(false);
 
   // 신고 상태 확인 함수
-  const checkReportStatus = async () => {
+  const checkReportStatus = useCallback(async () => {
     if (!user) {
       setChecking(false);
       return;
@@ -47,14 +47,14 @@ export function ReportButton({
 
       if (response.ok) {
         setHasReported(data.hasReported);
-        setReportId(data.reportId);
+        // id는 현재 UI에서 사용하지 않음
       }
     } catch (error) {
       console.error("신고 상태 확인 오류:", error);
     } finally {
       setChecking(false);
     }
-  };
+  }, [targetId, targetType, user]);
 
   // 초기 상태 확인 (한 번만 실행)
   useEffect(() => {
@@ -65,7 +65,7 @@ export function ReportButton({
 
     checkReportStatus();
     hasChecked.current = true;
-  }, [targetId, targetType, user]);
+  }, [checkReportStatus, user]);
 
   async function report() {
     if (!user) {
@@ -98,11 +98,16 @@ export function ReportButton({
       }
 
       setHasReported(true);
-      setReportId(data.id);
+      // id는 현재 UI에서 사용하지 않음
       setDialogOpen(false);
       toast.success("신고가 접수되었습니다");
-    } catch (error: any) {
-      toast.error(error.message || "신고 처리 중 오류가 발생했습니다");
+    } catch (error: unknown) {
+      const message =
+        error && typeof error === "object" && "message" in error
+          ? ((error as { message?: string }).message ??
+            "신고 처리 중 오류가 발생했습니다")
+          : "신고 처리 중 오류가 발생했습니다";
+      toast.error(message);
     } finally {
       setLoading(false);
     }

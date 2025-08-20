@@ -127,7 +127,19 @@ export default async function PostsManagementPage() {
                         </div>
                         <div className="flex items-center space-x-4 mt-2 text-xs text-muted-foreground">
                           <span>
-                            작성자: {post.profiles?.username || "익명"}
+                            작성자:{" "}
+                            {(() => {
+                              const p = (
+                                post as unknown as {
+                                  profiles?:
+                                    | { username?: string }
+                                    | { username?: string }[];
+                                }
+                              ).profiles;
+                              if (Array.isArray(p))
+                                return p[0]?.username ?? "익명";
+                              return p?.username ?? "익명";
+                            })()}
                           </span>
                           <span>
                             작성일:{" "}

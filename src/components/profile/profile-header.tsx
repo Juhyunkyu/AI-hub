@@ -36,7 +36,7 @@ export function ProfileHeader({
   const [isLoading, setIsLoading] = useState(false);
 
   const usernameInputRef = useRef<HTMLInputElement>(null);
-  const bioTextareaRef = useRef<HTMLTextareaElement>(null);
+  const bioTextareaRef = useRef<HTMLTextAreaElement>(null);
 
   // 편집 모드 시작 시 포커스
   useEffect(() => {

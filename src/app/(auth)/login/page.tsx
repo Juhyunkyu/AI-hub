@@ -29,8 +29,11 @@ export default function LoginPage() {
   }, [searchParams]);
 
   // 에러 메시지를 한국어로 변환하는 함수
-  function getErrorMessage(error: any): string {
-    const message = error?.message || "";
+  function getErrorMessage(error: unknown): string {
+    const message =
+      (error && typeof error === "object" && "message" in error
+        ? (error as { message?: string }).message
+        : "") || "";
 
     // 로그인 관련 에러
     if (message.includes("Invalid login credentials")) {
