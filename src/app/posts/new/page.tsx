@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { toast } from "sonner";
 import { useAuthStore } from "@/stores/auth";
 import { Badge } from "@/components/ui/badge";
@@ -24,6 +25,8 @@ import {
   Code2,
   Loader2,
   Search,
+  Home,
+  ChevronRight,
 } from "lucide-react";
 import {
   Tooltip,
@@ -74,6 +77,12 @@ export default function NewPostPage() {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const user = useAuthStore((s) => s.user);
   const isLoading = useAuthStore((s) => s.isLoading);
+  const editIdParam = params?.get("edit");
+  const categorySlugParam = params?.get("category") || null;
+  const isNoticeMode = useMemo(() => {
+    const t = params?.get("tag") || "";
+    return t.includes("공지");
+  }, [params]);
 
   const [title, setTitle] = useState("");
   const editorHtmlRef = useRef<string>("");
@@ -111,6 +120,18 @@ export default function NewPostPage() {
   const [selectedTopicIds, setSelectedTopicIds] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState("");
   const [tags, setTags] = useState<string[]>([]);
+  const [allowComments, setAllowComments] = useState<boolean>(true);
+  const [showInRecent, setShowInRecent] = useState<boolean>(true);
+  // 수정 모드에서 응답의 공지 여부를 반영하기 위한 상태
+  const [editNotice, setEditNotice] = useState<boolean>(false);
+  const activeNoticeMode = isNoticeMode || editNotice;
+  // 수정 모드 초기 로딩 중에는 공지/일반 판단 전까지 UI 깜빡임 방지
+  const [uiReady, setUiReady] = useState<boolean>(!Boolean(editIdParam));
+  // 관리자 핀 UI 상태
+  const [isPinned, setIsPinned] = useState<boolean>(false);
+  const [pinScope, setPinScope] = useState<"global" | "category">("global");
+  const [pinnedUntil, setPinnedUntil] = useState<string>("");
+  const [pinPriority, setPinPriority] = useState<number>(0);
 
   async function ensureKakaoLoaded(): Promise<void> {
     if (typeof window === "undefined") return;
@@ -261,6 +282,15 @@ export default function NewPostPage() {
         if (found) setSelectedCategoryId(found.id);
       }
 
+      // 공지 모드: 기본 카테고리 자동 선택 + 태그 사용 안 함
+      if (isNoticeMode && Array.isArray(c1) && c1.length) {
+        const fallbackSlug =
+          process.env.NEXT_PUBLIC_NOTICE_DEFAULT_CATEGORY_SLUG || "free";
+        const found = c1.find((c) => c.slug === fallbackSlug) || c1[0]!;
+        if (found) setSelectedCategoryId(found.id);
+        setTags([]);
+      }
+
       const editId = params?.get("edit");
       if (editId) {
         // 편집 모드: 기존 글 불러오기
@@ -283,13 +313,37 @@ export default function NewPostPage() {
           if (Array.isArray(j.tags)) {
             setTags(j.tags);
           }
+          // 공지 여부 및 옵션값 프리필
+          if (typeof j.post.is_notice === "boolean") {
+            setEditNotice(Boolean(j.post.is_notice));
+          }
+          if (typeof j.post.allow_comments === "boolean") {
+            setAllowComments(Boolean(j.post.allow_comments));
+          }
+          if (typeof j.post.show_in_recent === "boolean") {
+            setShowInRecent(Boolean(j.post.show_in_recent));
+          }
+          // 핀 프리필
+          if (typeof j.post.pin_scope === "string") {
+            setIsPinned(true);
+            setPinScope(
+              j.post.pin_scope === "category" ? "category" : "global"
+            );
+          }
+          if (typeof j.post.pin_priority === "number") {
+            setPinPriority(j.post.pin_priority);
+          }
+          if (typeof j.post.pinned_until === "string") {
+            setPinnedUntil(j.post.pinned_until);
+          }
         } else {
           toast.error(j?.error ?? "게시글 정보를 불러오지 못했습니다");
         }
+        setUiReady(true);
       }
     }
     load();
-  }, [supabase, params]);
+  }, [supabase, params, isNoticeMode]);
 
   // 주제 선택 UI는 후속 개선 때 추가 예정 (현재는 자동 기본 주제로 매핑)
 
@@ -318,8 +372,10 @@ export default function NewPostPage() {
       return;
     }
     if (!selectedCategoryId) {
-      toast.error("카테고리를 선택해주세요");
-      return;
+      if (!activeNoticeMode) {
+        toast.error("카테고리를 선택해주세요");
+        return;
+      }
     }
 
     setLoading(true);
@@ -332,7 +388,23 @@ export default function NewPostPage() {
       res = await fetch(`/api/posts/${editId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title, content: contentHtml, tags }),
+        body: JSON.stringify({
+          title,
+          content: contentHtml,
+          tags: activeNoticeMode ? [] : tags,
+          isNotice: activeNoticeMode,
+          allowComments,
+          showInRecent: activeNoticeMode ? showInRecent : true,
+          // pin fields (관리자만 처리됨 - 서버에서 권한 검증)
+          pinned: isPinned,
+          pinScope,
+          pinnedUntil,
+          pinPriority,
+          pinnedCategoryId:
+            pinScope === "category"
+              ? selectedCategoryId || undefined
+              : undefined,
+        }),
       });
     } else {
       // 신규 작성
@@ -344,7 +416,19 @@ export default function NewPostPage() {
           content: contentHtml,
           categoryId: selectedCategoryId,
           topicIds: selectedTopicIds,
-          tags,
+          tags: activeNoticeMode ? [] : tags,
+          isNotice: activeNoticeMode,
+          allowComments,
+          showInRecent: activeNoticeMode ? showInRecent : true,
+          // pin fields (관리자만 처리됨 - 서버에서 권한 검증)
+          pinned: isPinned,
+          pinScope,
+          pinnedUntil,
+          pinPriority,
+          pinnedCategoryId:
+            pinScope === "category"
+              ? selectedCategoryId || undefined
+              : undefined,
         }),
       });
     }
@@ -927,68 +1011,106 @@ export default function NewPostPage() {
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-6 space-y-4">
-      <div className="flex flex-col gap-3">
-        {/* 카테고리 선택 */}
-        <div>
-          <label className="text-xs block mb-1">카테고리</label>
-          <select
-            className="w-full rounded border p-2 bg-background"
-            value={selectedCategoryId}
-            onChange={(e) => {
-              setSelectedCategoryId(e.target.value);
-              setSelectedTopicIds([]);
-            }}
+      {/* Breadcrumb */}
+      <div className="pt-1 pb-0">
+        <nav className="flex items-center space-x-1 text-xs sm:text-sm text-muted-foreground">
+          <Link
+            href="/"
+            className="flex items-center hover:text-foreground transition-colors"
           >
-            <option value="">카테고리를 선택하세요</option>
-            {categories.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* 태그 입력 */}
-        <div>
-          <label className="text-xs block mb-1">태그(엔터로 추가)</label>
-          <div className="flex gap-2">
-            <div className="relative flex-1">
-              <Hash className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                className="pl-8"
-                placeholder="태그 입력..."
-                value={tagInput}
-                onChange={(e) => setTagInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    addTag();
-                  }
-                }}
-              />
-            </div>
-            <Button type="button" variant="outline" onClick={addTag}>
-              <Plus className="h-4 w-4" /> 추가
-            </Button>
-          </div>
-          {tags.length > 0 && (
-            <div className="flex flex-wrap gap-2 mt-2">
-              {tags.map((t) => (
-                <Badge key={t} variant="secondary" className="gap-1">
-                  {t}
-                  <button
-                    type="button"
-                    aria-label="태그 제거"
-                    onClick={() => removeTag(t)}
-                    className="ml-1 inline-flex items-center justify-center"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </Badge>
-              ))}
-            </div>
+            <Home className="h-3 w-3 mr-1" />홈
+          </Link>
+          <ChevronRight className="h-3 w-3" />
+          {editIdParam ? (
+            <span className="text-foreground font-medium">글 수정</span>
+          ) : categorySlugParam ? (
+            <>
+              <Link
+                href={`/categories/${categorySlugParam}`}
+                className="text-foreground font-medium hover:text-primary transition-colors"
+              >
+                {(() => {
+                  const found = categories.find(
+                    (c) => c.slug === categorySlugParam
+                  );
+                  return found ? found.name : "카테고리";
+                })()}
+              </Link>
+              <ChevronRight className="h-3 w-3" />
+              <span className="text-foreground font-medium">글쓰기</span>
+            </>
+          ) : (
+            <span className="text-foreground font-medium">글쓰기</span>
           )}
-        </div>
+        </nav>
+      </div>
+
+      <div className="flex flex-col gap-3">
+        {/* 카테고리 선택 (공지 모드에서는 숨김) */}
+        {uiReady && !activeNoticeMode && (
+          <div>
+            <label className="text-xs block mb-1">카테고리</label>
+            <select
+              className="w-full rounded border p-2 bg-background"
+              value={selectedCategoryId}
+              onChange={(e) => {
+                setSelectedCategoryId(e.target.value);
+                setSelectedTopicIds([]);
+              }}
+            >
+              <option value="">카테고리를 선택하세요</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {/* 태그 입력 (공지 모드에서는 숨김, 내부적으로 '공지' 고정) */}
+        {uiReady && !activeNoticeMode && (
+          <div>
+            <label className="text-xs block mb-1">태그(엔터로 추가)</label>
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Hash className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  className="pl-8"
+                  placeholder="태그 입력..."
+                  value={tagInput}
+                  onChange={(e) => setTagInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      addTag();
+                    }
+                  }}
+                />
+              </div>
+              <Button type="button" variant="outline" onClick={addTag}>
+                <Plus className="h-4 w-4" /> 추가
+              </Button>
+            </div>
+            {tags.length > 0 && (
+              <div className="flex flex-wrap gap-2 mt-2">
+                {tags.map((t) => (
+                  <Badge key={t} variant="secondary" className="gap-1">
+                    {t}
+                    <button
+                      type="button"
+                      aria-label="태그 제거"
+                      onClick={() => removeTag(t)}
+                      className="ml-1 inline-flex items-center justify-center"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* 제목 */}
         <div>
@@ -999,6 +1121,103 @@ export default function NewPostPage() {
             onChange={(e) => setTitle(e.target.value)}
           />
         </div>
+
+        {/* 공지 옵션: 댓글 허용 (공지 모드에서만 표시) */}
+        {uiReady && activeNoticeMode && (
+          <div className="mt-1 space-y-2">
+            <label className="text-xs inline-flex items-center gap-2">
+              <input
+                type="checkbox"
+                className="h-4 w-4"
+                checked={allowComments}
+                onChange={(e) => setAllowComments(e.target.checked)}
+              />
+              댓글 허용
+            </label>
+            <label className="text-xs inline-flex items-center gap-2">
+              <input
+                type="checkbox"
+                className="h-4 w-4"
+                checked={showInRecent}
+                onChange={(e) => setShowInRecent(e.target.checked)}
+              />
+              최근 게시물에 표시
+            </label>
+          </div>
+        )}
+
+        {/* 관리자 전용: 고정(핀) 설정 */}
+        {uiReady && (
+          <div className="mt-2 space-y-2">
+            <div className="text-[11px] text-muted-foreground">관리자 설정</div>
+            <label className="text-xs inline-flex items-center gap-2">
+              <input
+                type="checkbox"
+                className="h-4 w-4"
+                checked={isPinned}
+                onChange={(e) => setIsPinned(e.target.checked)}
+              />
+              상단 고정
+            </label>
+            {isPinned && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div>
+                  <label className="text-xs block mb-1">고정 범위</label>
+                  <select
+                    className="w-full rounded border p-2 bg-background"
+                    value={pinScope}
+                    onChange={(e) =>
+                      setPinScope(
+                        (e.target.value as "global" | "category") || "global"
+                      )
+                    }
+                  >
+                    <option value="global">전역</option>
+                    <option value="category">카테고리</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs block mb-1">만료 시각(선택)</label>
+                  <input
+                    type="datetime-local"
+                    className="w-full rounded border p-2 bg-background"
+                    value={pinnedUntil ? pinnedUntil.substring(0, 16) : ""}
+                    onChange={(e) => setPinnedUntil(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs block mb-1">
+                    우선순위(작을수록 상단)
+                  </label>
+                  <input
+                    type="number"
+                    className="w-full rounded border p-2 bg-background"
+                    value={pinPriority}
+                    onChange={(e) =>
+                      setPinPriority(parseInt(e.target.value || "0", 10))
+                    }
+                  />
+                </div>
+                {pinScope === "category" && (
+                  <div>
+                    <label className="text-xs block mb-1">고정 카테고리</label>
+                    <select
+                      className="w-full rounded border p-2 bg-background"
+                      value={selectedCategoryId}
+                      onChange={(e) => setSelectedCategoryId(e.target.value)}
+                    >
+                      {categories.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         <div>
           <label className="text-xs block mb-1">내용</label>

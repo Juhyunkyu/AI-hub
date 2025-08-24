@@ -2,6 +2,15 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+  PaginationEllipsis,
+} from "@/components/ui/pagination";
 import { SearchBar } from "@/components/search-bar";
 import { Plus, Home, ChevronRight } from "lucide-react";
 
@@ -74,8 +83,22 @@ export default async function CategoryPage({
 
     if (postTopicMappings && postTopicMappings.length > 0) {
       const postIds = postTopicMappings.map((m) => m.post_id);
+      // 카테고리 고정글 조회 (상단 영역)
+      const { data: pinnedCategory } = await supabase
+        .from("posts")
+        .select(
+          "id, title, content, created_at, author_id, pin_priority, pinned_until"
+        )
+        .eq("pin_scope", "category")
+        .eq("pinned_category_id", category.id)
+        .or("pinned_until.is.null,pinned_until.gt." + new Date().toISOString())
+        .order("pin_priority", { ascending: true })
+        .order("pinned_until", { ascending: false });
+      const pinnedIds = new Set(
+        (pinnedCategory ?? []).map((p) => p.id as string)
+      );
       // 검색이 있으면 제목/본문/태그로 필터링 (정확한 태그 매칭)
-      let filteredIds = postIds;
+      let filteredIds = postIds.filter((id) => !pinnedIds.has(id));
       let matchedTagPostIds = new Set<string>();
       if (query.length >= 2) {
         const { data: byText } = await supabase
@@ -115,14 +138,33 @@ export default async function CategoryPage({
       // 페이지네이션된 게시글 가져오기 (content 포함)
       const { data: postsData } = await supabase
         .from("posts")
-        .select("id, title, content, created_at, author_id")
+        .select(
+          "id, title, content, created_at, author_id, pin_scope, is_notice"
+        )
         .in("id", filteredIds)
         .order("created_at", { ascending: false })
         .range(offset, offset + POSTS_PER_PAGE - 1);
-      posts = (postsData || []).map((p) => ({
-        ...(p as PostLite & { content?: string | null }),
-        matchedByTag: matchedTagPostIds.has((p as { id: string }).id),
-      }));
+      const normPosts: PostLiteWithMeta[] = (postsData || [])
+        .filter((p) => {
+          const ps = (p as { pin_scope?: string | null }).pin_scope || null;
+          const isNotice = Boolean((p as { is_notice?: boolean }).is_notice);
+          // 전역 공지 글은 카테고리 리스트에서 제외
+          if (ps === "global" && isNotice) return false;
+          return true;
+        })
+        .map((p) => ({
+          ...(p as PostLite & { content?: string | null }),
+          matchedByTag: matchedTagPostIds.has((p as { id: string }).id),
+        }));
+      // 상단: 고정글 + 일반글 페이지 구간
+      const pinnedPosts: PostLiteWithMeta[] = (pinnedCategory || []).map(
+        (p) => ({
+          ...(p as PostLite & { content?: string | null }),
+          matchedByTag: false,
+        })
+      );
+      // 전역 고정글은 제외 (안전 장치)
+      posts = [...pinnedPosts.filter(() => true), ...normPosts];
     }
   }
 
@@ -229,7 +271,7 @@ export default async function CategoryPage({
             </div>
           ) : (
             <>
-              {/* Posts */}
+              {/* Posts (상단 고정 포함) */}
               <div className="space-y-1">
                 {posts.map((post) => {
                   const author = authorMap.get(post.author_id);
@@ -301,8 +343,8 @@ export default async function CategoryPage({
                             />
                           ) : (
                             <h3 className="font-medium text-sm sm:text-base text-foreground hover:text-primary transition-colors">
-                              {post.title}
-                            </h3>
+                            {post.title}
+                          </h3>
                           )}
                           {hasQuery && snippetHtml && (
                             <div
@@ -332,44 +374,57 @@ export default async function CategoryPage({
 
               {/* Pagination */}
               {totalPages > 1 && (
-                <div className="flex items-center justify-center gap-2 mt-8">
-                  <Link href={`/categories/${slug}?page=${currentPage - 1}`}>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={currentPage <= 1}
-                    >
-                      이전
-                    </Button>
-                  </Link>
-
-                  <div className="flex items-center gap-1">
-                    {pageNumbers.map((pageNum) => (
-                      <Link
-                        key={pageNum}
-                        href={`/categories/${slug}?page=${pageNum}`}
-                      >
-                        <Button
-                          variant={
-                            pageNum === currentPage ? "default" : "outline"
-                          }
-                          size="sm"
-                        >
-                          {pageNum}
-                        </Button>
-                      </Link>
-                    ))}
-                  </div>
-
-                  <Link href={`/categories/${slug}?page=${currentPage + 1}`}>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={currentPage >= totalPages}
-                    >
-                      다음
-                    </Button>
-                  </Link>
+                <div className="mt-8 flex justify-center">
+                  <Pagination>
+                    <PaginationContent>
+                      {currentPage > 1 && (
+                        <PaginationItem>
+                          <PaginationPrevious
+                            href={`/categories/${slug}?page=${currentPage - 1}`}
+                          />
+                        </PaginationItem>
+                      )}
+                      {(() => {
+                        const items: (number | "ellipsis")[] = [];
+                        const first = 1;
+                        const last = totalPages;
+                        const windowStart = Math.max(
+                          first + 1,
+                          currentPage - 1
+                        );
+                        const windowEnd = Math.min(last - 1, currentPage + 1);
+                        items.push(first);
+                        if (windowStart > first + 1) items.push("ellipsis");
+                        for (let p = windowStart; p <= windowEnd; p++)
+                          items.push(p);
+                        if (windowEnd < last - 1) items.push("ellipsis");
+                        if (last > first) items.push(last);
+                        return items.map((it, idx) =>
+                          it === "ellipsis" ? (
+                            <PaginationItem key={`e-${idx}`}>
+                              <PaginationEllipsis />
+                            </PaginationItem>
+                          ) : (
+                            <PaginationItem key={it}>
+                              <PaginationLink
+                                href={`/categories/${slug}?page=${it}`}
+                                isActive={it === currentPage}
+                              >
+                                {it}
+                              </PaginationLink>
+                            </PaginationItem>
+                          )
+                        );
+                      })()}
+                      {currentPage < totalPages && (
+                        <PaginationItem>
+                          <PaginationNext
+                            href={`/categories/${slug}?page=${currentPage + 1}`}
+                          />
+                        </PaginationItem>
+                      )}
+                    </PaginationContent>
+                  </Pagination>
                 </div>
               )}
             </>

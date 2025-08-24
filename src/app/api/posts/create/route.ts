@@ -10,20 +10,63 @@ export async function POST(request: NextRequest) {
     } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+    const isAdmin = (uid: string | null) => {
+      const allowed = (process.env.ADMIN_USER_IDS || "")
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      return !!uid && allowed.includes(uid);
+    };
+
     const body = await request.json().catch(() => ({}));
     const title: string = body?.title ?? "";
     const content: string = body?.content ?? "";
     const categoryId: string | undefined = body?.categoryId;
     const topicIds: string[] = Array.isArray(body?.topicIds) ? body.topicIds : [];
     const tags: string[] = Array.isArray(body?.tags) ? body.tags : [];
+    const isNotice: boolean = Boolean(body?.isNotice);
+    const allowComments: boolean = body?.allowComments === false ? false : true;
+    const showInRecent: boolean = body?.showInRecent === false ? false : true;
+    // pin fields (admin only)
+    const pinned: boolean = body?.pinned === true;
+    const pinScope: "global" | "category" | undefined = body?.pinScope;
+    const pinnedUntilRaw: string | undefined = body?.pinnedUntil;
+    const pinPriority: number | undefined =
+      typeof body?.pinPriority === "number" ? body.pinPriority : undefined;
+    const pinnedCategoryId: string | undefined = body?.pinnedCategoryId;
 
     if (!title.trim()) return NextResponse.json({ error: "제목은 필수입니다" }, { status: 400 });
-    if (!categoryId) return NextResponse.json({ error: "카테고리를 선택해주세요" }, { status: 400 });
+    // 전역 공지인 경우에는 카테고리 필수 아님
+    const isGlobalNotice = isNotice && pinScope === "global";
+    if (!categoryId && !isGlobalNotice)
+      return NextResponse.json({ error: "카테고리를 선택해주세요" }, { status: 400 });
+
+    if (isNotice && !isAdmin(user.id)) {
+      return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    }
 
     // 1) create post
     const { data: post, error: e1 } = await supabase
       .from("posts")
-      .insert({ title, content, author_id: user.id })
+      .insert({
+        title,
+        content,
+        author_id: user.id,
+        is_notice: isNotice,
+        allow_comments: allowComments,
+        show_in_recent: showInRecent,
+        ...(isAdmin(user.id) && pinned
+          ? {
+              pin_scope: pinScope === "category" ? "category" : "global",
+              pinned_until: pinnedUntilRaw ? new Date(pinnedUntilRaw).toISOString() : null,
+              pin_priority: typeof pinPriority === "number" ? pinPriority : 0,
+              pinned_category_id:
+                pinScope === "category"
+                  ? pinnedCategoryId || categoryId || null
+                  : null,
+            }
+          : {}),
+      })
       .select("id")
       .single();
     if (e1 || !post) return NextResponse.json({ error: e1?.message ?? "생성 실패" }, { status: 500 });
@@ -31,8 +74,9 @@ export async function POST(request: NextRequest) {
     const postId = (post as { id: string }).id;
 
     // 2) decide topics: use provided topics or default topic of the category
-    let finalTopicIds: string[] = topicIds;
-    if (!finalTopicIds.length) {
+    // 전역 공지는 카테고리/주제 매핑을 하지 않음
+    let finalTopicIds: string[] = isGlobalNotice ? [] : topicIds;
+    if (!finalTopicIds.length && !isGlobalNotice && categoryId) {
       const { data: defTopic } = await supabase
         .from("topics")
         .select("id")

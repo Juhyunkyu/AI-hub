@@ -34,12 +34,22 @@ export function PostOwnerActions({ postId }: { postId: string }) {
   };
 
   return (
-    <div className="flex items-center gap-2">
-      <Button variant="outline" size="sm" onClick={handleEdit}>
-        <PencilLine className="h-4 w-4 mr-1" /> 수정
+    <div className="flex items-center gap-1.5 sm:gap-2">
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={handleEdit}
+        className="h-7 px-2 text-[11px] sm:h-8 sm:px-3 sm:text-xs"
+      >
+        <PencilLine className="h-3.5 w-3.5 mr-1 sm:h-4 sm:w-4" /> 수정
       </Button>
-      <Button variant="outline" size="sm" onClick={handleDelete}>
-        <Trash2 className="h-4 w-4 mr-1" /> 삭제
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={handleDelete}
+        className="h-7 px-2 text-[11px] sm:h-8 sm:px-3 sm:text-xs"
+      >
+        <Trash2 className="h-3.5 w-3.5 mr-1 sm:h-4 sm:w-4" /> 삭제
       </Button>
     </div>
   );

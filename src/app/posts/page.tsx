@@ -9,9 +9,10 @@ import {
   PaginationLink,
   PaginationNext,
   PaginationPrevious,
+  PaginationEllipsis,
 } from "@/components/ui/pagination";
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 15;
 
 export default async function AllPosts({
   searchParams,
@@ -48,6 +49,61 @@ export default async function AllPosts({
   const total = count || 0;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
+  // 카테고리 메타(홈과 동일 로직): post -> topic -> category
+  const categoryByPost = new Map<string, { name: string; slug: string }>();
+  const pagePostIds = (posts ?? []).map((p) => (p as { id: string }).id);
+  if (pagePostIds.length) {
+    const { data: mappings } = await supabase
+      .from("post_topics")
+      .select("post_id,topic_id")
+      .in("post_id", pagePostIds);
+    const firstTopicByPost = new Map<string, string>();
+    (mappings ?? []).forEach((m) => {
+      const pid = (m as { post_id: string }).post_id;
+      if (!firstTopicByPost.has(pid)) {
+        firstTopicByPost.set(pid, (m as { topic_id: string }).topic_id);
+      }
+    });
+    const topicIds = Array.from(new Set(Array.from(firstTopicByPost.values())));
+    if (topicIds.length) {
+      const { data: topicsData } = await supabase
+        .from("topics")
+        .select("id,category_id")
+        .in("id", topicIds);
+      const topicToCategory = new Map<string, string>();
+      (topicsData ?? []).forEach((t) => {
+        topicToCategory.set(
+          (t as { id: string }).id,
+          (t as { category_id: string }).category_id as string
+        );
+      });
+      const categoryIds = Array.from(
+        new Set(Array.from(topicToCategory.values()).filter(Boolean))
+      );
+      if (categoryIds.length) {
+        const { data: cats } = await supabase
+          .from("categories")
+          .select("id,name,slug")
+          .in("id", categoryIds);
+        const catById = new Map<string, { name: string; slug: string }>();
+        (cats ?? []).forEach((c) => {
+          const id = (c as { id: string }).id;
+          catById.set(id, {
+            name: (c as { name: string }).name,
+            slug: (c as { slug: string }).slug,
+          });
+        });
+        Array.from(firstTopicByPost.entries()).forEach(([pid, tid]) => {
+          const cid = topicToCategory.get(tid);
+          if (cid) {
+            const meta = catById.get(cid);
+            if (meta) categoryByPost.set(pid, meta);
+          }
+        });
+      }
+    }
+  }
+
   return (
     <div className="min-h-screen bg-background pb-0">
       <Section>
@@ -82,8 +138,21 @@ export default async function AllPosts({
                     </span>
                   </div>
                   <div className="mt-1 text-xs text-muted-foreground flex items-center gap-2">
+                    {(() => {
+                      const cat = categoryByPost.get(p.id);
+                      return cat ? (
+                        <Link
+                          href={`/categories/${cat.slug}`}
+                          className="hover:underline"
+                        >
+                          {cat.name}
+                        </Link>
+                      ) : (
+                        <span>기타</span>
+                      );
+                    })()}
                     <span>
-                      작성자: {authorMap.get(p.author_id)?.username ?? "익명"}
+                      · {authorMap.get(p.author_id)?.username ?? "익명"}
                     </span>
                   </div>
                 </li>
@@ -94,39 +163,49 @@ export default async function AllPosts({
               <div className="mt-6 flex justify-center">
                 <Pagination>
                   <PaginationContent>
-                    <PaginationItem>
-                      <PaginationPrevious
-                        href={
-                          currentPage > 1
-                            ? `/posts?page=${currentPage - 1}`
-                            : undefined
-                        }
-                      />
-                    </PaginationItem>
-                    {Array.from({ length: totalPages })
-                      .slice(0, 7)
-                      .map((_, idx) => {
-                        const pageNum = idx + 1;
-                        return (
-                          <PaginationItem key={pageNum}>
+                    {currentPage > 1 && (
+                      <PaginationItem>
+                        <PaginationPrevious
+                          href={`/posts?page=${currentPage - 1}`}
+                        />
+                      </PaginationItem>
+                    )}
+                    {(() => {
+                      const items: (number | "ellipsis")[] = [];
+                      const first = 1;
+                      const last = totalPages;
+                      const windowStart = Math.max(first + 1, currentPage - 1);
+                      const windowEnd = Math.min(last - 1, currentPage + 1);
+                      items.push(first);
+                      if (windowStart > first + 1) items.push("ellipsis");
+                      for (let p = windowStart; p <= windowEnd; p++)
+                        items.push(p);
+                      if (windowEnd < last - 1) items.push("ellipsis");
+                      if (last > first) items.push(last);
+                      return items.map((it, idx) =>
+                        it === "ellipsis" ? (
+                          <PaginationItem key={`e-${idx}`}>
+                            <PaginationEllipsis />
+                          </PaginationItem>
+                        ) : (
+                          <PaginationItem key={it}>
                             <PaginationLink
-                              href={`/posts?page=${pageNum}`}
-                              isActive={pageNum === currentPage}
+                              href={`/posts?page=${it}`}
+                              isActive={it === currentPage}
                             >
-                              {pageNum}
+                              {it}
                             </PaginationLink>
                           </PaginationItem>
-                        );
-                      })}
-                    <PaginationItem>
-                      <PaginationNext
-                        href={
-                          currentPage < totalPages
-                            ? `/posts?page=${currentPage + 1}`
-                            : undefined
-                        }
-                      />
-                    </PaginationItem>
+                        )
+                      );
+                    })()}
+                    {currentPage < totalPages && (
+                      <PaginationItem>
+                        <PaginationNext
+                          href={`/posts?page=${currentPage + 1}`}
+                        />
+                      </PaginationItem>
+                    )}
                   </PaginationContent>
                 </Pagination>
               </div>

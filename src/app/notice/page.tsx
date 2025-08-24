@@ -21,27 +21,44 @@ export default async function NoticePage() {
   } = await supabase.auth.getUser();
   const canWrite = isAdmin(user?.id ?? null);
 
-  // 공지 태그가 달린 게시글 조회 (tags.name ilike '%공지%') 최신순
-  const { data: mappings } = await supabase
-    .from("post_tags")
-    .select("post_id,tags(name)")
-    .ilike("tags.name", "%공지%")
-    .order("post_id");
-
-  const postIds = Array.from(
-    new Set((mappings ?? []).map((m) => (m as { post_id: string }).post_id))
-  );
-
+  // 관리자 공지 전용: (1) 관리자 작성 (2) '공지' 태그가 달린 글만
   let posts:
     | { id: string; title: string; created_at: string; author_id: string }[]
     | [] = [];
-  if (postIds.length) {
-    const { data } = await supabase
-      .from("posts")
-      .select("id,title,created_at,author_id")
-      .in("id", postIds)
-      .order("created_at", { ascending: false });
-    posts = (data ?? []) as typeof posts;
+  const adminIds = (process.env.ADMIN_USER_IDS || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  if (adminIds.length) {
+    // 1) '공지' 태그 ID 조회
+    const { data: tags } = await supabase
+      .from("tags")
+      .select("id")
+      .ilike("name", "%공지%")
+      .limit(5);
+
+    const tagIds = (tags ?? []).map((t) => (t as { id: string }).id);
+    if (tagIds.length) {
+      // 2) 태그 매핑으로 post_ids 수집
+      const { data: mappings } = await supabase
+        .from("post_tags")
+        .select("post_id,tag_id")
+        .in("tag_id", tagIds);
+      const postIds = Array.from(
+        new Set((mappings ?? []).map((m) => (m as { post_id: string }).post_id))
+      );
+      if (postIds.length) {
+        // 3) 관리자 작성 + 공지 태그가 달린 글만 노출
+        const { data } = await supabase
+          .from("posts")
+          .select("id,title,created_at,author_id")
+          .in("id", postIds)
+          .in("author_id", adminIds)
+          .order("created_at", { ascending: false });
+        posts = (data ?? []) as typeof posts;
+      }
+    }
   }
 
   // 작성자 표시
@@ -63,10 +80,8 @@ export default async function NoticePage() {
   return (
     <div className="min-h-screen bg-background">
       <Section title="공지사항">
-        <div className="mb-3 flex items-center justify-between">
-          <p className="text-xs text-muted-foreground">
-            공지 태그가 달린 게시글을 모아서 보여줍니다.
-          </p>
+        <div className="mt-6 mb-3 flex items-center justify-between">
+          <div />
           {canWrite && (
             <Link href="/posts/new?tag=공지">
               <Button size="sm">글쓰기</Button>

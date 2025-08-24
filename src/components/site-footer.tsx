@@ -5,16 +5,18 @@ export function SiteFooter() {
   return (
     <footer className="border-t bg-card/50">
       <div className="mx-auto max-w-6xl px-4 py-8 text-sm">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-4">
-          <Link href="/notice" className="text-center hover:underline">
-            공지사항
-          </Link>
-          <Link href="/terms" className="text-center hover:underline">
-            이용약관
-          </Link>
-          <Link href="/privacy" className="text-center hover:underline">
-            개인정보 처리방침
-          </Link>
+        <div className="mb-4">
+          <nav className="w-full flex items-center justify-center gap-4 sm:gap-8 whitespace-nowrap text-[11px] sm:text-sm">
+            <Link href="/notice" className="hover:underline">
+              공지사항
+            </Link>
+            <Link href="/terms" className="hover:underline">
+              이용약관
+            </Link>
+            <Link href="/privacy" className="hover:underline">
+              개인정보 처리방침
+            </Link>
+          </nav>
         </div>
 
         <div className="text-xs text-muted-foreground">

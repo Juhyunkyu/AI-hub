@@ -7,6 +7,7 @@ import { ReportButton } from "@/components/report-button";
 // import { CommentItem } from "@/components/comment-item";
 import { Section } from "@/components/section";
 import { UserAvatar } from "@/components/user-avatar";
+import { AdminIcon } from "@/components/admin-icon";
 import DOMPurify from "isomorphic-dompurify";
 import { PostContent } from "@/components/post-content";
 import { CommentSection } from "@/components/comment-section";
@@ -22,6 +23,8 @@ type PostRow = {
   content: string | null;
   created_at: string;
   author_id: string;
+  is_notice?: boolean;
+  allow_comments?: boolean;
 };
 
 type ProfileLite = {
@@ -49,7 +52,7 @@ export default async function PostDetail({
 
   const { data: postRaw } = await supabase
     .from("posts")
-    .select("id,title,content,created_at,author_id")
+    .select("id,title,content,created_at,author_id,is_notice,allow_comments")
     .eq("id", id)
     .maybeSingle();
 
@@ -131,6 +134,16 @@ export default async function PostDetail({
     .map((r) => (r as { tags?: { id?: string; name?: string } }).tags)
     .filter((t): t is { id: string; name: string } => !!t?.id && !!t?.name);
 
+  // 공지 여부: 필드 우선, 없으면 태그로 간주
+  const isNotice =
+    Boolean((post as PostRow).is_notice) ||
+    tags.some((t) => t.name.includes("공지"));
+  // 공지 댓글 허용: 필드 우선, 없으면 env 기본값
+  const allowNoticeComments =
+    typeof (post as PostRow).allow_comments === "boolean"
+      ? Boolean((post as PostRow).allow_comments)
+      : (process.env.NOTICE_ALLOW_COMMENTS || "true").toLowerCase() !== "false";
+
   const safeHtml = DOMPurify.sanitize(post.content ?? "", {
     // 카카오 지도 컨테이너와 미디어 요소, 캡션을 위한 태그 보강
     ADD_TAGS: ["video", "source", "figure", "figcaption", "div"],
@@ -180,22 +193,52 @@ export default async function PostDetail({
         <article className="space-y-3">
           <h1 className="text-xl sm:text-2xl font-bold">{post.title}</h1>
           <div className="flex items-center justify-between text-xs sm:text-sm text-muted-foreground">
-            <div className="flex items-center gap-2">
-              <UserAvatar
-                userId={author?.id || ""}
-                username={author?.username || null}
-                avatarUrl={author?.avatar_url || null}
-                size="sm"
-                showActions={true}
-                isOwner={false}
-                showName={true}
-              />
-              <span>· {formatDate(post.created_at)}</span>
-            </div>
+            {isNotice ? (
+              <div className="flex items-center gap-2">
+                <div className="h-10 w-10 rounded-full border bg-muted flex items-center justify-center">
+                  <AdminIcon className="h-5 w-5" />
+                </div>
+                <div className="leading-tight">
+                  <div className="text-foreground font-medium">관리자</div>
+                  <div className="text-[11px] sm:text-xs text-muted-foreground">
+                    {formatDate(post.created_at)}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <UserAvatar
+                  userId={author?.id || ""}
+                  username={author?.username || null}
+                  avatarUrl={author?.avatar_url || null}
+                  size="lg"
+                  showActions={true}
+                  isOwner={false}
+                  showName={false}
+                />
+                <div className="leading-tight">
+                  <div className="text-foreground font-medium">
+                    {author?.username ? (
+                      <Link
+                        href={`/profile/${encodeURIComponent(author.username)}`}
+                        className="hover:underline"
+                      >
+                        {author.username}
+                      </Link>
+                    ) : (
+                      <span>익명</span>
+                    )}
+                  </div>
+                  <div className="text-[11px] sm:text-xs text-muted-foreground">
+                    {formatDate(post.created_at)}
+                  </div>
+                </div>
+              </div>
+            )}
             {isOwner && <PostOwnerActions postId={post.id} />}
           </div>
           <PostContent html={safeHtml} />
-          {tags.length > 0 && (
+          {!isNotice && tags.length > 0 && (
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <span className="text-xs text-muted-foreground flex items-center gap-1">
                 <Hash className="h-3 w-3" /> 태그
@@ -217,12 +260,14 @@ export default async function PostDetail({
         </article>
       </Section>
 
-      <CommentSection
-        comments={comments}
-        commentAuthors={commentAuthors}
-        postId={post.id}
-        postAuthorId={post.author_id}
-      />
+      {(!isNotice || (isNotice && allowNoticeComments)) && (
+        <CommentSection
+          comments={comments}
+          commentAuthors={commentAuthors}
+          postId={post.id}
+          postAuthorId={post.author_id}
+        />
+      )}
     </div>
   );
 }

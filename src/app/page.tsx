@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { AdminIcon } from "@/components/admin-icon";
+
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { Section } from "@/components/section";
 import { CategoryCard, Category } from "@/components/category-card";
@@ -15,23 +17,40 @@ export default async function Home({
   const query = (q || "").trim();
 
   // 카테고리와 각 카테고리의 게시물 수 가져오기
-  const [{ data: categories }, { data: recent }] = await Promise.all([
-    supabase
-      .from("categories")
-      .select(
-        "id, slug, name, description, icon, color, sort_order, created_at"
-      )
-      .order("sort_order", { ascending: true }),
-    supabase
-      .from("posts")
-      .select("id, title, created_at, author_id")
-      .order("created_at", { ascending: false })
-      .limit(6),
-  ]);
+  const [{ data: categories }, { data: recentPinnedGlobal }, { data: recent }] =
+    await Promise.all([
+      supabase
+        .from("categories")
+        .select(
+          "id, slug, name, description, icon, color, sort_order, created_at"
+        )
+        .order("sort_order", { ascending: true }),
+      supabase
+        .from("posts")
+        .select("id, title, created_at, author_id, pin_priority, pinned_until")
+        .eq("pin_scope", "global")
+        .or("pinned_until.is.null,pinned_until.gt." + new Date().toISOString())
+        .order("pin_priority", { ascending: true })
+        .order("pinned_until", { ascending: false })
+        .limit(5),
+      supabase
+        .from("posts")
+        .select("id, title, created_at, author_id")
+        .eq("show_in_recent", true)
+        .or("pin_scope.is.null,pin_scope.neq.global")
+        .order("created_at", { ascending: false })
+        .limit(6),
+    ]);
 
   // (생략) 카테고리별 카운트는 필요 시 추가 렌더링에 사용하세요
 
   // 최근 게시물 메타 정보(작성자/카테고리) 로딩
+  const pinnedGlobal = (recentPinnedGlobal ?? []) as {
+    id: string;
+    title: string;
+    created_at: string;
+    author_id: string;
+  }[];
   const recentPosts = (recent ?? []) as {
     id: string;
     title: string;
@@ -39,9 +58,9 @@ export default async function Home({
     author_id: string;
   }[];
   const recentAuthorIds = Array.from(
-    new Set(recentPosts.map((r) => r.author_id))
+    new Set([...recentPosts, ...pinnedGlobal].map((r) => r.author_id))
   );
-  const recentPostIds = recentPosts.map((r) => r.id);
+  const recentPostIds = [...recentPosts, ...pinnedGlobal].map((r) => r.id);
 
   // 작성자 맵
   const authorMap = new Map<string, { id: string; username: string | null }>();
@@ -304,77 +323,109 @@ export default async function Home({
         </Section>
       )}
 
-      {/* Categories Section - Only visible on small screens */}
-      <div className="md:hidden -mt-2">
-        <div className="grid grid-cols-3 gap-2">
-          {/* First row: 3 cards */}
-          {(categories ?? []).slice(0, 3).map((category) => (
-            <CategoryCard
-              key={category.id}
-              category={category as Category}
-              isMobile={true}
-            />
-          ))}
+      {/* Categories Section - Only visible on small screens (hide on search) */}
+      {!query && (
+        <div className="md:hidden -mt-2">
+          <div className="grid grid-cols-3 gap-2">
+            {/* First row: 3 cards */}
+            {(categories ?? []).slice(0, 3).map((category) => (
+              <CategoryCard
+                key={category.id}
+                category={category as Category}
+                isMobile={true}
+              />
+            ))}
+          </div>
+          <div className="grid grid-cols-2 gap-2 mt-2">
+            {/* Second row: 2 cards */}
+            {(categories ?? []).slice(3, 5).map((category) => (
+              <CategoryCard
+                key={category.id}
+                category={category as Category}
+                isMobile={true}
+              />
+            ))}
+          </div>
         </div>
-        <div className="grid grid-cols-2 gap-2 mt-2">
-          {/* Second row: 2 cards */}
-          {(categories ?? []).slice(3, 5).map((category) => (
-            <CategoryCard
-              key={category.id}
-              category={category as Category}
-              isMobile={true}
-            />
-          ))}
-        </div>
-      </div>
+      )}
 
-      {/* Recent Posts Section */}
-      <div>
-        <Section title="최근 게시물">
+      {/* Pinned Global Section (hide on search) */}
+      {!query && pinnedGlobal.length > 0 && (
+        <Section>
           <ul className="space-y-2">
-            {recentPosts.map((p) => (
-              <li key={p.id} className="border rounded px-3 py-2">
-                <div className="flex items-center justify-between gap-3">
+            {pinnedGlobal.map((p) => (
+              <li key={p.id} className="rounded px-3 py-2 bg-muted/30">
+                <div className="flex items-center gap-3">
                   <Link
                     href={`/posts/${p.id}`}
-                    className="hover:underline font-medium truncate"
+                    className="hover:underline truncate text-sm sm:text-[15px]"
                   >
                     {p.title}
                   </Link>
-                  <span className="text-xs text-muted-foreground shrink-0">
-                    {new Date(p.created_at).toLocaleDateString()}
-                  </span>
                 </div>
-                <div className="mt-1 text-xs text-muted-foreground flex items-center gap-2">
-                  {(() => {
-                    const cat = categoryByPost.get(p.id);
-                    return cat ? (
-                      <Link
-                        href={`/categories/${cat.slug}`}
-                        className="hover:underline"
-                      >
-                        {cat.name}
-                      </Link>
-                    ) : (
-                      <span>기타</span>
-                    );
-                  })()}
-                  <span>
-                    · {authorMap.get(p.author_id)?.username ?? "익명"}
+                <div className="mt-1 text-[11px] text-muted-foreground flex items-center gap-2">
+                  <span className="text-[10px] px-1 py-0.5 rounded border text-muted-foreground">
+                    공지
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <AdminIcon /> 관리자
                   </span>
                 </div>
               </li>
             ))}
           </ul>
-          <div className="mt-6 mb-16">
-            <Link href="/posts">
-              <Button variant="outline" size="sm">
-                더 보기
-              </Button>
-            </Link>
-          </div>
         </Section>
-      </div>
+      )}
+
+      {/* Recent Posts Section (hide on search) */}
+      {!query && (
+        <div>
+          <Section title="최근 게시물">
+            <ul className="space-y-2">
+              {recentPosts.map((p) => (
+                <li key={p.id} className="border rounded px-3 py-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <Link
+                      href={`/posts/${p.id}`}
+                      className="hover:underline font-medium truncate"
+                    >
+                      {p.title}
+                    </Link>
+                    <span className="text-xs text-muted-foreground shrink-0">
+                      {new Date(p.created_at).toLocaleDateString()}
+                    </span>
+                  </div>
+                  <div className="mt-1 text-xs text-muted-foreground flex items-center gap-2">
+                    {(() => {
+                      const cat = categoryByPost.get(p.id);
+                      return cat ? (
+                        <Link
+                          href={`/categories/${cat.slug}`}
+                          className="hover:underline"
+                        >
+                          {cat.name}
+                        </Link>
+                      ) : (
+                        <span>기타</span>
+                      );
+                    })()}
+                    <span>
+                      · {authorMap.get(p.author_id)?.username ?? "익명"}
+                    </span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+            <div className="mt-6 mb-16">
+              <Link href="/posts">
+                <Button variant="outline" size="sm">
+                  더 보기
+                </Button>
+              </Link>
+            </div>
+          </Section>
+        </div>
+      )}
     </div>
   );
 }
