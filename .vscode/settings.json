@@ -1,0 +1,15 @@
+{
+  "remote.portsAttributes": {
+    "3000": {
+      "requireLocalPort": true,
+      "protocol": "http",
+      "onAutoForward": "ignore"
+    }
+  },
+  "remote.forwardPorts": [3000],
+  "remote.autoForwardPortsSource": "process",
+  "remote.restoreForwardedPorts": false,
+  "remote.autoForwardPorts": false
+}
+
+

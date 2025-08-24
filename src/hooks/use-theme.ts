@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useAuthStore } from "@/stores/auth";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 type Theme = "light" | "dark" | "system";
 
 export function useTheme() {
-  const [theme, setTheme] = useState<Theme>("system");
+  const [theme, setTheme] = useState<Theme>("light");
   const [mounted, setMounted] = useState(false);
   const user = useAuthStore((s) => s.user);
   const supabase = createSupabaseBrowserClient();
@@ -19,12 +19,12 @@ export function useTheme() {
   };
 
   // 실제 적용될 테마 계산
-  const getActualTheme = (): "light" | "dark" => {
+  const getActualTheme = useCallback((): "light" | "dark" => {
     if (theme === "system") {
       return getSystemTheme();
     }
     return theme;
-  };
+  }, [theme]);
 
   // 테마 변경 함수
   const changeTheme = async (newTheme: Theme) => {
@@ -79,7 +79,7 @@ export function useTheme() {
     };
 
     loadTheme();
-  }, [user]);
+  }, [user, supabase]);
 
   // 시스템 테마 변경 감지
   useEffect(() => {
@@ -93,7 +93,7 @@ export function useTheme() {
 
     mediaQuery.addEventListener("change", handleChange);
     return () => mediaQuery.removeEventListener("change", handleChange);
-  }, [theme]);
+  }, [theme, getActualTheme]);
 
   // 테마 변경 시 DOM 업데이트
   useEffect(() => {
@@ -101,7 +101,25 @@ export function useTheme() {
 
     const actualTheme = getActualTheme();
     document.documentElement.classList.toggle("dark", actualTheme === "dark");
-  }, [theme, mounted]);
+  }, [theme, mounted, getActualTheme]);
+
+  // 로그아웃 시 theme:reset 이벤트로 기본값 초기화
+  useEffect(() => {
+    const handleReset = () => {
+      setTheme("light");
+      try {
+        localStorage.removeItem("theme");
+      } catch {}
+    };
+    if (typeof window !== "undefined") {
+      window.addEventListener("theme:reset", handleReset);
+    }
+    return () => {
+      if (typeof window !== "undefined") {
+        window.removeEventListener("theme:reset", handleReset);
+      }
+    };
+  }, []);
 
   return {
     theme,

@@ -1,17 +1,20 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
 import { LikeButton } from "@/components/like-button";
-import { CommentForm } from "@/components/comment-form";
+// import { CommentForm } from "@/components/comment-form";
 import { SaveButton } from "@/components/save-button";
 import { ReportButton } from "@/components/report-button";
-import { CommentItem } from "@/components/comment-item";
+// import { CommentItem } from "@/components/comment-item";
 import { Section } from "@/components/section";
 import { UserAvatar } from "@/components/user-avatar";
 import DOMPurify from "isomorphic-dompurify";
+import { PostContent } from "@/components/post-content";
 import { CommentSection } from "@/components/comment-section";
 import { formatDate } from "@/lib/utils/date-format";
 import Link from "next/link";
-import { Home, ChevronRight } from "lucide-react";
+import { Home, ChevronRight, Hash } from "lucide-react";
+import { PostOwnerActions } from "@/components/post-owner-actions";
+import { Badge } from "@/components/ui/badge";
 
 type PostRow = {
   id: string;
@@ -91,6 +94,10 @@ export default async function PostDetail({
     .maybeSingle();
 
   const author = authorRaw as unknown as ProfileLite | null;
+  // 현재 사용자 확인 (서버 컴포넌트에서 쿠키 기반)
+  const { data: me } = await supabase.auth.getUser();
+  const currentUserId = me.user?.id ?? null;
+  const isOwner = currentUserId === post.author_id;
 
   const { data: commentsRaw } = await supabase
     .from("comments")
@@ -111,13 +118,39 @@ export default async function PostDetail({
       .in("id", commentAuthorIds);
     commentAuthors = (raw ?? []) as unknown as ProfileLite[];
   }
-  const commentAuthorById = new Map<string, ProfileLite>(
-    commentAuthors.map((u) => [u.id, u])
-  );
+  // const commentAuthorById = new Map<string, ProfileLite>(
+  //   commentAuthors.map((u) => [u.id, u])
+  // );
+
+  // 태그 조회
+  const { data: postTagsRaw } = await supabase
+    .from("post_tags")
+    .select("tags(id,name)")
+    .eq("post_id", id);
+  const tags = (postTagsRaw ?? [])
+    .map((r) => (r as { tags?: { id?: string; name?: string } }).tags)
+    .filter((t): t is { id: string; name: string } => !!t?.id && !!t?.name);
 
   const safeHtml = DOMPurify.sanitize(post.content ?? "", {
-    ADD_TAGS: ["video", "source"],
-    ADD_ATTR: ["controls", "src", "type", "class", "style", "alt"],
+    // 카카오 지도 컨테이너와 미디어 요소, 캡션을 위한 태그 보강
+    ADD_TAGS: ["video", "source", "figure", "figcaption", "div"],
+    // 지도 data-*와 링크, 클래스/스타일 등 허용 속성 보강
+    ADD_ATTR: [
+      "controls",
+      "src",
+      "type",
+      "class",
+      "style",
+      "alt",
+      "href",
+      "target",
+      "rel",
+      "data-provider",
+      "data-lat",
+      "data-lng",
+      "data-name",
+      "data-zoom",
+    ],
   });
 
   return (
@@ -146,22 +179,36 @@ export default async function PostDetail({
       <Section>
         <article className="space-y-3">
           <h1 className="text-xl sm:text-2xl font-bold">{post.title}</h1>
-          <div className="flex items-center gap-2 text-xs sm:text-sm text-muted-foreground">
-            <UserAvatar
-              userId={author?.id || ""}
-              username={author?.username || null}
-              avatarUrl={author?.avatar_url || null}
-              size="sm"
-              showActions={true}
-              isOwner={false}
-              showName={true}
-            />
-            <span>· {formatDate(post.created_at)}</span>
+          <div className="flex items-center justify-between text-xs sm:text-sm text-muted-foreground">
+            <div className="flex items-center gap-2">
+              <UserAvatar
+                userId={author?.id || ""}
+                username={author?.username || null}
+                avatarUrl={author?.avatar_url || null}
+                size="sm"
+                showActions={true}
+                isOwner={false}
+                showName={true}
+              />
+              <span>· {formatDate(post.created_at)}</span>
+            </div>
+            {isOwner && <PostOwnerActions postId={post.id} />}
           </div>
-          <div
-            className="prose dark:prose-invert max-w-none text-sm sm:text-base"
-            dangerouslySetInnerHTML={{ __html: safeHtml }}
-          />
+          <PostContent html={safeHtml} />
+          {tags.length > 0 && (
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <span className="text-xs text-muted-foreground flex items-center gap-1">
+                <Hash className="h-3 w-3" /> 태그
+              </span>
+              {tags.map((t) => (
+                <Link key={t.id} href={`/?q=${encodeURIComponent(t.name)}`}>
+                  <Badge variant="outline" className="text-xs">
+                    {t.name}
+                  </Badge>
+                </Link>
+              ))}
+            </div>
+          )}
           <div className="mt-1 flex flex-wrap gap-2">
             <LikeButton targetId={post.id} />
             <SaveButton postId={post.id} />

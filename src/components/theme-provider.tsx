@@ -41,7 +41,7 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
       }
 
       // 로컬 스토리지에서 색상 테마 로드 (fallback)
-      const savedColor = localStorage.getItem("color-theme");
+      const savedColor = user ? localStorage.getItem("color-theme") : null;
       if (savedColor && savedColor !== "base") {
         document.documentElement.setAttribute("data-theme", savedColor);
       } else if (savedColor === "base") {

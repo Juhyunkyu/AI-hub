@@ -1,77 +1,214 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, lazy, Suspense } from "react";
-import dynamic from "next/dynamic";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+// dynamic import 제거됨
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { useAuthStore } from "@/stores/auth";
-import { z } from "zod";
-import { safeSlug } from "@/lib/slugify";
-const TiptapEditor = dynamic(() => import("./Editor"), { ssr: false });
+import { Badge } from "@/components/ui/badge";
 import {
+  X,
+  Plus,
+  Hash,
   Bold,
   Italic,
   Strikethrough,
-  Quote,
-  AlignCenter,
-  AlignLeft,
-  AlignRight,
+  List,
   Image as ImageIcon,
-  Video,
-  CheckSquare,
+  Video as VideoIcon,
+  MapPin,
+  Link2,
   Code2,
+  Loader2,
+  Search,
 } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+// 임시: 에디터 제거 상태. 후속 PRD 에디터 반영 예정.
 
-const POSTS_BUCKET = process.env.NEXT_PUBLIC_SUPABASE_BUCKET_POSTS || "posts";
+// Kakao Maps 타입(로컬 인터페이스)
+type KakaoMapsNS = {
+  LatLng: new (lat: number, lng: number) => unknown;
+  Map: new (
+    el: HTMLElement,
+    opts: { center: unknown; level: number }
+  ) => unknown;
+  Marker: new (opts: { position: unknown }) => {
+    setMap(map: unknown): void;
+  };
+  InfoWindow: new (opts: { content: string }) => {
+    open(map: unknown, marker: unknown): void;
+  };
+  load(cb: () => void): void;
+};
 
-const PostSchema = z.object({
-  title: z.string().min(1, "제목은 필수입니다"),
-  contentHtml: z.string().optional(),
-  categoryId: z.string().optional(),
-  topicIds: z.array(z.string()).default([]),
-  tagIds: z.array(z.string()).default([]),
-});
+function getKakaoMaps(): KakaoMapsNS | undefined {
+  return (
+    typeof window !== "undefined"
+      ? (window as unknown as { kakao?: { maps?: KakaoMapsNS } }).kakao?.maps
+      : undefined
+  ) as KakaoMapsNS | undefined;
+}
+
+type Category = { id: string; name: string; slug: string };
+type Topic = { id: string; name: string; category_id: string };
 
 export default function NewPostPage() {
-  const [title, setTitle] = useState("");
-  const editorHtmlRef = useRef<string>("");
-  // 제거된 표 로직 잔여 ref 삭제
-  const ImagePicker = useMemo(() => lazy(() => import("./image-picker")), []);
-  const editorApiRef = useRef<{
-    toggleBold: () => void;
-    toggleItalic: () => void;
-    toggleStrike: () => void;
-    alignLeft: () => void;
-    alignCenter: () => void;
-    alignRight: () => void;
-    insertCodeBlock: () => void;
-    toggleBlockquote: () => void;
-    toggleTaskList: () => void;
-    insertHtml: (html: string) => void;
-  } | null>(null);
-  const imagePickerRef = useRef<{ open: () => void } | null>(null);
-  const videoPickerRef = useRef<{ open: () => void } | null>(null);
-  const [dragOver, setDragOver] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [categories, setCategories] = useState<{ id: string; name: string; slug: string }[]>([]);
-  const [topics, setTopics] = useState<{ id: string; name: string; category_id?: string }[]>([]);
-  const [tags, setTags] = useState<{ id: string; name: string }[]>([]);
-  const [selectedCategoryId, setSelectedCategoryId] = useState<string>("");
-  const [selTopics, setSelTopics] = useState<string[]>([]);
-  const [selTags, setSelTags] = useState<string[]>([]);
-  const [newTopicName, setNewTopicName] = useState("");
-  const [newTagName, setNewTagName] = useState("");
-  const [quoteOpen, setQuoteOpen] = useState(false);
-
   const router = useRouter();
+  const params = useSearchParams();
+  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const user = useAuthStore((s) => s.user);
   const isLoading = useAuthStore((s) => s.isLoading);
-  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
 
-  // If not signed in, redirect to login preserving next
+  const [title, setTitle] = useState("");
+  const editorHtmlRef = useRef<string>("");
+  const editorRef = useRef<HTMLDivElement | null>(null);
+  const savedRangeRef = useRef<Range | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  // 업로드 입력
+  const imageInputRef = useRef<HTMLInputElement | null>(null);
+  const videoInputRef = useRef<HTMLInputElement | null>(null);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [isUploadingVideo, setIsUploadingVideo] = useState(false);
+  const [videoUploadProgress, setVideoUploadProgress] = useState<number>(0);
+  const videoXhrRef = useRef<XMLHttpRequest | null>(null);
+
+  // 장소 모달
+  const [placeOpen, setPlaceOpen] = useState(false);
+  const [placeQuery, setPlaceQuery] = useState("");
+  const [placeResults, setPlaceResults] = useState<
+    Array<{ display_name: string; lat: string; lon: string }>
+  >([]);
+  const [searchingPlace, setSearchingPlace] = useState(false);
+  const [selectedPlace, setSelectedPlace] = useState<{
+    display_name: string;
+    lat: string;
+    lon: string;
+  } | null>(null);
+  const placeMapElRef = useRef<HTMLDivElement | null>(null);
+  const placeMapObjRef = useRef<{ map: unknown; marker: unknown } | null>(null);
+
+  const [categories, setCategories] = useState<Category[]>([]);
+  // 주제 목록(향후 수동 선택 UI 추가 예정). 현재는 기본 주제 자동 매핑만 사용
+  const [, setTopics] = useState<Topic[]>([]);
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string>("");
+  const [selectedTopicIds, setSelectedTopicIds] = useState<string[]>([]);
+  const [tagInput, setTagInput] = useState("");
+  const [tags, setTags] = useState<string[]>([]);
+
+  async function ensureKakaoLoaded(): Promise<void> {
+    if (typeof window === "undefined") return;
+    const maps = getKakaoMaps();
+    if (maps) {
+      return new Promise<void>((resolve) => maps.load(resolve));
+    }
+    const key = process.env.NEXT_PUBLIC_KAKAO_JAVASCRIPT_KEY;
+    if (!key) return;
+    const existed = document.querySelector(
+      "script[src^='https://dapi.kakao.com/v2/maps/sdk.js']"
+    );
+    if (existed) {
+      await new Promise<void>((resolve) => getKakaoMaps()?.load(resolve));
+      return;
+    }
+    await new Promise<void>((resolve) => {
+      const s = document.createElement("script");
+      s.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${key}&autoload=false`;
+      s.async = true;
+      s.onload = () => getKakaoMaps()?.load(() => resolve());
+      document.head.appendChild(s);
+    });
+  }
+
+  function renderEditorKakaoMaps() {
+    const maps = getKakaoMaps();
+    if (!maps) return;
+    const root = editorRef.current;
+    if (!root) return;
+    const nodes = root.querySelectorAll<HTMLElement>(
+      ".kakao-map[data-provider='kakao']"
+    );
+    nodes.forEach((el) => {
+      const elWithFlag = el as HTMLElement & { _kakaoRendered?: boolean };
+      if (elWithFlag._kakaoRendered) return;
+      const lat = parseFloat(el.dataset.lat || "0");
+      const lng = parseFloat(el.dataset.lng || "0");
+      const name = el.dataset.name || "장소";
+      const zoom = parseInt(el.dataset.zoom || "3", 10);
+      if (!isFinite(lat) || !isFinite(lng)) return;
+      if (!el.style.height) el.style.height = "240px";
+      if (!el.style.borderRadius) el.style.borderRadius = "8px";
+      const center = new maps.LatLng(lat, lng);
+      const map = new maps.Map(el, { center, level: zoom });
+      const marker = new maps.Marker({ position: center });
+      marker.setMap(map);
+      const iw = new maps.InfoWindow({
+        content: `<div style='padding:6px 8px'>${name}</div>`,
+      });
+      iw.open(map, marker);
+      elWithFlag._kakaoRendered = true;
+    });
+  }
+
+  function renderPlaceModalMap() {
+    const maps = getKakaoMaps();
+    if (!maps) return;
+    const el = placeMapElRef.current;
+    if (!el) return;
+    if (!el.style.height) el.style.height = "260px";
+    if (!el.style.borderRadius) el.style.borderRadius = "8px";
+    const center = new maps.LatLng(37.5665, 126.978);
+    const map = new maps.Map(el, { center, level: 3 });
+    const marker = new maps.Marker({ position: center });
+    marker.setMap(map);
+    placeMapObjRef.current = { map, marker };
+  }
+
+  function previewPlaceOnMap(r: {
+    display_name: string;
+    lat: string;
+    lon: string;
+  }) {
+    const maps = getKakaoMaps();
+    if (!maps) return;
+    const objs = placeMapObjRef.current;
+    if (!objs) return;
+    const center = new maps.LatLng(parseFloat(r.lat), parseFloat(r.lon));
+    // kakao types minimal: use index access to avoid any
+    (
+      objs as {
+        map: { setCenter: (c: unknown) => void };
+        marker: { setMap: (m: unknown) => void };
+      }
+    ).map.setCenter(center);
+    // remove old marker
+    (
+      objs as { map: unknown; marker: { setMap: (m: unknown) => void } }
+    ).marker.setMap(null as unknown);
+    const marker = new maps.Marker({ position: center });
+    (marker as unknown as { setMap: (m: unknown) => void }).setMap(
+      (objs as { map: unknown }).map
+    );
+    placeMapObjRef.current = { map: (objs as { map: unknown }).map, marker };
+    setSelectedPlace(r);
+  }
+
   useEffect(() => {
     if (isLoading) return;
     if (user === null) {
@@ -79,515 +216,727 @@ export default function NewPostPage() {
     }
   }, [isLoading, user, router]);
 
+  // 에디터 마운트 시 SDK 로드 후 기존 placeholder 렌더
+  useEffect(() => {
+    (async () => {
+      await ensureKakaoLoaded();
+      renderEditorKakaoMaps();
+      // 초기 선택 저장 (본문 시작)
+      const root = editorRef.current;
+      if (root) {
+        const r = document.createRange();
+        r.selectNodeContents(root);
+        r.collapse(false);
+        const s = window.getSelection();
+        s?.removeAllRanges();
+        s?.addRange(r);
+        savedRangeRef.current = r.cloneRange();
+      }
+    })();
+  }, []);
+
+  // 장소 모달 열릴 때 기본 지도 표시 및 선택 초기화
+  useEffect(() => {
+    if (!placeOpen) return;
+    setSelectedPlace(null);
+    (async () => {
+      await ensureKakaoLoaded();
+      setTimeout(() => renderPlaceModalMap(), 0);
+    })();
+  }, [placeOpen]);
+
   useEffect(() => {
     async function load() {
-      const [{ data: c1 }, { data: t1 }, { data: t2 }] = await Promise.all([
+      const [{ data: c1 }, { data: t1 }] = await Promise.all([
         supabase.from("categories").select("id,name,slug").order("sort_order"),
         supabase.from("topics").select("id,name,category_id").order("name"),
-        supabase.from("tags").select("id,name").order("name"),
       ]);
       setCategories(c1 ?? []);
-      setTopics(t1 ?? []);
-      setTags(t2 ?? []);
-    }
-    load();
-  }, [supabase]);
+      setTopics((t1 ?? []) as Topic[]);
 
-  // 카테고리가 변경되면 해당 카테고리의 주제들만 필터링
-  const filteredTopics = useMemo(() => {
-    if (!selectedCategoryId) return topics;
-    return topics.filter(topic => topic.category_id === selectedCategoryId);
-  }, [topics, selectedCategoryId]);
-
-  useEffect(() => {}, []);
-
-  // exec/insertHtml는 TipTap 명령으로 대체됨
-  const exec = (cmd: string) => {
-    const api = editorApiRef.current;
-    if (!api) return;
-    if (cmd === "bold") return api.toggleBold();
-    if (cmd === "italic") return api.toggleItalic();
-    if (cmd === "strikeThrough") return api.toggleStrike();
-    if (cmd === "justifyLeft") return api.alignLeft();
-    if (cmd === "justifyCenter") return api.alignCenter();
-    if (cmd === "justifyRight") return api.alignRight();
-  };
-
-  // 표 관련 잔여 코드 완전 제거(주석 포함)
-
-  // (표 관련 로직 제거)
-
-  const insertHtml = (html: string): Node | null => {
-    editorApiRef.current?.insertHtml(html);
-    return null;
-  };
-
-  async function compressImage(
-    file: File,
-    max = 1280,
-    quality = 0.85
-  ): Promise<Blob> {
-    const img = document.createElement("img");
-    const reader = new FileReader();
-    const dataUrl: string = await new Promise<string>((res, rej) => {
-      reader.onerror = () => rej(new Error("read error"));
-      reader.onload = () => res(reader.result as string);
-      reader.readAsDataURL(file);
-    });
-    await new Promise<void>((res) => {
-      img.onload = () => res();
-      img.src = dataUrl;
-    });
-    const canvas = document.createElement("canvas");
-    const scale = Math.min(1, max / Math.max(img.width, img.height));
-    canvas.width = Math.max(1, Math.round(img.width * scale));
-    canvas.height = Math.max(1, Math.round(img.height * scale));
-    const ctx = canvas.getContext("2d");
-    if (!ctx) throw new Error("canvas ctx");
-    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-    const mime = file.type.includes("png") ? "image/png" : "image/jpeg";
-    return await new Promise((res) =>
-      canvas.toBlob((b) => res(b as Blob), mime, quality)
-    );
-  }
-
-  async function uploadImage(file: File): Promise<string | null> {
-    if (!user) {
-      toast.error("로그인이 필요합니다");
-      return null;
-    }
-    if (!/^image\//.test(file.type)) {
-      toast.error("이미지 파일만 업로드할 수 있습니다");
-      return null;
-    }
-    if (file.size > 10 * 1024 * 1024) {
-      toast.error("이미지는 최대 10MB까지 지원합니다");
-      return null;
-    }
-    try {
-      const blob = await compressImage(file);
-      const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
-      const path = `${user.id}/posts/${Date.now()}.${ext}`;
-      const { error } = await supabase.storage
-        .from(POSTS_BUCKET)
-        .upload(path, blob, { upsert: true, contentType: blob.type });
-      if (error) throw error;
-      const { data } = supabase.storage.from(POSTS_BUCKET).getPublicUrl(path);
-      return data.publicUrl;
-    } catch (err) {
-      const msg =
-        err instanceof Error ? err.message : String(err ?? "업로드 실패");
-      toast.error(msg);
-      return null;
-    }
-  }
-
-  async function uploadVideo(file: File): Promise<string | null> {
-    if (!user) {
-      toast.error("로그인이 필요합니다");
-      return null;
-    }
-    if (!/^video\//.test(file.type)) {
-      toast.error("동영상 파일만 업로드할 수 있습니다");
-      return null;
-    }
-    if (file.size > 50 * 1024 * 1024) {
-      toast.error("동영상은 최대 50MB까지 지원합니다");
-      return null;
-    }
-    try {
-      const ext = (file.name.split(".").pop() || "mp4").toLowerCase();
-      const path = `${user.id}/posts/video-${Date.now()}.${ext}`;
-      const { error } = await supabase.storage
-        .from(POSTS_BUCKET)
-        .upload(path, file, { upsert: true, contentType: file.type });
-      if (error) throw error;
-      const { data } = supabase.storage.from(POSTS_BUCKET).getPublicUrl(path);
-      return data.publicUrl;
-    } catch (err) {
-      const msg =
-        err instanceof Error ? err.message : String(err ?? "업로드 실패");
-      toast.error(msg);
-      return null;
-    }
-  }
-
-  function handleDrag(e: React.DragEvent) {
-    e.preventDefault();
-    e.stopPropagation();
-    if (e.type === "dragover") setDragOver(true);
-    if (e.type === "dragleave") setDragOver(false);
-  }
-
-  async function handleDrop(e: React.DragEvent) {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragOver(false);
-    const files = Array.from(e.dataTransfer.files ?? []);
-    for (const f of files) {
-      if (f.type.startsWith("image/")) {
-        const url = await uploadImage(f);
-        if (url) insertHtml(`<p><img src="${url}" alt="image" /></p>`);
-      } else if (f.type.startsWith("video/")) {
-        const url = await uploadVideo(f);
-        if (url) insertHtml(`<p><video controls src="${url}"></video></p>`);
+      // URL 기본 카테고리/편집 모드 처리
+      const qCat = params?.get("category");
+      if (qCat && Array.isArray(c1) && c1.length) {
+        const found = c1.find((c) => c.slug === qCat);
+        if (found) setSelectedCategoryId(found.id);
       }
-    }
-  }
 
-  // TipTap 내부에서 paste 처리로 대체 예정. 외부 핸들러 제거.
-  /* async function handlePaste(e: React.ClipboardEvent<HTMLDivElement>) {
-    let pending = 0;
-    const begin = () => {
-      if (pending === 0) toast.info("업로드 시작", { id: "paste-upload" });
-      pending += 1;
-    };
-    const done = () => {
-      pending -= 1;
-      if (pending <= 0) toast.success("업로드 완료", { id: "paste-upload" });
-    };
-    const items = Array.from(e.clipboardData.items ?? []);
-    for (const it of items) {
-      if (it.kind === "file") {
-        const file = it.getAsFile();
-        if (file) {
-          e.preventDefault();
-          begin();
-          try {
-            const url = file.type.startsWith("image/")
-              ? await uploadImage(file)
-              : file.type.startsWith("video/")
-                ? await uploadVideo(file)
-                : null;
-            if (url) {
-              insertHtml(
-                file.type.startsWith("image/")
-                  ? `<p><img src="${url}" alt="image" /></p>`
-                  : `<p><video controls src="${url}"></video></p>`
-              );
-            }
-          } finally {
-            done();
+      const editId = params?.get("edit");
+      if (editId) {
+        // 편집 모드: 기존 글 불러오기
+        const res = await fetch(`/api/posts/${editId}`);
+        const j = await res.json().catch(() => null);
+        if (res.ok && j?.post) {
+          setTitle(j.post.title || "");
+          if (editorRef.current) {
+            editorRef.current.innerHTML = j.post.content || "";
           }
+          editorHtmlRef.current = j.post.content || "";
+          // 프리필: 카테고리, 토픽, 태그
+          if (j.categoryId && Array.isArray(c1)) {
+            const found = c1.find((c) => c.id === j.categoryId);
+            if (found) setSelectedCategoryId(found.id);
+          }
+          if (Array.isArray(j.topicIds)) {
+            setSelectedTopicIds(j.topicIds);
+          }
+          if (Array.isArray(j.tags)) {
+            setTags(j.tags);
+          }
+        } else {
+          toast.error(j?.error ?? "게시글 정보를 불러오지 못했습니다");
         }
       }
     }
-  } */
+    load();
+  }, [supabase, params]);
 
-  async function onPickImageFile(file: File) {
-    const url = await uploadImage(file);
-    if (url) insertHtml(`<p><img src="${url}" alt="image" /></p>`);
-  }
+  // 주제 선택 UI는 후속 개선 때 추가 예정 (현재는 자동 기본 주제로 매핑)
 
-  async function onPickVideoFile(file: File) {
-    const url = await uploadVideo(file);
-    if (url) insertHtml(`<p><video controls src="${url}"></video></p>`);
-  }
-
-  async function createTopic() {
-    if (!newTopicName.trim()) return;
-    if (!selectedCategoryId) {
-      toast.error("카테고리를 먼저 선택해주세요");
+  const addTag = () => {
+    const v = tagInput.trim();
+    if (!v) return;
+    if (tags.includes(v)) {
+      setTagInput("");
       return;
     }
-    try {
-      const slug = safeSlug(newTopicName, "topic");
-      const res = await fetch("/api/meta/topics", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          name: newTopicName, 
-          slug,
-          category_id: selectedCategoryId 
-        }),
-      });
-      const j: unknown = await res.json().catch(() => null);
-      const message =
-        j && typeof j === "object" && j !== null && "message" in j
-          ? (j as { message?: string }).message
-          : undefined;
-      if (!res.ok) {
-        toast.error(message ?? "주제 추가 실패");
-        return;
-      }
-      const data = j as { id: string; name: string; category_id: string };
-      setTopics((prev) => [...prev, data]);
-      setSelTopics((prev) => [...prev, data.id]);
-      setNewTopicName("");
-    } catch {
-      toast.error("네트워크 오류");
-    }
-  }
+    setTags((prev) => [...prev, v]);
+    setTagInput("");
+  };
 
-  async function createTag() {
-    if (!newTagName.trim()) return;
-    try {
-      const slug = safeSlug(newTagName, "tag");
-      const res = await fetch("/api/meta/tags", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newTagName, slug }),
-      });
-      const j: unknown = await res.json().catch(() => null);
-      const message =
-        j && typeof j === "object" && j !== null && "message" in j
-          ? (j as { message?: string }).message
-          : undefined;
-      if (!res.ok) {
-        toast.error(message ?? "태그 추가 실패");
-        return;
-      }
-      const data = j as { id: string; name: string };
-      setTags((prev) => [...prev, data]);
-      setSelTags((prev) => [...prev, data.id]);
-      setNewTagName("");
-    } catch {
-      toast.error("네트워크 오류");
-    }
-  }
-
-  // 인용문은 TipTap 명령으로 처리
+  const removeTag = (t: string) => {
+    setTags((prev) => prev.filter((x) => x !== t));
+  };
 
   async function submit() {
     if (!user) {
       toast.error("로그인이 필요합니다");
       return;
     }
-    const contentHtml = editorHtmlRef.current ?? "";
-    const parsed = PostSchema.safeParse({
-      title,
-      contentHtml,
-      categoryId: selectedCategoryId || undefined,
-      topicIds: selTopics,
-      tagIds: selTags,
-    });
-    if (!parsed.success) {
-      toast.error(parsed.error.issues[0]?.message ?? "유효성 오류");
+    if (!title.trim()) {
+      toast.error("제목을 입력해주세요");
+      return;
+    }
+    if (!selectedCategoryId) {
+      toast.error("카테고리를 선택해주세요");
       return;
     }
 
     setLoading(true);
-    const { data, error } = await supabase
-      .from("posts")
-      .insert({ title, content: contentHtml, author_id: user.id })
-      .select("id")
-      .single();
-    if (error) {
+    const contentHtml = editorHtmlRef.current ?? "";
+
+    const editId = params?.get("edit");
+    let res: Response;
+    if (editId) {
+      // 수정 요청
+      res = await fetch(`/api/posts/${editId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, content: contentHtml, tags }),
+      });
+    } else {
+      // 신규 작성
+      res = await fetch("/api/posts/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title,
+          content: contentHtml,
+          categoryId: selectedCategoryId,
+          topicIds: selectedTopicIds,
+          tags,
+        }),
+      });
+    }
+    const j = await res.json().catch(() => null);
+    if (!res.ok) {
       setLoading(false);
-      toast.error(error.message);
+      const msg = j?.error ?? (editId ? "수정 실패" : "게시 실패");
+      toast.error(msg);
       return;
     }
 
-    const postId = data!.id as string;
-
-    if (selTopics.length) {
-      const rows = selTopics.map((topic_id) => ({ post_id: postId, topic_id }));
-      const { error: e1 } = await supabase.from("post_topics").insert(rows);
-      if (e1) console.error(e1);
-    }
-    if (selTags.length) {
-      const rows = selTags.map((tag_id) => ({ post_id: postId, tag_id }));
-      const { error: e2 } = await supabase.from("post_tags").insert(rows);
-      if (e2) console.error(e2);
-    }
-
+    const postId = editId ? editId : (j?.id as string);
     setLoading(false);
-    toast.success("게시 완료");
+    toast.success(editId ? "수정 완료" : "게시 완료");
     router.push(`/posts/${postId}`);
   }
 
+  // ----- 에디터 유틸 -----
+  const POSTS_BUCKET = process.env.NEXT_PUBLIC_SUPABASE_BUCKET_POSTS || "posts";
+  const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+
+  function focusEditor() {
+    if (editorRef.current) {
+      editorRef.current.focus();
+    }
+  }
+
+  function isRangeInsideEditor(range: Range | null): boolean {
+    const root = editorRef.current;
+    if (!root || !range) return false;
+    return root.contains(range.commonAncestorContainer);
+  }
+
+  const saveCurrentSelection = useCallback(() => {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return;
+    const r = sel.getRangeAt(0);
+    if (!isRangeInsideEditor(r)) return;
+    // clone to avoid live range issues
+    savedRangeRef.current = r.cloneRange();
+  }, []);
+
+  function restoreSavedSelection() {
+    const r = savedRangeRef.current;
+    if (!isRangeInsideEditor(r)) return false;
+    const s = window.getSelection();
+    s?.removeAllRanges();
+    if (r) s?.addRange(r);
+    return true;
+  }
+
+  // 선택 영역 저장: 편집 영역에서 커서 이동/입력 시 마지막 위치 저장
+  useEffect(() => {
+    const handler = () => saveCurrentSelection();
+    document.addEventListener("mouseup", handler);
+    document.addEventListener("keyup", handler);
+    document.addEventListener("selectionchange", handler);
+    return () => {
+      document.removeEventListener("mouseup", handler);
+      document.removeEventListener("keyup", handler);
+      document.removeEventListener("selectionchange", handler);
+    };
+  }, [saveCurrentSelection]);
+
+  // robust: capture clicks on remove button inside editor and prevent default/propagation so it doesn't act like text
+  useEffect(() => {
+    const root = editorRef.current;
+    if (!root) return;
+    const onMouseDown = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        target.getAttribute &&
+        target.getAttribute("data-action") === "remove-figure"
+      ) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+    const onClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        target.getAttribute &&
+        target.getAttribute("data-action") === "remove-figure"
+      ) {
+        e.preventDefault();
+        e.stopPropagation();
+        const fig = target.closest("figure");
+        if (fig && root.contains(fig)) {
+          const next = fig.nextSibling;
+          fig.remove();
+          const r = document.createRange();
+          if (next && root.contains(next)) {
+            r.setStartBefore(next);
+          } else if (root.lastChild) {
+            r.selectNodeContents(root.lastChild as Node);
+            r.collapse(false);
+          } else {
+            r.selectNodeContents(root);
+            r.collapse(false);
+          }
+          const s = window.getSelection();
+          s?.removeAllRanges();
+          s?.addRange(r);
+          const htmlNow = editorRef.current?.innerHTML || "";
+          editorHtmlRef.current = sanitizeHtml(htmlNow);
+        }
+      }
+    };
+    root.addEventListener("mousedown", onMouseDown, true);
+    root.addEventListener("click", onClick, true);
+    return () => {
+      root.removeEventListener("mousedown", onMouseDown, true);
+      root.removeEventListener("click", onClick, true);
+    };
+  }, []);
+
+  function sanitizeHtml(html: string): string {
+    // 매우 보수적인 간단한 sanitize (DOMPurify 미사용)
+    // 허용 태그와 속성만 통과
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(`<div>${html}</div>`, "text/html");
+    const allowedTags = new Set([
+      "DIV",
+      "P",
+      "BR",
+      "STRONG",
+      "EM",
+      "S",
+      "UL",
+      "LI",
+      "A",
+      "IMG",
+      "VIDEO",
+      "FIGURE",
+      "FIGCAPTION",
+      "PRE",
+      "CODE",
+      "SPAN",
+      "BUTTON",
+    ]);
+    const allowedAttrs: Record<string, Set<string>> = {
+      A: new Set(["href", "target", "rel"]),
+      IMG: new Set(["src", "alt"]),
+      VIDEO: new Set(["src", "controls"]),
+      DIV: new Set([
+        "data-placeholder",
+        "data-lat",
+        "data-lng",
+        "data-name",
+        "data-zoom",
+        "data-provider",
+        "class",
+        "style",
+      ]),
+      FIGCAPTION: new Set(["class"]),
+      BUTTON: new Set(["type", "data-action", "class", "contenteditable"]),
+      SPAN: new Set([]),
+      P: new Set([]),
+      UL: new Set([]),
+      LI: new Set([]),
+      STRONG: new Set([]),
+      EM: new Set([]),
+      S: new Set([]),
+      FIGURE: new Set([]),
+      PRE: new Set([]),
+      CODE: new Set([]),
+      BR: new Set([]),
+    };
+    function traverse(node: Element | ChildNode): void {
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        const el = node as HTMLElement;
+        const tag = el.tagName.toUpperCase();
+        if (!allowedTags.has(tag)) {
+          el.replaceWith(...Array.from(el.childNodes));
+          return;
+        }
+        // strip attributes
+        const allowed =
+          allowedAttrs[tag as keyof typeof allowedAttrs] || new Set<string>();
+        Array.from(el.attributes).forEach((attr) => {
+          if (!allowed.has(attr.name.toLowerCase())) {
+            el.removeAttribute(attr.name);
+          }
+          if (attr.name.toLowerCase() === "href") {
+            try {
+              const url = new URL(el.getAttribute("href") || "");
+              // no javascript: protocol
+              if (url.protocol !== "http:" && url.protocol !== "https:") {
+                el.removeAttribute("href");
+              }
+            } catch {
+              el.removeAttribute("href");
+            }
+          }
+        });
+      }
+      Array.from((node as Element).childNodes).forEach(traverse);
+    }
+    Array.from(doc.body.firstElementChild?.childNodes || []).forEach(traverse);
+    return (doc.body.firstElementChild as HTMLElement)?.innerHTML || "";
+  }
+
+  const updateEditorHtmlRef = useCallback(() => {
+    const html = editorRef.current?.innerHTML || "";
+    editorHtmlRef.current = sanitizeHtml(html);
+  }, []);
+
+  function applyCommand(cmd: string) {
+    focusEditor();
+    if (cmd === "insertUnorderedList") {
+      const sel = window.getSelection();
+      if (!sel || sel.rangeCount === 0 || sel.isCollapsed) {
+        insertHtmlAtCursor(`<ul><li></li></ul>`);
+        const lastLi = editorRef.current?.querySelector("li:last-child");
+        if (lastLi) {
+          const r = document.createRange();
+          r.selectNodeContents(lastLi);
+          r.collapse(false);
+          sel?.removeAllRanges();
+          sel?.addRange(r);
+        }
+        updateEditorHtmlRef();
+        return;
+      }
+    }
+    document.execCommand(cmd, false);
+    updateEditorHtmlRef();
+  }
+
+  function wrapSelectionWithHtml(before: string, after: string) {
+    focusEditor();
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return;
+    const range = sel.getRangeAt(0);
+    const selectedText = range.toString();
+    const el = document.createElement("span");
+    el.innerHTML = `${before}${selectedText || ""}${after}`;
+    const frag = document.createDocumentFragment();
+    while (el.firstChild) frag.appendChild(el.firstChild);
+    range.deleteContents();
+    range.insertNode(frag);
+    range.collapse(false);
+    sel.removeAllRanges();
+    sel.addRange(range);
+    updateEditorHtmlRef();
+  }
+
+  function insertHtmlAtCursor(html: string) {
+    focusEditor();
+    const root = editorRef.current;
+    const sel = window.getSelection();
+    let useAppend = true;
+    let range: Range | null = null;
+    // 우선 저장된 선택 영역을 복원 시도
+    if (restoreSavedSelection()) {
+      const s2 = window.getSelection();
+      if (s2 && s2.rangeCount > 0) {
+        const r2 = s2.getRangeAt(0);
+        if (root && r2 && root.contains(r2.commonAncestorContainer)) {
+          useAppend = false;
+          range = r2;
+        }
+      }
+    } else if (sel && sel.rangeCount > 0) {
+      const r = sel.getRangeAt(0);
+      if (root && r && root.contains(r.commonAncestorContainer)) {
+        useAppend = false;
+        range = r;
+      }
+    }
+    if (!root) {
+      updateEditorHtmlRef();
+      return;
+    }
+    if (useAppend) {
+      root.innerHTML += html;
+      // 커서를 본문 끝으로 이동
+      const r = document.createRange();
+      r.selectNodeContents(root);
+      r.collapse(false);
+      const s = window.getSelection();
+      if (s) {
+        s.removeAllRanges();
+        s.addRange(r);
+      }
+      updateEditorHtmlRef();
+      return;
+    }
+    // 에디터 내부 선택 영역에 삽입
+    if (!range) {
+      updateEditorHtmlRef();
+      return;
+    }
+    range.deleteContents();
+    const el = document.createElement("div");
+    el.innerHTML = html;
+    const frag = document.createDocumentFragment();
+    let node: ChildNode | null;
+    let lastNode: ChildNode | null = null;
+    while ((node = el.firstChild)) {
+      lastNode = frag.appendChild(node);
+    }
+    range.insertNode(frag);
+    if (lastNode) {
+      range.setStartAfter(lastNode);
+      range.collapse(true);
+      const s = window.getSelection();
+      if (s) {
+        s.removeAllRanges();
+        s.addRange(range);
+      }
+    }
+    updateEditorHtmlRef();
+  }
+
+  function getClosestElement(
+    node: Node | null,
+    tagName: string
+  ): HTMLElement | null {
+    const target = tagName.toUpperCase();
+    let cur: Node | null = node;
+    while (cur) {
+      if (cur.nodeType === 1) {
+        const el = cur as HTMLElement;
+        if (el.tagName.toUpperCase() === target) return el;
+      }
+      cur = (cur as HTMLElement).parentNode as Node | null;
+    }
+    return null;
+  }
+
+  function isListItemEmpty(li: HTMLElement): boolean {
+    // 이미지/비디오는 비어있지 않다고 간주
+    if (li.querySelector("img,video,figure")) return false;
+    const text = (li.textContent || "").replace(/\u200B/g, "").trim();
+    // 빈 텍스트이거나 <br>만 있는 경우 비어있다고 판단
+    const onlyBr =
+      li.children.length === 1 && li.children[0].tagName.toUpperCase() === "BR";
+    return text.length === 0 || onlyBr;
+  }
+
+  function exitListFromListItem(li: HTMLElement) {
+    const list = li.closest("ul,ol") as HTMLElement | null;
+    if (!list) return;
+    const p = document.createElement("p");
+    p.appendChild(document.createElement("br"));
+    list.insertAdjacentElement("afterend", p);
+    // 마지막 빈 li 자동 제거 및 빈 리스트 정리
+    if (isListItemEmpty(li)) {
+      li.remove();
+      const remaining = list.querySelectorAll("li").length;
+      if (remaining === 0) {
+        list.remove();
+      }
+    }
+    const r = document.createRange();
+    r.setStart(p, 0);
+    r.collapse(true);
+    const s = window.getSelection();
+    s?.removeAllRanges();
+    s?.addRange(r);
+    updateEditorHtmlRef();
+  }
+
+  // 이미지 압축 (간단 버전)
+  async function compressImage(
+    file: File,
+    maxSize = 1280,
+    quality = 0.85
+  ): Promise<Blob> {
+    const img = document.createElement("img");
+    const reader = new FileReader();
+    const load = new Promise<string>((resolve, reject) => {
+      reader.onerror = () => reject(new Error("read error"));
+      reader.onload = () => resolve(reader.result as string);
+    });
+    reader.readAsDataURL(file);
+    const dataUrl = await load;
+    await new Promise<void>((res) => {
+      img.onload = () => res();
+      img.src = dataUrl;
+    });
+    const canvas = document.createElement("canvas");
+    const scale = Math.min(1, maxSize / Math.max(img.width, img.height));
+    canvas.width = Math.max(1, Math.round(img.width * scale));
+    canvas.height = Math.max(1, Math.round(img.height * scale));
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("canvas ctx");
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    const type = file.type.includes("png") ? "image/png" : "image/jpeg";
+    const blob: Blob = await new Promise((resolve) =>
+      canvas.toBlob((b) => resolve(b as Blob), type, quality)
+    );
+    return blob;
+  }
+
+  async function handleSelectImage(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!user) return toast.error("로그인이 필요합니다");
+    if (!/^image\//.test(file.type))
+      return toast.error("이미지 파일만 업로드할 수 있습니다");
+    if (file.size > 10 * 1024 * 1024)
+      return toast.error("이미지는 최대 10MB까지 지원합니다");
+    setIsUploadingImage(true);
+    try {
+      const blob = await compressImage(file);
+      const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+      const path = `posts/images/${user.id}/${Date.now()}.${ext}`;
+      const { error: upErr } = await supabase.storage
+        .from(POSTS_BUCKET)
+        .upload(path, blob, {
+          upsert: true,
+          contentType: blob.type,
+          cacheControl: "3600",
+        });
+      if (upErr) throw upErr;
+      const { data: urlData } = supabase.storage
+        .from(POSTS_BUCKET)
+        .getPublicUrl(path);
+      const url = urlData.publicUrl;
+      insertHtmlAtCursor(
+        `<figure class="my-2"><img class="max-w-full h-auto rounded border border-border" src="${url}" alt="" /><figcaption class="text-xs text-muted-foreground">이미지 설명</figcaption></figure>`
+      );
+      toast.success("이미지가 본문에 삽입되었습니다");
+    } catch (err: unknown) {
+      console.error(err);
+      toast.error((err as Error)?.message ?? "이미지 업로드 실패");
+    } finally {
+      setIsUploadingImage(false);
+      if (imageInputRef.current) imageInputRef.current.value = "";
+    }
+  }
+
+  async function handleSelectVideo(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!user) return toast.error("로그인이 필요합니다");
+    if (!/^video\//.test(file.type))
+      return toast.error("동영상 파일만 업로드할 수 있습니다");
+    if (file.size > 200 * 1024 * 1024)
+      return toast.error("동영상은 최대 200MB까지 지원합니다");
+    setIsUploadingVideo(true);
+    setVideoUploadProgress(0);
+    toast("동영상 압축이 백그라운드에서 진행 중입니다…");
+    try {
+      if (!SUPABASE_URL) throw new Error("SUPABASE_URL 미설정");
+      const ext = (file.name.split(".").pop() || "mp4").toLowerCase();
+      const path = `posts/videos/${user.id}/${Date.now()}.${ext}`;
+      const endpoint = `${SUPABASE_URL.replace(/\/$/, "")}/storage/v1/object/${encodeURIComponent(POSTS_BUCKET)}/${path}`;
+      const { data: sess } = await supabase.auth.getSession();
+      const accessToken = sess.session?.access_token;
+      if (!accessToken) throw new Error("인증 토큰 없음");
+
+      await new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        videoXhrRef.current = xhr;
+        xhr.open("POST", endpoint, true);
+        xhr.setRequestHeader("Authorization", `Bearer ${accessToken}`);
+        xhr.setRequestHeader("x-upsert", "true");
+        xhr.setRequestHeader("cache-control", "3600");
+        xhr.setRequestHeader("content-type", file.type);
+        xhr.upload.onprogress = (ev) => {
+          if (ev.lengthComputable) {
+            const percent = Math.min(
+              100,
+              Math.round((ev.loaded / ev.total) * 100)
+            );
+            setVideoUploadProgress(percent);
+          }
+        };
+        xhr.onerror = () => reject(new Error("업로드 네트워크 오류"));
+        xhr.onabort = () => reject(new Error("업로드가 취소되었습니다"));
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) resolve();
+          else reject(new Error(`업로드 실패(${xhr.status})`));
+        };
+        xhr.send(file);
+      });
+
+      const { data: urlData } = supabase.storage
+        .from(POSTS_BUCKET)
+        .getPublicUrl(path);
+      const url = urlData.publicUrl;
+      insertHtmlAtCursor(
+        `<figure class="my-2"><video class="max-w-full h-auto rounded" controls src="${url}"></video><figcaption class="text-xs text-muted-foreground">동영상 설명</figcaption></figure>`
+      );
+      toast.success("동영상이 본문에 삽입되었습니다");
+    } catch (err: unknown) {
+      console.error(err);
+      const msg = (err as Error)?.message ?? "동영상 업로드 실패";
+      toast.error(msg);
+    } finally {
+      setIsUploadingVideo(false);
+      setVideoUploadProgress(0);
+      videoXhrRef.current = null;
+      if (videoInputRef.current) videoInputRef.current.value = "";
+    }
+  }
+
+  function cancelVideoUpload() {
+    if (videoXhrRef.current) {
+      videoXhrRef.current.abort();
+    }
+    setIsUploadingVideo(false);
+    setVideoUploadProgress(0);
+    if (videoInputRef.current) videoInputRef.current.value = "";
+  }
+
+  function onInsertLink() {
+    const url = window.prompt("링크 URL을 입력하세요");
+    if (!url) return;
+    try {
+      const u = new URL(url);
+      if (!/^https?:$/.test(u.protocol)) throw new Error();
+    } catch {
+      toast.error("유효한 http/https URL을 입력해주세요");
+      return;
+    }
+    // 선택 영역이 있으면 감싸고, 없으면 URL 텍스트로 삽입
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount && !sel.isCollapsed) {
+      wrapSelectionWithHtml(
+        `<a href="${url}" target="_blank" rel="noopener noreferrer">`,
+        "</a>"
+      );
+    } else {
+      insertHtmlAtCursor(
+        `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`
+      );
+    }
+  }
+
+  function onInsertCodeBlock() {
+    const sel = window.getSelection();
+    const hasSelection = sel && sel.rangeCount && !sel!.isCollapsed;
+    if (hasSelection) {
+      wrapSelectionWithHtml(`<pre><code>`, `</code></pre>`);
+    } else {
+      insertHtmlAtCursor(`<pre><code>// 코드 입력</code></pre>`);
+    }
+  }
+
+  async function searchPlaces() {
+    const q = placeQuery.trim();
+    if (!q) return;
+    setSearchingPlace(true);
+    try {
+      const res = await fetch(`/api/kakao/search?q=${encodeURIComponent(q)}`);
+      if (!res.ok) throw new Error("검색 실패");
+      const j = (await res.json()) as {
+        items?: Array<{ display_name: string; lat: string; lon: string }>;
+      };
+      setPlaceResults(j.items || []);
+    } catch {
+      toast.error("장소 검색 실패");
+    } finally {
+      setSearchingPlace(false);
+    }
+  }
+
+  function insertPlace(r: { display_name: string; lat: string; lon: string }) {
+    const gmap = `https://maps.google.com/?q=${r.lat},${r.lon}`;
+    // 카카오 지도 플래이스홀더 + 캡션(링크 포함)
+    insertHtmlAtCursor(
+      `<figure class="my-2"><div class="kakao-map" style="width:100%;height:240px;border-radius:8px" data-provider="kakao" data-lat="${r.lat}" data-lng="${r.lon}" data-name="${r.display_name}" data-action="remove-figure"></div><figcaption class="text-xs text-muted-foreground"><div class="flex items-center justify-between"><span>📍 ${r.display_name} · <a href="${gmap}" target="_blank" rel="noopener noreferrer">지도로 열기</a></span><button type="button" data-action="remove-figure" contenteditable="false" class="px-2 py-1 rounded border border-border">삭제</button></div></figcaption></figure>`
+    );
+    // SDK 보장 후 즉시 미리보기 렌더
+    ensureKakaoLoaded().then(() => {
+      // 렌더는 비동기로 약간 지연하여 DOM 삽입 완료 후 실행
+      setTimeout(() => renderEditorKakaoMaps(), 0);
+    });
+    setPlaceOpen(false);
+    setPlaceQuery("");
+    setPlaceResults([]);
+    toast.success("장소가 본문에 삽입되었습니다");
+  }
+
   return (
-    <div className="mx-auto max-w-5xl px-4 py-6 space-y-4">
-      <h1 className="text-xl font-semibold">새 게시물</h1>
-      <Input
-        placeholder="제목"
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-      />
-
-      <div className="space-y-2">
-        <div className="flex flex-wrap gap-1">
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-8"
-            onMouseDown={(e) => {
-              e.preventDefault();
-              exec("bold");
-            }}
-            aria-label="굵게"
-            title="굵게 (Ctrl+B)"
-          >
-            <Bold className="h-4 w-4" />
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-8"
-            onMouseDown={(e) => {
-              e.preventDefault();
-              exec("italic");
-            }}
-            aria-label="기울임"
-            title="기울임 (Ctrl+I)"
-          >
-            <Italic className="h-4 w-4" />
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-8"
-            onMouseDown={(e) => {
-              e.preventDefault();
-              exec("strikeThrough");
-            }}
-            aria-label="취소선"
-            title="취소선"
-          >
-            <Strikethrough className="h-4 w-4" />
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-8"
-            onMouseDown={(e) => {
-              e.preventDefault();
-              editorApiRef.current?.toggleBlockquote?.();
-            }}
-            aria-label="인용문"
-            title="인용문"
-          >
-            <Quote className="h-4 w-4" />
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-8"
-            onMouseDown={(e) => {
-              e.preventDefault();
-              editorApiRef.current?.insertCodeBlock?.();
-            }}
-            aria-label="코드 블록"
-            title="코드 블록"
-          >
-            <Code2 className="h-4 w-4" />
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-8"
-            onMouseDown={(e) => {
-              e.preventDefault();
-              editorApiRef.current?.toggleTaskList?.();
-            }}
-            aria-label="체크리스트"
-            title="체크리스트"
-          >
-            <CheckSquare className="h-4 w-4" />
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-8"
-            onMouseDown={(e) => {
-              e.preventDefault();
-              exec("justifyLeft");
-            }}
-            aria-label="왼쪽 정렬"
-            title="왼쪽 정렬"
-          >
-            <AlignLeft className="h-4 w-4" />
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-8"
-            onMouseDown={(e) => {
-              e.preventDefault();
-              exec("justifyCenter");
-            }}
-            aria-label="가운데 정렬"
-            title="가운데 정렬"
-          >
-            <AlignCenter className="h-4 w-4" />
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-8"
-            onMouseDown={(e) => {
-              e.preventDefault();
-              exec("justifyRight");
-            }}
-            aria-label="오른쪽 정렬"
-            title="오른쪽 정렬"
-          >
-            <AlignRight className="h-4 w-4" />
-          </Button>
-          <Suspense fallback={null}>
-            <ImagePicker
-              ref={imagePickerRef}
-              accept="image/*"
-              onPick={onPickImageFile}
-            />
-            <ImagePicker
-              ref={videoPickerRef}
-              accept="video/*"
-              onPick={onPickVideoFile}
-            />
-          </Suspense>
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-8"
-            onMouseDown={(e) => {
-              e.preventDefault();
-              imagePickerRef.current?.open();
-            }}
-            aria-label="이미지 업로드"
-            title="이미지 업로드"
-          >
-            <ImageIcon className="h-4 w-4" />
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-8"
-            onMouseDown={(e) => {
-              e.preventDefault();
-              videoPickerRef.current?.open();
-            }}
-            aria-label="동영상 업로드"
-            title="동영상 업로드"
-          >
-            <Video className="h-4 w-4" />
-          </Button>
-        </div>
-        <div
-          className={`rounded border p-3 bg-background ${dragOver ? "ring-2 ring-ring" : ""}`}
-          onDragOver={handleDrag}
-          onDragLeave={handleDrag}
-          onDrop={handleDrop}
-        >
-          <TiptapEditor
-            onUpdate={(html) => (editorHtmlRef.current = html)}
-            placeholder="내용을 입력하세요..."
-            ref={editorApiRef}
-            onUploadImage={uploadImage}
-            onUploadVideo={uploadVideo}
-          />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <div className="mx-auto max-w-4xl px-4 py-6 space-y-4">
+      <div className="flex flex-col gap-3">
+        {/* 카테고리 선택 */}
         <div>
-          <label className="text-xs block mb-1">카테고리 선택</label>
+          <label className="text-xs block mb-1">카테고리</label>
           <select
             className="w-full rounded border p-2 bg-background"
             value={selectedCategoryId}
             onChange={(e) => {
               setSelectedCategoryId(e.target.value);
-              setSelTopics([]); // 카테고리가 변경되면 선택된 주제 초기화
+              setSelectedTopicIds([]);
             }}
           >
             <option value="">카테고리를 선택하세요</option>
@@ -598,65 +947,297 @@ export default function NewPostPage() {
             ))}
           </select>
         </div>
+
+        {/* 태그 입력 */}
         <div>
-          <label className="text-xs block mb-1">주제 선택</label>
-          <select
-            multiple
-            className="min-h-28 w-full rounded border p-2 bg-background"
-            value={selTopics}
-            onChange={(e) =>
-              setSelTopics(
-                Array.from(e.target.selectedOptions).map((o) => o.value)
-              )
-            }
-            disabled={!selectedCategoryId}
-          >
-            {filteredTopics.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
-          </select>
-          <div className="mt-2 flex gap-2">
-            <Input
-              placeholder="새 주제"
-              value={newTopicName}
-              onChange={(e) => setNewTopicName(e.target.value)}
-              disabled={!selectedCategoryId}
-            />
-            <Button type="button" onClick={createTopic} disabled={!selectedCategoryId}>
-              추가
+          <label className="text-xs block mb-1">태그(엔터로 추가)</label>
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <Hash className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                className="pl-8"
+                placeholder="태그 입력..."
+                value={tagInput}
+                onChange={(e) => setTagInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    addTag();
+                  }
+                }}
+              />
+            </div>
+            <Button type="button" variant="outline" onClick={addTag}>
+              <Plus className="h-4 w-4" /> 추가
             </Button>
           </div>
+          {tags.length > 0 && (
+            <div className="flex flex-wrap gap-2 mt-2">
+              {tags.map((t) => (
+                <Badge key={t} variant="secondary" className="gap-1">
+                  {t}
+                  <button
+                    type="button"
+                    aria-label="태그 제거"
+                    onClick={() => removeTag(t)}
+                    className="ml-1 inline-flex items-center justify-center"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </Badge>
+              ))}
+            </div>
+          )}
         </div>
+
+        {/* 제목 */}
         <div>
-          <label className="text-xs block mb-1">태그 선택</label>
-          <select
-            multiple
-            className="min-h-28 w-full rounded border p-2 bg-background"
-            value={selTags}
-            onChange={(e) =>
-              setSelTags(
-                Array.from(e.target.selectedOptions).map((o) => o.value)
-              )
-            }
-          >
-            {tags.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
-          </select>
-          <div className="mt-2 flex gap-2">
-            <Input
-              placeholder="새 태그"
-              value={newTagName}
-              onChange={(e) => setNewTagName(e.target.value)}
-            />
-            <Button type="button" onClick={createTag}>
-              추가
-            </Button>
-          </div>
+          <label className="text-xs block mb-1">제목</label>
+          <Input
+            placeholder="제목을 입력하세요"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+          />
+        </div>
+
+        <div>
+          <label className="text-xs block mb-1">내용</label>
+          {/* 툴바 */}
+          <TooltipProvider>
+            <div className="flex flex-wrap items-center gap-1 sm:gap-2 rounded border bg-muted/40 p-1.5">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    aria-label="굵게"
+                    onClick={() => applyCommand("bold")}
+                  >
+                    <Bold className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>굵게</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    aria-label="기울임"
+                    onClick={() => applyCommand("italic")}
+                  >
+                    <Italic className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>기울임</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    aria-label="취소선"
+                    onClick={() => applyCommand("strikeThrough")}
+                  >
+                    <Strikethrough className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>취소선</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    aria-label="목록"
+                    onClick={() => applyCommand("insertUnorderedList")}
+                  >
+                    <List className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>목록</TooltipContent>
+              </Tooltip>
+
+              <div className="w-px h-6 bg-border mx-1" />
+
+              {/* 이미지 */}
+              <input
+                ref={imageInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleSelectImage}
+              />
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    aria-label="이미지"
+                    onClick={() => imageInputRef.current?.click()}
+                    disabled={isUploadingImage}
+                  >
+                    {isUploadingImage ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <ImageIcon className="h-4 w-4" />
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>이미지</TooltipContent>
+              </Tooltip>
+
+              {/* 동영상 */}
+              <input
+                ref={videoInputRef}
+                type="file"
+                accept="video/*"
+                className="hidden"
+                onChange={handleSelectVideo}
+              />
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    aria-label="동영상"
+                    onClick={() => videoInputRef.current?.click()}
+                    disabled={isUploadingVideo}
+                  >
+                    {isUploadingVideo ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <VideoIcon className="h-4 w-4" />
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>동영상</TooltipContent>
+              </Tooltip>
+              {isUploadingVideo && (
+                <div className="ml-1 flex items-center gap-1 text-xs text-muted-foreground">
+                  <span>{videoUploadProgress}%</span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    aria-label="업로드 취소"
+                    onClick={cancelVideoUpload}
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
+              )}
+
+              {/* 장소 */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    aria-label="장소"
+                    onClick={() => setPlaceOpen(true)}
+                  >
+                    <MapPin className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>장소 첨부</TooltipContent>
+              </Tooltip>
+
+              <div className="w-px h-6 bg-border mx-1" />
+
+              {/* 링크 */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    aria-label="링크"
+                    onClick={onInsertLink}
+                  >
+                    <Link2 className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>링크</TooltipContent>
+              </Tooltip>
+              {/* 코드 블록 */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    aria-label="코드"
+                    onClick={onInsertCodeBlock}
+                  >
+                    <Code2 className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>코드 블록</TooltipContent>
+              </Tooltip>
+            </div>
+          </TooltipProvider>
+
+          {/* 편진 영역 */}
+          <div
+            ref={editorRef}
+            className="w-full min-h-[300px] rounded border p-3 bg-background text-sm mt-2 focus:outline-none [&_img]:max-w-full [&_img]:h-auto [&_img]:rounded [&_img]:border [&_img]:border-border [&_video]:max-w-full [&_video]:h-auto [&_ul]:list-disc [&_ul]:pl-6 [&_pre]:bg-muted [&_pre]:p-2 [&_pre]:rounded"
+            contentEditable
+            role="textbox"
+            aria-multiline
+            aria-label="게시글 내용"
+            data-placeholder="내용을 입력하세요..."
+            onInput={updateEditorHtmlRef}
+            onBlur={updateEditorHtmlRef}
+            onKeyDown={(e) => {
+              // 빈 목록 항목에서 Enter → 목록 종료 후 일반 문단으로 이동
+              if (e.key === "Enter" && !e.shiftKey) {
+                const sel = window.getSelection();
+                const anchor = sel?.anchorNode || null;
+                const li = getClosestElement(anchor, "LI");
+                if (li && isListItemEmpty(li)) {
+                  e.preventDefault();
+                  exitListFromListItem(li);
+                  return;
+                }
+              }
+              // Ctrl+Enter → 즉시 목록 종료
+              if (e.ctrlKey && e.key === "Enter") {
+                const sel = window.getSelection();
+                const anchor = sel?.anchorNode || null;
+                const li = getClosestElement(anchor, "LI");
+                if (li) {
+                  e.preventDefault();
+                  exitListFromListItem(li);
+                  return;
+                }
+              }
+              if (e.ctrlKey && e.key.toLowerCase() === "b") {
+                e.preventDefault();
+                applyCommand("bold");
+              }
+              if (e.ctrlKey && e.key.toLowerCase() === "i") {
+                e.preventDefault();
+                applyCommand("italic");
+              }
+              if (e.ctrlKey && e.key.toLowerCase() === "s") {
+                e.preventDefault();
+                applyCommand("strikeThrough");
+              }
+            }}
+            suppressContentEditableWarning
+          />
+          <p className="text-[11px] text-muted-foreground mt-1">
+            이미지/동영상은 공개 URL로 삽입됩니다. 민감한 정보는 포함하지
+            마세요.
+          </p>
         </div>
       </div>
 
@@ -665,6 +1246,96 @@ export default function NewPostPage() {
           {loading ? "게시 중..." : "게시"}
         </Button>
       </div>
+
+      {/* 장소 검색 모달 */}
+      <Dialog open={placeOpen} onOpenChange={setPlaceOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>장소 첨부</DialogTitle>
+            <DialogDescription>
+              지도에서 미리보고 확인 후 본문에 삽입하세요.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                className="pl-8"
+                placeholder="장소를 입력하세요 (예: 서울시청)"
+                value={placeQuery}
+                onChange={(e) => setPlaceQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    searchPlaces();
+                  }
+                }}
+              />
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={searchPlaces}
+              disabled={searchingPlace}
+            >
+              {searchingPlace ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                "검색"
+              )}
+            </Button>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="border rounded">
+              <div ref={placeMapElRef} />
+              <div className="p-2 text-xs text-muted-foreground">
+                {selectedPlace
+                  ? `📍 ${selectedPlace.display_name}`
+                  : "지도를 이동하거나 검색 결과를 선택하세요"}
+              </div>
+            </div>
+            <div className="max-h-64 overflow-auto border rounded">
+              {placeResults.length === 0 ? (
+                <div className="p-3 text-xs text-muted-foreground">
+                  검색 결과가 없습니다
+                </div>
+              ) : (
+                <ul className="divide-y">
+                  {placeResults.map((r, idx) => (
+                    <li key={`${r.lat}-${r.lon}-${idx}`} className={""}>
+                      <button
+                        type="button"
+                        className="w-full text-left p-3 hover:bg-muted text-sm"
+                        onClick={() => previewPlaceOnMap(r)}
+                      >
+                        {r.display_name}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+          <DialogFooter className="justify-between">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setPlaceOpen(false)}
+            >
+              닫기
+            </Button>
+            <Button
+              type="button"
+              onClick={() => {
+                if (!selectedPlace) return toast.error("장소를 선택하세요");
+                insertPlace(selectedPlace);
+              }}
+            >
+              본문에 삽입
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

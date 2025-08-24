@@ -134,6 +134,25 @@ export function Navbar() {
 
   useEffect(() => {
     let cancelled = false;
+
+    async function fetchUnreadCount() {
+      if (!user) {
+        setUnreadMessages(0);
+        return;
+      }
+      try {
+        const { count } = await supabase
+          .from("messages")
+          .select("*", { count: "exact", head: true })
+          .eq("to_user_id", user.id)
+          .eq("read", false)
+          .eq("deleted_by_receiver", false);
+        if (!cancelled) setUnreadMessages(count || 0);
+      } catch (error) {
+        if (!cancelled) setUnreadMessages(0);
+      }
+    }
+
     async function load() {
       if (!user) {
         setAvatarUrl(null);
@@ -144,27 +163,18 @@ export function Navbar() {
       }
 
       try {
-        // 아바타와 관리자 권한 동시에 로드
-        const [avatarResult, profileResult, messagesResult] = await Promise.all(
-          [
-            supabase
-              .from("profiles")
-              .select("avatar_url")
-              .eq("id", user.id)
-              .maybeSingle(),
-            supabase
-              .from("profiles")
-              .select("role")
-              .eq("id", user.id)
-              .maybeSingle(),
-            supabase
-              .from("messages")
-              .select("*", { count: "exact", head: true })
-              .eq("to_user_id", user.id)
-              .eq("read", false)
-              .eq("deleted_by_receiver", false),
-          ]
-        );
+        const [avatarResult, profileResult] = await Promise.all([
+          supabase
+            .from("profiles")
+            .select("avatar_url")
+            .eq("id", user.id)
+            .maybeSingle(),
+          supabase
+            .from("profiles")
+            .select("role")
+            .eq("id", user.id)
+            .maybeSingle(),
+        ]);
 
         if (!cancelled) {
           const avatar =
@@ -172,7 +182,6 @@ export function Navbar() {
             null;
           setAvatarUrl(avatar);
           setIsAdmin(profileResult.data?.role === "admin");
-          setUnreadMessages(messagesResult.count || 0);
           setIsLoading(false);
         }
       } catch (error) {
@@ -180,14 +189,28 @@ export function Navbar() {
         if (!cancelled) {
           setIsAdmin(false);
           setAvatarUrl(null);
-          setUnreadMessages(0);
           setIsLoading(false);
         }
+      } finally {
+        fetchUnreadCount();
       }
     }
+
     load();
+
+    // messages:refresh 이벤트 구독
+    const handleRefresh = () => {
+      fetchUnreadCount();
+    };
+    if (typeof window !== "undefined") {
+      window.addEventListener("messages:refresh", handleRefresh);
+    }
+
     return () => {
       cancelled = true;
+      if (typeof window !== "undefined") {
+        window.removeEventListener("messages:refresh", handleRefresh);
+      }
     };
   }, [supabase, user]);
 
@@ -196,6 +219,12 @@ export function Navbar() {
       await signOut();
       setShowUserMenu(false);
       toast.success("로그아웃되었습니다.");
+      // 로그아웃 후 즉시 테마 초기화
+      try {
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new Event("theme:reset"));
+        }
+      } catch {}
     } catch (error) {
       console.error("SignOut error:", error);
       toast.error("로그아웃 중 오류가 발생했습니다.");

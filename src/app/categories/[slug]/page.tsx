@@ -2,8 +2,8 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Plus, Search, Home, ChevronRight } from "lucide-react";
+import { SearchBar } from "@/components/search-bar";
+import { Plus, Home, ChevronRight } from "lucide-react";
 
 interface CategoryPageProps {
   params: Promise<{
@@ -23,14 +23,23 @@ type PostLite = {
   comment_count?: number;
 };
 
-const POSTS_PER_PAGE = 10; // 페이지당 게시글 수
+type PostLiteWithMeta = PostLite & {
+  content?: string | null;
+  matchedByTag?: boolean;
+};
+
+const POSTS_PER_PAGE = 15; // 메인 정책에 맞춰 페이지당 게시글 수
 
 export default async function CategoryPage({
   params,
   searchParams,
 }: CategoryPageProps) {
   const { slug } = await params;
-  const { page = "1" } = await searchParams;
+  const sp = await searchParams;
+  const { page = "1" } = sp;
+  const q = (sp as Record<string, string | undefined>).q ?? "";
+  const query = (q || "").trim();
+  const hasQuery = query.length >= 2;
   const currentPage = parseInt(page);
   const offset = (currentPage - 1) * POSTS_PER_PAGE;
 
@@ -47,14 +56,14 @@ export default async function CategoryPage({
     notFound();
   }
 
-  // 해당 카테고리의 주제에 속한 게시물들 가져오기 (페이지네이션 적용)
+  // 해당 카테고리의 주제에 속한 게시물들 가져오기 (페이지네이션/검색 적용)
   const { data: topics } = await supabase
     .from("topics")
     .select("id")
     .eq("category_id", category.id);
 
   const topicIds = (topics || []).map((t) => t.id);
-  let posts: PostLite[] = [];
+  let posts: PostLiteWithMeta[] = [];
   let totalPosts = 0;
 
   if (topicIds.length > 0) {
@@ -65,24 +74,55 @@ export default async function CategoryPage({
 
     if (postTopicMappings && postTopicMappings.length > 0) {
       const postIds = postTopicMappings.map((m) => m.post_id);
+      // 검색이 있으면 제목/본문/태그로 필터링 (정확한 태그 매칭)
+      let filteredIds = postIds;
+      let matchedTagPostIds = new Set<string>();
+      if (query.length >= 2) {
+        const { data: byText } = await supabase
+          .from("posts")
+          .select("id")
+          .in("id", postIds)
+          .or(`title.ilike.%${query}%,content.ilike.%${query}%`);
+        const textIds = new Set((byText ?? []).map((p) => p.id as string));
+
+        const { data: matchedTags } = await supabase
+          .from("tags")
+          .select("id")
+          .ilike("name", `%${query}%`);
+        const matchedTagIds = (matchedTags ?? []).map((t) => t.id as string);
+        if (matchedTagIds.length) {
+          const { data: mappings } = await supabase
+            .from("post_tags")
+            .select("post_id,tag_id")
+            .in("tag_id", matchedTagIds)
+            .in("post_id", postIds);
+          matchedTagPostIds = new Set(
+            (mappings ?? []).map((m) => (m as { post_id: string }).post_id)
+          );
+        }
+        filteredIds = postIds.filter(
+          (id) => textIds.has(id) || matchedTagPostIds.has(id)
+        );
+      }
 
       // 전체 게시글 수 계산
       const { count } = await supabase
         .from("posts")
         .select("*", { count: "exact", head: true })
-        .in("id", postIds);
-
+        .in("id", filteredIds);
       totalPosts = count || 0;
 
-      // 페이지네이션된 게시글 가져오기
+      // 페이지네이션된 게시글 가져오기 (content 포함)
       const { data: postsData } = await supabase
         .from("posts")
-        .select("id, title, created_at, author_id")
-        .in("id", postIds)
+        .select("id, title, content, created_at, author_id")
+        .in("id", filteredIds)
         .order("created_at", { ascending: false })
         .range(offset, offset + POSTS_PER_PAGE - 1);
-
-      posts = postsData || [];
+      posts = (postsData || []).map((p) => ({
+        ...(p as PostLite & { content?: string | null }),
+        matchedByTag: matchedTagPostIds.has((p as { id: string }).id),
+      }));
     }
   }
 
@@ -154,14 +194,14 @@ export default async function CategoryPage({
             )}
           </div>
           <div className="flex gap-3 w-full sm:w-auto">
-            <div className="relative flex-1 sm:flex-none sm:w-64">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="게시물, 태그 검색..."
-                className="pl-10 text-xs sm:text-sm"
+            <div className="flex-1 sm:flex-none sm:w-64">
+              <SearchBar
+                actionPath={`/categories/${category.slug}`}
+                initialQuery={query}
+                placeholder="이 카테고리에서 검색..."
               />
             </div>
-            <Link href="/posts/new">
+            <Link href={`/posts/new?category=${category.slug}`}>
               <Button className="gap-2 whitespace-nowrap text-xs sm:text-sm">
                 <Plus className="h-4 w-4" />
                 글쓰기
@@ -172,7 +212,13 @@ export default async function CategoryPage({
 
         {/* Posts List */}
         <div className="space-y-0">
-          {posts.length === 0 ? (
+          {hasQuery && posts.length === 0 ? (
+            <div className="text-center py-12">
+              <p className="text-muted-foreground text-xs sm:text-sm">
+                검색 결과가 없습니다.
+              </p>
+            </div>
+          ) : posts.length === 0 ? (
             <div className="text-center py-12">
               <p className="text-muted-foreground text-xs sm:text-sm mb-4">
                 아직 게시물이 없습니다.
@@ -187,6 +233,57 @@ export default async function CategoryPage({
               <div className="space-y-1">
                 {posts.map((post) => {
                   const author = authorMap.get(post.author_id);
+                  const qLower = query.toLowerCase();
+                  const escapeHtml = (s: string) =>
+                    (s || "")
+                      .replace(/&/g, "&amp;")
+                      .replace(/</g, "&lt;")
+                      .replace(/>/g, "&gt;")
+                      .replace(/"/g, "&quot;")
+                      .replace(/'/g, "&#39;");
+                  const regexSafe = query.replace(
+                    /[.*+?^${}()|[\\]\\]/g,
+                    "\\$&"
+                  );
+                  const highlight = (text: string) => {
+                    const safe = escapeHtml(text || "");
+                    if (!safe) return safe;
+                    const re = new RegExp(`(${regexSafe})`, "gi");
+                    return safe.replace(
+                      re,
+                      '<mark class="px-1 rounded bg-muted/50">$1</mark>'
+                    );
+                  };
+                  const stripHtml = (html: string) =>
+                    (html || "")
+                      .replace(/<[^>]*>/g, " ")
+                      .replace(/\s+/g, " ")
+                      .trim();
+                  const contentText = stripHtml(post.content || "");
+                  const contentLower = contentText.toLowerCase();
+                  const titleLower = (post.title || "").toLowerCase();
+                  const titleHas = hasQuery && titleLower.includes(qLower);
+                  const contentHas = hasQuery && contentLower.includes(qLower);
+                  let snippetHtml: string | null = null;
+                  if (hasQuery && contentHas) {
+                    const idx = contentLower.indexOf(qLower);
+                    const start = Math.max(0, idx - 40);
+                    const end = Math.min(
+                      contentText.length,
+                      idx + qLower.length + 40
+                    );
+                    const snippet = contentText.slice(start, end);
+                    snippetHtml = highlight(
+                      (start > 0 ? "… " : "") +
+                        snippet +
+                        (end < contentText.length ? " …" : "")
+                    );
+                  }
+                  const tagOnly =
+                    hasQuery &&
+                    Boolean(post.matchedByTag) &&
+                    !titleHas &&
+                    !contentHas;
                   return (
                     <Link
                       key={post.id}
@@ -195,10 +292,30 @@ export default async function CategoryPage({
                     >
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex-1 min-w-0">
-                          <h3 className="font-medium text-sm sm:text-base text-foreground hover:text-primary transition-colors line-clamp-2">
-                            {post.title}
-                          </h3>
-                          <div className="flex items-center gap-4 mt-2 text-xs sm:text-xs text-muted-foreground">
+                          {hasQuery ? (
+                            <h3
+                              className="font-medium text-sm sm:text-base text-foreground hover:text-primary transition-colors"
+                              dangerouslySetInnerHTML={{
+                                __html: highlight(post.title),
+                              }}
+                            />
+                          ) : (
+                            <h3 className="font-medium text-sm sm:text-base text-foreground hover:text-primary transition-colors">
+                              {post.title}
+                            </h3>
+                          )}
+                          {hasQuery && snippetHtml && (
+                            <div
+                              className="text-xs text-muted-foreground line-clamp-2 mt-1"
+                              dangerouslySetInnerHTML={{ __html: snippetHtml }}
+                            />
+                          )}
+                          <div className="flex items-center gap-2 mt-2 text-xs sm:text-xs text-muted-foreground">
+                            {tagOnly && (
+                              <span className="text-[10px] px-1 py-0.5 rounded border text-muted-foreground">
+                                태그 일치
+                              </span>
+                            )}
                             <span>{author?.username || "익명"}</span>
                             <span>
                               {new Date(

@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { useAuthStore } from "@/stores/auth";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -10,7 +10,7 @@ import { MessageWithUsers, MessageStats } from "@/types/message";
 import { MessageSquare, Send, Inbox, Mail, Trash2, Plus } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+// import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 
 export default function MessagesPage() {
@@ -26,29 +26,12 @@ export default function MessagesPage() {
   const [activeTab, setActiveTab] = useState("received");
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [marking, setMarking] = useState(false);
 
-  const supabase = createSupabaseBrowserClient();
+  // const supabase = createSupabaseBrowserClient();
 
-  useEffect(() => {
-    if (user) {
-      loadStats();
-      loadMessages();
-    }
-  }, [user, activeTab, page]);
-
-  const loadStats = async () => {
-    try {
-      const response = await fetch("/api/messages/stats");
-      if (response.ok) {
-        const data = await response.json();
-        setStats(data.stats);
-      }
-    } catch (error) {
-      console.error("Error loading stats:", error);
-    }
-  };
-
-  const loadMessages = async () => {
+  const loadMessages = useCallback(async () => {
     if (!user) return;
 
     try {
@@ -76,6 +59,18 @@ export default function MessagesPage() {
     } finally {
       setLoading(false);
     }
+  }, [user, activeTab, page]);
+
+  const loadStats = async () => {
+    try {
+      const response = await fetch("/api/messages/stats");
+      if (response.ok) {
+        const data = await response.json();
+        setStats(data.stats);
+      }
+    } catch (error) {
+      console.error("Error loading stats:", error);
+    }
   };
 
   const deleteMessage = async (messageId: string) => {
@@ -88,12 +83,99 @@ export default function MessagesPage() {
         setMessages((prev) => prev.filter((msg) => msg.id !== messageId));
         loadStats(); // 통계 업데이트
         toast.success("쪽지가 삭제되었습니다");
+        if (typeof window !== "undefined") {
+          try {
+            window.dispatchEvent(new Event("messages:refresh"));
+          } catch {}
+        }
       } else {
         toast.error("쪽지 삭제에 실패했습니다");
       }
     } catch (error) {
       console.error("Error deleting message:", error);
       toast.error("쪽지 삭제에 실패했습니다");
+    }
+  };
+
+  // 카드 단위 체크박스는 제거되었으므로 개별 토글은 사용하지 않음
+
+  const clearSelection = () => setSelectedIds(new Set());
+
+  const allSelectedOnPage = useMemo(() => {
+    if (!messages.length) return false;
+    return messages.every((m) => selectedIds.has(m.id));
+  }, [messages, selectedIds]);
+
+  const toggleSelectAllOnPage = () => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allSelectedOnPage) {
+        messages.forEach((m) => next.delete(m.id));
+      } else {
+        messages.forEach((m) => next.add(m.id));
+      }
+      return next;
+    });
+  };
+
+  const batchDelete = async () => {
+    if (!selectedIds.size) return;
+    try {
+      const response = await fetch("/api/messages/batch-delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: Array.from(selectedIds) }),
+      });
+      if (response.ok) {
+        setMessages((prev) => prev.filter((m) => !selectedIds.has(m.id)));
+        clearSelection();
+        toast.success("선택한 쪽지를 삭제했습니다");
+        loadStats();
+        if (typeof window !== "undefined") {
+          try {
+            window.dispatchEvent(new Event("messages:refresh"));
+          } catch {}
+        }
+      } else {
+        toast.error("일괄 삭제에 실패했습니다");
+      }
+    } catch {
+      toast.error("일괄 삭제에 실패했습니다");
+    }
+  };
+
+  const batchMarkRead = async (read: boolean) => {
+    if (!selectedIds.size) return;
+    setMarking(true);
+    try {
+      const response = await fetch("/api/messages/batch-read", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: Array.from(selectedIds), read }),
+      });
+      if (response.ok) {
+        // 로컬 상태 갱신
+        setMessages((prev) =>
+          prev.map((m) => (selectedIds.has(m.id) ? { ...m, read } : m))
+        );
+        if (typeof window !== "undefined") {
+          try {
+            window.dispatchEvent(new Event("messages:refresh"));
+          } catch {}
+        }
+        loadStats();
+        toast.success(
+          read
+            ? "선택한 쪽지를 읽음으로 표시했습니다"
+            : "선택한 쪽지를 읽지 않음으로 표시했습니다"
+        );
+      } else {
+        toast.error("일괄 처리에 실패했습니다");
+      }
+    } catch {
+      toast.error("일괄 처리에 실패했습니다");
+    } finally {
+      setMarking(false);
     }
   };
 
@@ -121,6 +203,37 @@ export default function MessagesPage() {
       });
     }
   };
+
+  useEffect(() => {
+    if (user) {
+      loadStats();
+      loadMessages();
+    }
+  }, [user, loadMessages]);
+
+  // 페이지 진입 시 받은 쪽지 읽음 처리 (배지 제거)
+  useEffect(() => {
+    if (!user) return;
+    if (activeTab !== "received") return;
+    // 비동기 처리
+    (async () => {
+      try {
+        const res = await fetch("/api/messages/read-all", { method: "PATCH" });
+        if (res.ok) {
+          // 로컬 상태 즉시 반영 (읽지 않은 메시지들을 읽음으로 표시)
+          setMessages((prev) => prev.map((m) => ({ ...m, read: true })));
+        }
+        // 네비게이션 배지 갱신 이벤트
+        if (typeof window !== "undefined") {
+          try {
+            window.dispatchEvent(new Event("messages:refresh"));
+          } catch {}
+        }
+        // 통계 재조회
+        loadStats();
+      } catch {}
+    })();
+  }, [user, activeTab]);
 
   if (!user) {
     return (
@@ -154,23 +267,7 @@ export default function MessagesPage() {
               </Link>
             </div>
           </div>
-
-          {/* 통계 */}
-          <div className="flex items-center gap-4 mt-3 text-sm text-muted-foreground">
-            <div className="flex items-center gap-1">
-              <Inbox className="h-4 w-4" />
-              <span>받은 쪽지 {stats.total_received}</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <Send className="h-4 w-4" />
-              <span>보낸 쪽지 {stats.total_sent}</span>
-            </div>
-            {stats.unread_count > 0 && (
-              <Badge variant="destructive" className="text-xs">
-                {stats.unread_count}개 읽지 않음
-              </Badge>
-            )}
-          </div>
+          {/* 통계 영역 제거 */}
         </div>
       </div>
 
@@ -182,28 +279,78 @@ export default function MessagesPage() {
             setActiveTab(value);
             setPage(1);
             setMessages([]);
+            clearSelection();
           }}
         >
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="received" className="flex items-center gap-2">
               <Inbox className="h-4 w-4" />
               받은 쪽지
+              {stats.total_received > 0 && (
+                <Badge
+                  className="ml-1 h-5 px-1 text-[10px]"
+                  variant="secondary"
+                >
+                  {stats.total_received}
+                </Badge>
+              )}
             </TabsTrigger>
             <TabsTrigger value="sent" className="flex items-center gap-2">
               <Send className="h-4 w-4" />
               보낸 쪽지
+              {stats.total_sent > 0 && (
+                <Badge
+                  className="ml-1 h-5 px-1 text-[10px]"
+                  variant="secondary"
+                >
+                  {stats.total_sent}
+                </Badge>
+              )}
             </TabsTrigger>
           </TabsList>
 
           <TabsContent value="received" className="mt-4">
             <div className="space-y-3">
+              {/* 상단 툴바: Sticky */}
+              <div className="sticky top-14 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 border rounded px-3 py-2 flex items-center justify-between">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={allSelectedOnPage}
+                    onChange={toggleSelectAllOnPage}
+                    aria-label="전체 선택"
+                    className="h-4 w-4"
+                  />
+                  전체 선택
+                </label>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={!selectedIds.size || marking}
+                    onClick={() => batchMarkRead(true)}
+                  >
+                    읽음 표시
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="bg-red-600 hover:bg-red-700"
+                    disabled={!selectedIds.size}
+                    onClick={batchDelete}
+                  >
+                    삭제
+                  </Button>
+                </div>
+              </div>
               {messages.map((message) => (
                 <Card
                   key={message.id}
                   className={`cursor-pointer transition-colors ${
                     !message.read ? "border-primary/20 bg-primary/5" : ""
                   }`}
-                  onClick={() => router.push(`/messages/${message.id}`)}
+                  onClick={() => {
+                    router.push(`/messages/${message.id}`);
+                  }}
                 >
                   <CardContent className="p-4">
                     <div className="flex items-start justify-between">
@@ -241,6 +388,7 @@ export default function MessagesPage() {
                           </Button>
                         </div>
                       </div>
+                      {/* 카드 체크박스 제거 */}
                     </div>
                   </CardContent>
                 </Card>
@@ -278,11 +426,36 @@ export default function MessagesPage() {
 
           <TabsContent value="sent" className="mt-4">
             <div className="space-y-3">
+              {/* 보낸 쪽지 툴바: Sticky (전체 선택 + 삭제) */}
+              <div className="sticky top-14 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 border rounded px-3 py-2 flex items-center justify-between">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={allSelectedOnPage}
+                    onChange={toggleSelectAllOnPage}
+                    aria-label="전체 선택"
+                    className="h-4 w-4"
+                  />
+                  전체 선택
+                </label>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    className="bg-red-600 hover:bg-red-700"
+                    disabled={!selectedIds.size}
+                    onClick={batchDelete}
+                  >
+                    삭제
+                  </Button>
+                </div>
+              </div>
               {messages.map((message) => (
                 <Card
                   key={message.id}
                   className="cursor-pointer"
-                  onClick={() => router.push(`/messages/${message.id}`)}
+                  onClick={() => {
+                    router.push(`/messages/${message.id}`);
+                  }}
                 >
                   <CardContent className="p-4">
                     <div className="flex items-start justify-between">

@@ -5,6 +5,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider } from "@/components/auth-provider";
 import { Navbar } from "@/components/navbar";
+import { SiteFooter } from "@/components/site-footer";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -37,6 +38,7 @@ export default function RootLayout({
             <main className="mx-auto w-full max-w-6xl px-3 sm:px-4 md:px-6 py-0">
               {children}
             </main>
+            <SiteFooter />
             <Toaster richColors position="top-right" />
           </AuthProvider>
         </ThemeProvider>

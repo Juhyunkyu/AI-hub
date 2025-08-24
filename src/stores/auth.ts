@@ -26,6 +26,21 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   signOut: async () => {
     const supabase = createSupabaseBrowserClient()
     await supabase.auth.signOut()
+    // 클라이언트 보존 상태 초기화 (테마/컬러테마 등)
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.removeItem('theme')
+        localStorage.removeItem('color-theme')
+      } catch {}
+      try {
+        document.documentElement.classList.remove('dark')
+        document.documentElement.removeAttribute('data-theme')
+      } catch {}
+      // 선택적으로 전역 이벤트 발행 (테마 리셋 알림)
+      try {
+        window.dispatchEvent(new Event('theme:reset'))
+      } catch {}
+    }
     set({ user: null })
   },
   
