@@ -1,14 +1,13 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { MessageSquare, Search, Filter, Eye, Edit, Trash2 } from "lucide-react";
 
 export default async function CommentsManagementPage() {
   const supabase = createSupabaseServerClient();
 
   // 모든 댓글 데이터 가져오기 (작성자 및 게시글 정보 포함)
-  const { data: comments, error } = await supabase
+  const { data: commentsRaw, error } = await supabase
     .from("comments")
     .select(
       `
@@ -27,6 +26,22 @@ export default async function CommentsManagementPage() {
   if (error) {
     console.error("Error fetching comments:", error);
   }
+
+  type JoinedUser = { username: string };
+  type JoinedPost = { title: string };
+  type CommentWithJoins = {
+    id: string;
+    body: string;
+    created_at: string;
+    updated_at: string;
+    author_id: string;
+    post_id: string;
+    profiles: JoinedUser | JoinedUser[] | null;
+    posts: JoinedPost | JoinedPost[] | null;
+  };
+
+  const comments: CommentWithJoins[] =
+    (commentsRaw as unknown as CommentWithJoins[] | null) ?? [];
 
   const stats = {
     total: comments?.length || 0,
@@ -114,59 +129,75 @@ export default async function CommentsManagementPage() {
         <CardContent>
           <div className="space-y-4">
             {comments && comments.length > 0 ? (
-              comments.map((comment) => (
-                <div
-                  key={comment.id}
-                  className="flex items-start justify-between p-4 border rounded-lg"
-                >
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-4 mb-2">
-                      <div className="flex-1">
-                        <div className="text-sm text-muted-foreground">
-                          게시글:{" "}
-                          <span className="font-medium">
-                            {comment.posts?.title || "삭제된 게시글"}
-                          </span>
-                        </div>
-                        <div className="text-sm text-muted-foreground">
-                          작성자:{" "}
-                          <span className="font-medium">
-                            {comment.profiles?.username || "익명"}
-                          </span>
+              comments.map((comment) => {
+                const postTitle = Array.isArray(comment.posts)
+                  ? (comment.posts[0] as { title?: string } | undefined)?.title
+                  : (comment.posts as { title?: string } | null | undefined)
+                      ?.title;
+                const authorUsername = Array.isArray(comment.profiles)
+                  ? (comment.profiles[0] as { username?: string } | undefined)
+                      ?.username
+                  : (
+                      comment.profiles as
+                        | { username?: string }
+                        | null
+                        | undefined
+                    )?.username;
+
+                return (
+                  <div
+                    key={comment.id}
+                    className="flex items-start justify-between p-4 border rounded-lg"
+                  >
+                    <div className="flex-1">
+                      <div className="flex items-center space-x-4 mb-2">
+                        <div className="flex-1">
+                          <div className="text-sm text-muted-foreground">
+                            게시글:{" "}
+                            <span className="font-medium">
+                              {postTitle || "삭제된 게시글"}
+                            </span>
+                          </div>
+                          <div className="text-sm text-muted-foreground">
+                            작성자:{" "}
+                            <span className="font-medium">
+                              {authorUsername || "익명"}
+                            </span>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                    <div className="text-sm mb-2">{comment.body}</div>
-                    <div className="flex items-center space-x-4 text-xs text-muted-foreground">
-                      <span>
-                        작성일:{" "}
-                        {new Date(comment.created_at).toLocaleDateString()}
-                      </span>
-                      {comment.updated_at !== comment.created_at && (
+                      <div className="text-sm mb-2">{comment.body}</div>
+                      <div className="flex items-center space-x-4 text-xs text-muted-foreground">
                         <span>
-                          수정일:{" "}
-                          {new Date(comment.updated_at).toLocaleDateString()}
+                          작성일:{" "}
+                          {new Date(comment.created_at).toLocaleDateString()}
                         </span>
-                      )}
+                        {comment.updated_at !== comment.created_at && (
+                          <span>
+                            수정일:{" "}
+                            {new Date(comment.updated_at).toLocaleDateString()}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Button variant="outline" size="sm">
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                      <Button variant="outline" size="sm">
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-red-600 hover:text-red-700"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </div>
                   </div>
-                  <div className="flex items-center space-x-2">
-                    <Button variant="outline" size="sm">
-                      <Eye className="h-4 w-4" />
-                    </Button>
-                    <Button variant="outline" size="sm">
-                      <Edit className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="text-red-600 hover:text-red-700"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              ))
+                );
+              })
             ) : (
               <div className="text-center py-8 text-muted-foreground">
                 댓글이 없습니다.

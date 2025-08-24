@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/pagination";
 import { SearchBar } from "@/components/search-bar";
 import { Plus, Home, ChevronRight } from "lucide-react";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 
 interface CategoryPageProps {
   params: Promise<{
@@ -343,8 +344,8 @@ export default async function CategoryPage({
                             />
                           ) : (
                             <h3 className="font-medium text-sm sm:text-base text-foreground hover:text-primary transition-colors">
-                            {post.title}
-                          </h3>
+                              {post.title}
+                            </h3>
                           )}
                           {hasQuery && snippetHtml && (
                             <div
@@ -358,7 +359,18 @@ export default async function CategoryPage({
                                 태그 일치
                               </span>
                             )}
-                            <span>{author?.username || "익명"}</span>
+                            <span className="inline-flex items-center gap-1.5">
+                              <Avatar className="size-5">
+                                <AvatarImage
+                                  src={author?.avatar_url ?? undefined}
+                                  alt={author?.username ?? "익명"}
+                                />
+                                <AvatarFallback className="text-[10px]">
+                                  {(author?.username || "익명").slice(0, 1)}
+                                </AvatarFallback>
+                              </Avatar>
+                              <span>{author?.username || "익명"}</span>
+                            </span>
                             <span>
                               {new Date(
                                 post.created_at as unknown as string

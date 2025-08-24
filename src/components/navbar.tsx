@@ -268,8 +268,12 @@ export function Navbar() {
               const base =
                 "px-3 py-1.5 rounded-full border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
               const classes = isActive
-                ? "text-foreground border-border bg-muted/90 shadow"
-                : "text-muted-foreground border-transparent bg-transparent hover:text-foreground hover:border-border/40 hover:bg-muted/80";
+                ? "text-foreground border-border" +
+                  " " +
+                  "[background:var(--nav-chip-bg)] shadow"
+                : "text-muted-foreground border-transparent bg-transparent hover:text-foreground hover:border-border/40" +
+                  " " +
+                  "hover:[background:var(--nav-chip-hover-bg)]";
               return (
                 <Link key={c.id} href={href} className={`${base} ${classes}`}>
                   {c.name}

@@ -3,6 +3,7 @@ import { AdminIcon } from "@/components/admin-icon";
 
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { Section } from "@/components/section";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { CategoryCard, Category } from "@/components/category-card";
 import { Button } from "@/components/ui/button";
 import { SearchBar } from "@/components/search-bar";
@@ -63,16 +64,19 @@ export default async function Home({
   const recentPostIds = [...recentPosts, ...pinnedGlobal].map((r) => r.id);
 
   // 작성자 맵
-  const authorMap = new Map<string, { id: string; username: string | null }>();
+  const authorMap = new Map<
+    string,
+    { id: string; username: string | null; avatar_url: string | null }
+  >();
   if (recentAuthorIds.length) {
     const { data: authorsData } = await supabase
       .from("profiles")
-      .select("id,username")
+      .select("id,username,avatar_url")
       .in("id", recentAuthorIds);
     (authorsData ?? []).forEach((a) => {
       authorMap.set(
         (a as { id: string }).id,
-        a as { id: string; username: string | null }
+        a as { id: string; username: string | null; avatar_url: string | null }
       );
     });
   }
@@ -414,9 +418,22 @@ export default async function Home({
                         <span>기타</span>
                       );
                     })()}
-                    <span>
-                      · {authorMap.get(p.author_id)?.username ?? "익명"}
-                    </span>
+                    {(() => {
+                      const author = authorMap.get(p.author_id);
+                      const name = author?.username ?? "익명";
+                      const avatarUrl = author?.avatar_url ?? undefined;
+                      return (
+                        <span className="inline-flex items-center gap-1.5">
+                          <Avatar className="size-5">
+                            <AvatarImage src={avatarUrl} alt={name} />
+                            <AvatarFallback className="text-[10px]">
+                              {name.slice(0, 1)}
+                            </AvatarFallback>
+                          </Avatar>
+                          <span>· {name}</span>
+                        </span>
+                      );
+                    })()}
                   </div>
                 </li>
               ))}

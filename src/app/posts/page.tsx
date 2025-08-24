@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { Section } from "@/components/section";
 import { Button } from "@/components/ui/button";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import {
   Pagination,
   PaginationContent,
@@ -32,16 +33,19 @@ export default async function AllPosts({
     .range(from, to);
 
   const authorIds = Array.from(new Set((posts ?? []).map((p) => p.author_id)));
-  const authorMap = new Map<string, { id: string; username: string | null }>();
+  const authorMap = new Map<
+    string,
+    { id: string; username: string | null; avatar_url: string | null }
+  >();
   if (authorIds.length) {
     const { data: authors } = await supabase
       .from("profiles")
-      .select("id,username")
+      .select("id,username,avatar_url")
       .in("id", authorIds);
     (authors ?? []).forEach((a) => {
       authorMap.set(
         (a as { id: string }).id,
-        a as { id: string; username: string | null }
+        a as { id: string; username: string | null; avatar_url: string | null }
       );
     });
   }
@@ -151,9 +155,22 @@ export default async function AllPosts({
                         <span>기타</span>
                       );
                     })()}
-                    <span>
-                      · {authorMap.get(p.author_id)?.username ?? "익명"}
-                    </span>
+                    {(() => {
+                      const author = authorMap.get(p.author_id);
+                      const name = author?.username ?? "익명";
+                      const avatarUrl = author?.avatar_url ?? undefined;
+                      return (
+                        <span className="inline-flex items-center gap-1.5">
+                          <Avatar className="size-5">
+                            <AvatarImage src={avatarUrl} alt={name} />
+                            <AvatarFallback className="text-[10px]">
+                              {name.slice(0, 1)}
+                            </AvatarFallback>
+                          </Avatar>
+                          <span>· {name}</span>
+                        </span>
+                      );
+                    })()}
                   </div>
                 </li>
               ))}
