@@ -1,21 +1,28 @@
 import Link from "next/link";
+import { unstable_noStore as noStore } from "next/cache";
 import { AdminIcon } from "@/components/admin-icon";
 
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabasePublicClient } from "@/lib/supabase/public";
 import { Section } from "@/components/section";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { CategoryCard, Category } from "@/components/category-card";
 import { Button } from "@/components/ui/button";
 import { SearchBar } from "@/components/search-bar";
 
+export const revalidate = 60; // 60초 ISR
+
 export default async function Home({
   searchParams,
 }: {
   searchParams: Promise<{ q?: string }>;
 }) {
-  const supabase = createSupabaseServerClient();
+  const supabase = createSupabasePublicClient();
   const { q = "" } = await searchParams;
   const query = (q || "").trim();
+
+  if (query.length >= 2) {
+    noStore();
+  }
 
   // 카테고리와 각 카테고리의 게시물 수 가져오기
   const [{ data: categories }, { data: recentPinnedGlobal }, { data: recent }] =
@@ -46,13 +53,13 @@ export default async function Home({
   // (생략) 카테고리별 카운트는 필요 시 추가 렌더링에 사용하세요
 
   // 최근 게시물 메타 정보(작성자/카테고리) 로딩
-  const pinnedGlobal = (recentPinnedGlobal ?? []) as {
+  const pinnedGlobal = (recentPinnedGlobal ?? []) as unknown as {
     id: string;
     title: string;
     created_at: string;
     author_id: string;
   }[];
-  const recentPosts = (recent ?? []) as {
+  const recentPosts = (recent ?? []) as unknown as {
     id: string;
     title: string;
     created_at: string;

@@ -2,6 +2,7 @@
 
 import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
+import Image from "next/image";
 import { useAuthStore } from "@/stores/auth";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
@@ -57,8 +58,14 @@ export function ProfileCover({
   return (
     <div className="relative w-full h-28 sm:h-36 md:h-44 rounded-md overflow-hidden border bg-muted">
       {url ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={url} alt="cover" className="h-full w-full object-cover" />
+        <Image
+          src={url}
+          alt="cover"
+          fill
+          sizes="100vw"
+          className="object-cover"
+          priority={false}
+        />
       ) : null}
       {isOwner && (
         <div className="absolute right-2 bottom-2">

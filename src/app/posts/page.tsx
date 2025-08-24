@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { unstable_noStore as noStore } from "next/cache";
+import { createSupabasePublicClient } from "@/lib/supabase/public";
 import { Section } from "@/components/section";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
@@ -15,12 +16,16 @@ import {
 
 const PAGE_SIZE = 15;
 
+export const revalidate = 60; // 60초 ISR
+
 export default async function AllPosts({
   searchParams,
 }: {
   searchParams: Promise<{ page?: string }>;
 }) {
-  const supabase = createSupabaseServerClient();
+  // 목록 페이지는 페이지 번호별로 ISR 캐시를 사용 (검색 없음)
+  // noStore 미사용: 페이지 파라미터 단위로 캐싱됨
+  const supabase = createSupabasePublicClient();
   const sp = await searchParams;
   const currentPage = Math.max(1, parseInt(sp.page ?? "1", 10) || 1);
   const from = (currentPage - 1) * PAGE_SIZE;

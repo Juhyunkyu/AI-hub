@@ -853,7 +853,7 @@ export default function NewPostPage() {
         .getPublicUrl(path);
       const url = urlData.publicUrl;
       insertHtmlAtCursor(
-        `<figure class="my-2"><img class="max-w-full h-auto rounded border border-border" src="${url}" alt="" /><figcaption class="text-xs text-muted-foreground">이미지 설명</figcaption></figure>`
+        `<figure class=\"my-2\"><img loading=\"lazy\" class=\"max-w-full h-auto rounded border border-border\" src=\"${url}\" alt=\"\" /><figcaption class=\"text-xs text-muted-foreground\">이미지 설명</figcaption></figure>`
       );
       toast.success("이미지가 본문에 삽입되었습니다");
     } catch (err: unknown) {

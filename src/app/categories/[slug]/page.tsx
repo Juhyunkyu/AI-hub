@@ -1,4 +1,5 @@
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabasePublicClient } from "@/lib/supabase/public";
+import { unstable_noStore as noStore } from "next/cache";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -14,6 +15,8 @@ import {
 import { SearchBar } from "@/components/search-bar";
 import { Plus, Home, ChevronRight } from "lucide-react";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+
+export const revalidate = 60; // 60초 ISR (검색 시에는 noStore)
 
 interface CategoryPageProps {
   params: Promise<{
@@ -50,10 +53,13 @@ export default async function CategoryPage({
   const q = (sp as Record<string, string | undefined>).q ?? "";
   const query = (q || "").trim();
   const hasQuery = query.length >= 2;
+  if (hasQuery) {
+    noStore();
+  }
   const currentPage = parseInt(page);
   const offset = (currentPage - 1) * POSTS_PER_PAGE;
 
-  const supabase = createSupabaseServerClient();
+  const supabase = createSupabasePublicClient();
 
   // 카테고리 정보 가져오기
   const { data: category } = await supabase
@@ -96,7 +102,7 @@ export default async function CategoryPage({
         .order("pin_priority", { ascending: true })
         .order("pinned_until", { ascending: false });
       const pinnedIds = new Set(
-        (pinnedCategory ?? []).map((p) => p.id as string)
+        ((pinnedCategory ?? []) as unknown as { id: string }[]).map((p) => p.id)
       );
       // 검색이 있으면 제목/본문/태그로 필터링 (정확한 태그 매칭)
       let filteredIds = postIds.filter((id) => !pinnedIds.has(id));
@@ -145,25 +151,36 @@ export default async function CategoryPage({
         .in("id", filteredIds)
         .order("created_at", { ascending: false })
         .range(offset, offset + POSTS_PER_PAGE - 1);
-      const normPosts: PostLiteWithMeta[] = (postsData || [])
+      const normPosts: PostLiteWithMeta[] = (
+        (postsData || []) as unknown as (PostLite & {
+          content?: string | null;
+        })[]
+      )
         .filter((p) => {
-          const ps = (p as { pin_scope?: string | null }).pin_scope || null;
-          const isNotice = Boolean((p as { is_notice?: boolean }).is_notice);
+          const ps =
+            (p as unknown as { pin_scope?: string | null }).pin_scope || null;
+          const isNotice = Boolean(
+            (p as unknown as { is_notice?: boolean }).is_notice
+          );
           // 전역 공지 글은 카테고리 리스트에서 제외
           if (ps === "global" && isNotice) return false;
           return true;
         })
         .map((p) => ({
-          ...(p as PostLite & { content?: string | null }),
-          matchedByTag: matchedTagPostIds.has((p as { id: string }).id),
+          ...(p as unknown as PostLite & { content?: string | null }),
+          matchedByTag: matchedTagPostIds.has(
+            (p as unknown as { id: string }).id
+          ),
         }));
       // 상단: 고정글 + 일반글 페이지 구간
-      const pinnedPosts: PostLiteWithMeta[] = (pinnedCategory || []).map(
-        (p) => ({
-          ...(p as PostLite & { content?: string | null }),
-          matchedByTag: false,
-        })
-      );
+      const pinnedPosts: PostLiteWithMeta[] = (
+        (pinnedCategory || []) as unknown as (PostLite & {
+          content?: string | null;
+        })[]
+      ).map((p) => ({
+        ...p,
+        matchedByTag: false,
+      }));
       // 전역 고정글은 제외 (안전 장치)
       posts = [...pinnedPosts.filter(() => true), ...normPosts];
     }
