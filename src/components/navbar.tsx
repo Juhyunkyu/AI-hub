@@ -13,7 +13,6 @@ import {
   Inbox,
   Settings,
   LogOut,
-  ChevronDown,
   Grid3X3,
 } from "lucide-react";
 import { useEffect, useState, useMemo, useRef } from "react";
@@ -258,15 +257,25 @@ export function Navbar() {
     <header className="w-full border-b bg-background/60 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="mx-auto max-w-6xl px-4 h-14 flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Link href="/" className="font-semibold">
+          <Link href="/" className="font-semibold text-base sm:text-lg">
             AI Hub
           </Link>
-          <nav className="hidden md:flex items-center gap-3 text-sm">
-            <Link href="/categories/free">자유게시판</Link>
-            <Link href="/categories/ai-qa">AI 물어보기</Link>
-            <Link href="/categories/ai-briefing">AI 브리핑</Link>
-            <Link href="/categories/vibe-coding">바이브코딩</Link>
-            <Link href="/categories/ai-studio">AI 스튜디오</Link>
+          {/* 데스크톱 카테고리 내비게이션: 칩(배지)형 - 테마 맞춤 배경 + 미세 텍스처 */}
+          <nav className="hidden md:flex items-center gap-2 text-sm">
+            {categories.map((c) => {
+              const href = `/categories/${c.slug}`;
+              const isActive = pathname?.startsWith(href);
+              const base =
+                "px-3 py-1.5 rounded-full border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+              const classes = isActive
+                ? "text-foreground border-border bg-muted/90 shadow"
+                : "text-muted-foreground border-transparent bg-transparent hover:text-foreground hover:border-border/40 hover:bg-muted/80";
+              return (
+                <Link key={c.id} href={href} className={`${base} ${classes}`}>
+                  {c.name}
+                </Link>
+              );
+            })}
           </nav>
         </div>
         <div className="flex items-center gap-1">
