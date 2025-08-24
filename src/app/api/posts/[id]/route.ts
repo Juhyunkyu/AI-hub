@@ -29,14 +29,19 @@ export async function GET(
       .select("topic_id, topics(category_id)")
       .eq("post_id", id);
 
-    const topicIds: string[] = (ptRows ?? [])
-      .map((r: any) => r?.topic_id)
-      .filter((v: unknown): v is string => typeof v === "string");
+    type PostTopicRow = {
+      topic_id?: string | null;
+      topics?: { category_id?: string | null } | null;
+    };
+    const pt = (ptRows ?? []) as PostTopicRow[];
+    const topicIds: string[] = pt
+      .map((r) => r.topic_id)
+      .filter((v): v is string => typeof v === "string" && v.length > 0);
 
     let categoryId: string | null = null;
-    const firstTopic = (ptRows ?? [])[0] as any;
-    if (firstTopic?.topics?.category_id) {
-      categoryId = firstTopic.topics.category_id as string;
+    if (pt.length > 0) {
+      const cid = pt[0]?.topics?.category_id;
+      if (typeof cid === "string" && cid) categoryId = cid;
     }
 
     // 태그 조회
@@ -45,9 +50,11 @@ export async function GET(
       .select("tags(id,name)")
       .eq("post_id", id);
 
-    const tags: string[] = (tagRows ?? [])
-      .map((r: any) => r?.tags?.name)
-      .filter((v: unknown): v is string => typeof v === "string");
+    type TagJoinRow = { tags?: { id?: string; name?: string } | null };
+    const tagJoin = (tagRows ?? []) as TagJoinRow[];
+    const tags: string[] = tagJoin
+      .map((r) => r.tags?.name)
+      .filter((v): v is string => typeof v === "string" && v.length > 0);
 
     // 본문 조회는 공개글이면 모두 가능하고, 비공개 요건이 있으면 여기서 제한하면 됨
     // 편집 화면에서 소유자 확인용으로도 사용됨
@@ -173,9 +180,10 @@ export async function PATCH(
           .upsert(upserts, { onConflict: "slug" })
           .select("id,name,slug");
         if (e3) return NextResponse.json({ error: e3.message }, { status: 500 });
-        const tagIds = (tagRows ?? [])
-          .filter((r: any) => typeof r?.id === "string")
-          .map((r: any) => r.id as string);
+        const tagRowsTyped = (tagRows ?? []) as { id?: string | null }[];
+        const tagIds = tagRowsTyped
+          .map((r) => r.id)
+          .filter((id): id is string => typeof id === "string");
 
         // 2) 기존 매핑 삭제 후 재삽입
         const { error: delErr } = await supabase

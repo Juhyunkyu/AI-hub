@@ -358,12 +358,12 @@ export default async function Home({
                 <div className="flex items-center gap-3">
                   <Link
                     href={`/posts/${p.id}`}
-                    className="hover:underline truncate text-sm sm:text-[15px]"
+                    className="hover:underline truncate text-[11px] sm:text-sm"
                   >
                     {p.title}
                   </Link>
                 </div>
-                <div className="mt-1 text-[11px] text-muted-foreground flex items-center gap-2">
+                <div className="mt-1 text-[10px] sm:text-xs text-muted-foreground flex items-center gap-2">
                   <span className="text-[10px] px-1 py-0.5 rounded border text-muted-foreground">
                     공지
                   </span>
@@ -380,22 +380,27 @@ export default async function Home({
       {/* Recent Posts Section (hide on search) */}
       {!query && (
         <div>
-          <Section title="최근 게시물">
+          <Section>
+            <div className="mt-1 mb-3">
+              <h2 className="text-sm sm:text-base font-semibold">
+                최근 게시물
+              </h2>
+            </div>
             <ul className="space-y-2">
               {recentPosts.map((p) => (
                 <li key={p.id} className="border rounded px-3 py-2">
                   <div className="flex items-center justify-between gap-3">
                     <Link
                       href={`/posts/${p.id}`}
-                      className="hover:underline font-medium truncate"
+                      className="hover:underline font-medium truncate text-sm sm:text-base"
                     >
                       {p.title}
                     </Link>
-                    <span className="text-xs text-muted-foreground shrink-0">
+                    <span className="text-[11px] sm:text-xs text-muted-foreground shrink-0">
                       {new Date(p.created_at).toLocaleDateString()}
                     </span>
                   </div>
-                  <div className="mt-1 text-xs text-muted-foreground flex items-center gap-2">
+                  <div className="mt-1 text-[11px] sm:text-xs text-muted-foreground flex items-center gap-2">
                     {(() => {
                       const cat = categoryByPost.get(p.id);
                       return cat ? (

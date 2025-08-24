@@ -54,11 +54,16 @@ export function CategoryCard({
     return (
       <Link href={`/categories/${category.slug}`}>
         <Card className="transition-all duration-200 active:scale-95 cursor-pointer bg-card border-border shadow-sm">
-          <CardContent className="p-2">
+          <CardContent className="px-2 py-0.5">
             <div className="text-center">
-              <h3 className="font-semibold text-sm whitespace-nowrap text-foreground">
+              <h3 className="font-semibold text-[13px] leading-tight whitespace-nowrap text-foreground">
                 {category.name}
               </h3>
+              {category.description && (
+                <p className="text-[10px] text-muted-foreground mt-0 truncate leading-[1.1]">
+                  {category.description}
+                </p>
+              )}
             </div>
           </CardContent>
         </Card>
