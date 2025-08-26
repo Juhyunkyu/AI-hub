@@ -77,9 +77,10 @@ export function SaveButton({ postId }: { postId: string }) {
       size="sm"
       variant={saved ? "default" : "outline"}
       onClick={toggle}
-      className="h-8 px-2 text-xs"
+      className="h-7 sm:h-8 px-2 text-[11px] sm:text-xs"
     >
-      <Bookmark className="mr-1 h-4 w-4" /> {saved ? "저장됨" : "저장"}
+      <Bookmark className="mr-1 h-3.5 w-3.5 sm:h-4 sm:w-4" />{" "}
+      {saved ? "저장됨" : "저장"}
     </Button>
   );
 }

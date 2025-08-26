@@ -7,8 +7,9 @@ import { useAuthStore } from "@/stores/auth";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import { UserAvatar } from "@/components/user-avatar";
+import Image from "next/image";
 import { Badge } from "@/components/ui/badge";
-import { MoreHorizontal, Reply, Heart, MessageSquare } from "lucide-react";
+import { MoreHorizontal, Reply, Heart } from "lucide-react";
 import { ReportButton } from "@/components/report-button";
 import {
   DropdownMenu,
@@ -42,8 +43,6 @@ export function CommentItem({
   authorAvatarUrl,
   createdAt,
   isPostAuthor,
-  postId,
-  isReply = false,
   images = [],
   onReply,
   onUpdate,
@@ -116,7 +115,7 @@ export function CommentItem({
         setLiked(true);
         setLikeCount((prev) => prev + 1);
       }
-    } catch (error) {
+    } catch {
       toast.error("좋아요 처리 중 오류가 발생했습니다");
     }
   }
@@ -130,7 +129,7 @@ export function CommentItem({
   };
 
   return (
-    <div className="flex gap-3 p-3 border rounded-lg hover:bg-muted/50 transition-colors">
+    <div className="flex gap-1 sm:gap-1.5 p-2.5 sm:p-3 border rounded-lg hover:bg-muted/50 transition-colors">
       {/* 사용자 아바타 */}
       <div className="flex-shrink-0">
         <UserAvatar
@@ -146,15 +145,15 @@ export function CommentItem({
       {/* 댓글 내용 */}
       <div className="flex-1 min-w-0">
         {/* 헤더: 닉네임, 배지, 메뉴 */}
-        <div className="flex items-center justify-between gap-2 mb-1">
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="font-medium text-sm truncate">
+        <div className="flex items-center justify-between gap-2 mb-0.5 sm:mb-1">
+          <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+            <span className="font-medium text-[13px] sm:text-sm truncate">
               {authorUsername || "익명"}
             </span>
             {isPostAuthor && (
               <Badge
                 variant="secondary"
-                className="text-xs bg-primary text-primary-foreground hover:bg-primary/90 flex-shrink-0"
+                className="text-[9px] px-1 py-px bg-primary text-primary-foreground hover:bg-primary/90 flex-shrink-0 leading-none"
               >
                 작성자
               </Badge>
@@ -202,7 +201,7 @@ export function CommentItem({
               value={text}
               onChange={(e) => setText(e.target.value)}
               rows={3}
-              className="text-sm"
+              className="text-[13px] sm:text-sm"
             />
             <div className="flex gap-2">
               <Button size="sm" onClick={save} disabled={loading}>
@@ -222,18 +221,22 @@ export function CommentItem({
             </div>
           </div>
         ) : (
-          <div className="text-sm leading-relaxed mb-2">{body}</div>
+          <div className="text-[13px] sm:text-sm leading-relaxed mb-1.5 sm:mb-2">
+            {body}
+          </div>
         )}
 
         {/* 이미지 표시 */}
         {images && images.length > 0 && (
-          <div className="flex gap-2 flex-wrap mb-3">
+          <div className="flex gap-1.5 sm:gap-2 flex-wrap mb-2 sm:mb-3">
             {images.map((imageUrl, index) => (
-              <img
+              <Image
                 key={index}
-                src={imageUrl}
+                src={`/api/image-proxy?url=${encodeURIComponent(imageUrl)}`}
                 alt={`댓글 이미지 ${index + 1}`}
-                className="max-w-48 max-h-48 object-cover rounded border cursor-pointer hover:opacity-80 transition-opacity"
+                width={192}
+                height={192}
+                className="w-48 h-48 object-cover rounded border cursor-pointer hover:opacity-80 transition-opacity"
                 onClick={() => window.open(imageUrl, "_blank")}
               />
             ))}
@@ -242,9 +245,9 @@ export function CommentItem({
 
         {/* 날짜와 액션 버튼들 */}
         {!editing && (
-          <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+          <div className="flex items-center justify-between gap-2 text-[11px] sm:text-xs text-muted-foreground">
             <span>{formatDate(createdAt)}</span>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 sm:gap-3">
               <button
                 onClick={handleReply}
                 className="flex items-center gap-1 hover:text-foreground transition-colors"

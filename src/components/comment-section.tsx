@@ -98,7 +98,13 @@ export function CommentSection({
 
       return (
         <div key={`${c.id}-${level}`} className="group">
-          <div className={isReply ? "pl-8 border-l-2 border-muted/30" : ""}>
+          <div
+            className={
+              isReply
+                ? "pl-4 sm:pl-8 border-l border-muted/30 sm:border-l-2"
+                : ""
+            }
+          >
             <CommentItem
               id={c.id}
               body={c.body}
@@ -127,10 +133,15 @@ export function CommentSection({
   };
 
   return (
-    <Section title="댓글">
-      <div className="space-y-3">{renderCommentTree(commentTree)}</div>
+    <Section
+      title={<span className="text-sm sm:text-base">댓글</span>}
+      className="space-y-2 sm:space-y-3"
+    >
+      <div className="space-y-2 sm:space-y-3">
+        {renderCommentTree(commentTree)}
+      </div>
 
-      <div className="mt-6">
+      <div className="mt-4 sm:mt-6 mb-8 sm:mb-10">
         <CommentForm
           postId={postId}
           replyTo={replyTo || undefined}

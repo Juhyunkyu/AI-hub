@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { unstable_noStore as noStore } from "next/cache";
-import { createSupabasePublicClient } from "@/lib/supabase/public";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { Section } from "@/components/section";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
@@ -16,7 +16,7 @@ import {
 
 const PAGE_SIZE = 15;
 
-export const revalidate = 60; // 60초 ISR
+export const revalidate = 15; // 댓글 수 빠른 반영을 위한 15초 ISR
 
 export default async function AllPosts({
   searchParams,
@@ -25,7 +25,11 @@ export default async function AllPosts({
 }) {
   // 목록 페이지는 페이지 번호별로 ISR 캐시를 사용 (검색 없음)
   // noStore 미사용: 페이지 파라미터 단위로 캐싱됨
-  const supabase = createSupabasePublicClient();
+  const supabase = createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const isLoggedIn = Boolean(user?.id);
   const sp = await searchParams;
   const currentPage = Math.max(1, parseInt(sp.page ?? "1", 10) || 1);
   const from = (currentPage - 1) * PAGE_SIZE;
@@ -34,6 +38,7 @@ export default async function AllPosts({
   const { data: posts, count } = await supabase
     .from("posts")
     .select("id,title,created_at,author_id", { count: "exact" })
+    .eq("is_notice", false)
     .order("created_at", { ascending: false })
     .range(from, to);
 
@@ -113,6 +118,19 @@ export default async function AllPosts({
     }
   }
 
+  // 댓글 수 집계 (표시되는 게시글에 한정)
+  const commentCountByPost = new Map<string, number>();
+  if (pagePostIds.length) {
+    const { data: commentRows } = await supabase
+      .from("comments")
+      .select("post_id")
+      .in("post_id", pagePostIds);
+    for (const r of commentRows ?? []) {
+      const pid = (r as { post_id: string }).post_id;
+      commentCountByPost.set(pid, (commentCountByPost.get(pid) || 0) + 1);
+    }
+  }
+
   return (
     <div className="min-h-screen bg-background pb-0">
       <Section>
@@ -124,9 +142,11 @@ export default async function AllPosts({
             <p className="text-muted-foreground text-sm mb-4">
               아직 게시물이 없습니다.
             </p>
-            <Link href="/posts/new">
-              <Button>첫 번째 게시물 작성하기</Button>
-            </Link>
+            {isLoggedIn ? (
+              <Link href="/posts/new">
+                <Button>첫 번째 게시물 작성하기</Button>
+              </Link>
+            ) : null}
           </div>
         ) : (
           <>
@@ -136,17 +156,26 @@ export default async function AllPosts({
                   <div className="flex items-center justify-between gap-3">
                     <Link
                       href={`/posts/${p.id}`}
-                      className="hover:underline font-medium truncate"
+                      className="hover:underline font-medium truncate text-sm sm:text-base flex items-baseline"
                     >
-                      {p.title}
+                      <span className="truncate">{p.title}</span>
+                      {(() => {
+                        const n = commentCountByPost.get(p.id) || 0;
+                        if (n <= 0) return null;
+                        return (
+                          <span className="ml-1 text-[11px] sm:text-xs text-muted-foreground whitespace-nowrap">
+                            {n > 99 ? "99+" : n}
+                          </span>
+                        );
+                      })()}
                     </Link>
-                    <span className="text-xs text-muted-foreground shrink-0">
+                    <span className="text-[11px] sm:text-xs text-muted-foreground shrink-0">
                       {new Date(
                         p.created_at as unknown as string
                       ).toLocaleDateString()}
                     </span>
                   </div>
-                  <div className="mt-1 text-xs text-muted-foreground flex items-center gap-2">
+                  <div className="mt-1 text-[11px] sm:text-xs text-muted-foreground flex items-center gap-2">
                     {(() => {
                       const cat = categoryByPost.get(p.id);
                       return cat ? (

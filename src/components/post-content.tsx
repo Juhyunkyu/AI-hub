@@ -21,7 +21,7 @@ interface KakaoMaps {
 }
 
 type KLatLng = unknown;
-interface KMap {}
+type KMap = unknown;
 interface KMarker {
   setMap(map: KMap): void;
 }

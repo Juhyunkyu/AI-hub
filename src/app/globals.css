@@ -146,6 +146,15 @@
 }
 
 /* Naver Cafe-like quote styles */
+/* 네이티브 인디케이터는 이 컨테이너에서만 숨김 (오버레이 아이콘 사용) */
+.has-custom-calendar input[type="date"]::-webkit-calendar-picker-indicator,
+.has-custom-calendar input[type="datetime-local"]::-webkit-calendar-picker-indicator,
+.has-custom-calendar input[type="month"]::-webkit-calendar-picker-indicator,
+.has-custom-calendar input[type="time"]::-webkit-calendar-picker-indicator {
+  opacity: 0;
+  display: none;
+}
+
 .nc-quote {
   position: relative;
   border: 1px solid var(--border);

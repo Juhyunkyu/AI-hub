@@ -7,6 +7,7 @@ import { AvatarUpload } from "@/components/profile/avatar-upload";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
+import { useAuthStore } from "@/stores/auth";
 
 interface UserAvatarProps {
   userId: string;
@@ -17,12 +18,13 @@ interface UserAvatarProps {
   isOwner?: boolean;
   showName?: boolean; // 닉네임 표시 여부
   showFollowButton?: boolean; // 팔로우 버튼 표시 여부
+  secondaryText?: React.ReactNode; // 이름 아래 보조 텍스트(예: 날짜/시간)
 }
 
 const sizeClasses = {
   sm: "h-6 w-6",
   md: "h-8 w-8",
-  lg: "h-12 w-12",
+  lg: "h-10 w-10 sm:h-12 sm:w-12",
 };
 
 const iconSizes = {
@@ -40,8 +42,10 @@ export function UserAvatar({
   isOwner = false,
   showName = false,
   showFollowButton = false,
+  secondaryText,
 }: UserAvatarProps) {
   const router = useRouter();
+  const user = useAuthStore((s) => s.user);
   const [showAvatarUpload, setShowAvatarUpload] = useState(false);
   const [showActionsMenu, setShowActionsMenu] = useState(false);
   const [isFollowing, setIsFollowing] = useState(false);
@@ -50,31 +54,43 @@ export function UserAvatar({
   const handleAvatarClick = () => {
     if (isOwner) {
       setShowAvatarUpload(true);
-    } else if (showActions && username) {
-      setShowActionsMenu(!showActionsMenu);
-    } else if (username) {
-      // 닉네임이 있으면 바로 프로필로 이동
-      router.push(`/profile/${encodeURIComponent(username)}`);
     }
+    // 비소유자는 이미지 클릭 시 아무 동작 없음 (이름에서 메뉴 사용)
+  };
+
+  const handleNameClick = () => {
+    if (!username) return;
+    if (showActions) setShowActionsMenu((v) => !v);
   };
 
   const handleMessageClick = () => {
-    router.push(`/messages/new?to=${userId}`);
+    if (!user) {
+      const next = `/messages/new?to=${encodeURIComponent(userId)}`;
+      router.push(`/login?next=${encodeURIComponent(next)}`);
+    } else {
+      router.push(`/messages/new?to=${userId}`);
+    }
     setShowActionsMenu(false);
   };
 
   const handleProfileClick = () => {
-    if (username) {
-      router.push(`/profile/${encodeURIComponent(username)}`);
-    } else {
+    if (!username) {
       toast.error("이 사용자의 프로필을 볼 수 없습니다");
+      setShowActionsMenu(false);
+      return;
+    }
+    if (!user) {
+      const next = `/profile/${encodeURIComponent(username)}`;
+      router.push(`/login?next=${encodeURIComponent(next)}`);
+    } else {
+      router.push(`/profile/${encodeURIComponent(username)}`);
     }
     setShowActionsMenu(false);
   };
 
   const handleFollowClick = async () => {
     if (isOwner) return;
-    
+
     setFollowLoading(true);
     try {
       // TODO: 팔로우/언팔로우 API 호출
@@ -90,12 +106,10 @@ export function UserAvatar({
   const AvatarComponent = (
     <div
       onClick={handleAvatarClick}
-      className={`${sizeClasses[size]} rounded-full border bg-muted overflow-hidden flex items-center justify-center hover:opacity-80 transition-opacity ${
+      className={`${sizeClasses[size]} rounded-full border bg-muted overflow-hidden flex items-center justify-center ${
         isOwner
-          ? "cursor-pointer"
-          : showActions
-            ? "cursor-pointer"
-            : "cursor-default"
+          ? "cursor-pointer hover:opacity-80 transition-opacity"
+          : "cursor-default"
       }`}
       title={isOwner ? "프로필 사진 변경" : username || "사용자"}
     >
@@ -110,11 +124,7 @@ export function UserAvatar({
         <div className="h-full w-full flex items-center justify-center bg-gradient-to-br from-blue-100 to-purple-100 dark:from-blue-900/20 dark:to-purple-900/20">
           <span
             className={`font-bold text-blue-600 dark:text-blue-400 ${
-              size === "sm"
-                ? "text-xs"
-                : size === "md"
-                  ? "text-sm"
-                  : "text-lg"
+              size === "sm" ? "text-xs" : size === "md" ? "text-sm" : "text-lg"
             }`}
           >
             {username?.charAt(0).toUpperCase() || "U"}
@@ -124,18 +134,25 @@ export function UserAvatar({
     </div>
   );
 
-  // 닉네임과 함께 표시하는 경우
+  // 닉네임과 함께 표시하는 경우 (아바타 왼쪽, 오른쪽에 이름/보조텍스트 수직 정렬)
   if (showName && username) {
     return (
       <div className="relative">
         <div className="flex items-center gap-2 group">
           {AvatarComponent}
-          <span 
-            onClick={handleAvatarClick}
-            className="text-sm font-medium hover:underline cursor-pointer group-hover:text-primary transition-colors"
-          >
-            {username}
-          </span>
+          <div className="leading-tight">
+            <span
+              onClick={handleNameClick}
+              className="text-[13px] sm:text-sm font-medium hover:underline cursor-pointer group-hover:text-primary transition-colors"
+            >
+              {username}
+            </span>
+            {secondaryText ? (
+              <div className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">
+                {secondaryText}
+              </div>
+            ) : null}
+          </div>
           {showFollowButton && !isOwner && (
             <Button
               size="sm"

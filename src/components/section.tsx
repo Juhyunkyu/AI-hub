@@ -11,7 +11,10 @@ type SectionProps = {
 export function Section({ title, actions, className, children }: SectionProps) {
   return (
     <section
-      className={cn("w-full space-y-3 sm:space-y-4 md:space-y-5", className)}
+      className={cn(
+        "w-full space-y-2.5 sm:space-y-3.5 md:space-y-4.5",
+        className
+      )}
     >
       {(title || actions) && (
         <div className="flex items-center justify-between gap-2">

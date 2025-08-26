@@ -1,4 +1,4 @@
-import { createSupabasePublicClient } from "@/lib/supabase/public";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { unstable_noStore as noStore } from "next/cache";
 import { notFound } from "next/navigation";
 import Link from "next/link";
@@ -16,7 +16,7 @@ import { SearchBar } from "@/components/search-bar";
 import { Plus, Home, ChevronRight } from "lucide-react";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 
-export const revalidate = 60; // 60초 ISR (검색 시에는 noStore)
+export const revalidate = 15; // 댓글 수 빠른 반영 (검색 시에는 noStore)
 
 interface CategoryPageProps {
   params: Promise<{
@@ -59,7 +59,11 @@ export default async function CategoryPage({
   const currentPage = parseInt(page);
   const offset = (currentPage - 1) * POSTS_PER_PAGE;
 
-  const supabase = createSupabasePublicClient();
+  const supabase = createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const isLoggedIn = Boolean(user?.id);
 
   // 카테고리 정보 가져오기
   const { data: category } = await supabase
@@ -162,8 +166,9 @@ export default async function CategoryPage({
           const isNotice = Boolean(
             (p as unknown as { is_notice?: boolean }).is_notice
           );
-          // 전역 공지 글은 카테고리 리스트에서 제외
-          if (ps === "global" && isNotice) return false;
+          // 공지 중 고정되지 않은 글은 제외 (상단 고정 또는 공지 페이지에서만 노출)
+          const isPinned = ps === "global" || ps === "category";
+          if (isNotice && !isPinned) return false;
           return true;
         })
         .map((p) => ({
@@ -204,6 +209,20 @@ export default async function CategoryPage({
   }
 
   const authorMap = new Map(authors.map((author) => [author.id, author]));
+
+  // 댓글 수 집계 (표시되는 게시글에 한정)
+  const displayPostIds = posts.map((p) => p.id);
+  const commentCountByPost = new Map<string, number>();
+  if (displayPostIds.length) {
+    const { data: commentRows } = await supabase
+      .from("comments")
+      .select("post_id")
+      .in("post_id", displayPostIds);
+    for (const r of commentRows ?? []) {
+      const pid = (r as { post_id: string }).post_id;
+      commentCountByPost.set(pid, (commentCountByPost.get(pid) || 0) + 1);
+    }
+  }
 
   // 페이지네이션 계산
   const totalPages = Math.ceil(totalPosts / POSTS_PER_PAGE);
@@ -248,25 +267,27 @@ export default async function CategoryPage({
               {category.name}
             </h1>
             {category.description && (
-              <p className="text-muted-foreground text-xs sm:text-sm">
+              <p className="text-muted-foreground text-xs sm:text-sm line-clamp-1 sm:line-clamp-none sm:whitespace-normal">
                 {category.description}
               </p>
             )}
           </div>
           <div className="flex gap-3 w-full sm:w-auto">
-            <div className="flex-1 sm:flex-none sm:w-64">
+            <div className="flex-1 sm:flex-none sm:w-80 lg:w-96">
               <SearchBar
                 actionPath={`/categories/${category.slug}`}
                 initialQuery={query}
                 placeholder="이 카테고리에서 검색..."
               />
             </div>
-            <Link href={`/posts/new?category=${category.slug}`}>
-              <Button className="gap-2 whitespace-nowrap text-xs sm:text-sm">
-                <Plus className="h-4 w-4" />
-                글쓰기
-              </Button>
-            </Link>
+            {isLoggedIn ? (
+              <Link href={`/posts/new?category=${category.slug}`}>
+                <Button className="gap-1 sm:gap-2 whitespace-nowrap px-1.5 py-1 sm:px-3 sm:py-2 text-[11px] sm:text-sm">
+                  <Plus className="h-3 w-3 sm:h-4 sm:w-4" />
+                  글쓰기
+                </Button>
+              </Link>
+            ) : null}
           </div>
         </div>
 
@@ -283,9 +304,11 @@ export default async function CategoryPage({
               <p className="text-muted-foreground text-xs sm:text-sm mb-4">
                 아직 게시물이 없습니다.
               </p>
-              <Link href="/posts/new">
-                <Button>첫 번째 게시물 작성하기</Button>
-              </Link>
+              {isLoggedIn ? (
+                <Link href="/posts/new">
+                  <Button>첫 번째 게시물 작성하기</Button>
+                </Link>
+              ) : null}
             </div>
           ) : (
             <>
@@ -353,20 +376,39 @@ export default async function CategoryPage({
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex-1 min-w-0">
                           {hasQuery ? (
-                            <h3
-                              className="font-medium text-sm sm:text-base text-foreground hover:text-primary transition-colors"
-                              dangerouslySetInnerHTML={{
-                                __html: highlight(post.title),
-                              }}
-                            />
+                            <h3 className="font-medium text-sm sm:text-base text-foreground hover:text-primary transition-colors flex items-baseline">
+                              <span
+                                dangerouslySetInnerHTML={{
+                                  __html: highlight(post.title),
+                                }}
+                              />
+                              {(() => {
+                                const n = commentCountByPost.get(post.id) || 0;
+                                if (n <= 0) return null;
+                                return (
+                                  <span className="ml-1 text-[11px] sm:text-xs text-muted-foreground whitespace-nowrap">
+                                    {n > 99 ? "99+" : n}
+                                  </span>
+                                );
+                              })()}
+                            </h3>
                           ) : (
-                            <h3 className="font-medium text-sm sm:text-base text-foreground hover:text-primary transition-colors">
-                              {post.title}
+                            <h3 className="font-medium text-sm sm:text-base text-foreground hover:text-primary transition-colors flex items-baseline">
+                              <span className="truncate">{post.title}</span>
+                              {(() => {
+                                const n = commentCountByPost.get(post.id) || 0;
+                                if (n <= 0) return null;
+                                return (
+                                  <span className="ml-1 text-[11px] sm:text-xs text-muted-foreground whitespace-nowrap">
+                                    {n > 99 ? "99+" : n}
+                                  </span>
+                                );
+                              })()}
                             </h3>
                           )}
                           {hasQuery && snippetHtml && (
                             <div
-                              className="text-xs text-muted-foreground line-clamp-2 mt-1"
+                              className="text-[11px] sm:text-xs text-muted-foreground line-clamp-2 mt-1"
                               dangerouslySetInnerHTML={{ __html: snippetHtml }}
                             />
                           )}
@@ -376,19 +418,43 @@ export default async function CategoryPage({
                                 태그 일치
                               </span>
                             )}
-                            <span className="inline-flex items-center gap-1.5">
-                              <Avatar className="size-5">
-                                <AvatarImage
-                                  src={author?.avatar_url ?? undefined}
-                                  alt={author?.username ?? "익명"}
-                                />
-                                <AvatarFallback className="text-[10px]">
-                                  {(author?.username || "익명").slice(0, 1)}
-                                </AvatarFallback>
-                              </Avatar>
-                              <span>{author?.username || "익명"}</span>
-                            </span>
-                            <span>
+                            {(() => {
+                              const isNotice = Boolean(
+                                (post as unknown as { is_notice?: boolean })
+                                  .is_notice
+                              );
+                              if (isNotice) {
+                                return (
+                                  <span className="inline-flex items-center gap-1.5">
+                                    <Avatar className="size-5">
+                                      <AvatarImage
+                                        src={undefined}
+                                        alt="관리자"
+                                      />
+                                      <AvatarFallback className="text-[10px]">
+                                        관
+                                      </AvatarFallback>
+                                    </Avatar>
+                                    <span>관리자</span>
+                                  </span>
+                                );
+                              }
+                              return (
+                                <span className="inline-flex items-center gap-1.5">
+                                  <Avatar className="size-5">
+                                    <AvatarImage
+                                      src={author?.avatar_url ?? undefined}
+                                      alt={author?.username ?? "익명"}
+                                    />
+                                    <AvatarFallback className="text-[10px]">
+                                      {(author?.username || "익명").slice(0, 1)}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <span>{author?.username || "익명"}</span>
+                                </span>
+                              );
+                            })()}
+                            <span className="text-[11px] sm:text-xs">
                               {new Date(
                                 post.created_at as unknown as string
                               ).toLocaleDateString()}

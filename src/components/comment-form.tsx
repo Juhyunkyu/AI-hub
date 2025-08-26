@@ -4,10 +4,10 @@ import { useState, useEffect, useRef } from "react";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { useRouter } from "next/navigation";
+// import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/stores/auth";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
-import { X, Send, Image, Smile } from "lucide-react";
+import { X, Send, Image as ImageIcon, Smile } from "lucide-react";
 import {
   Popover,
   PopoverContent,
@@ -38,7 +38,7 @@ export function CommentForm({
   const [emojiPage, setEmojiPage] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const user = useAuthStore((s) => s.user);
-  const router = useRouter();
+  // const router = useRouter();
   const supabase = createSupabaseBrowserClient();
 
   // 이모지 데이터 (중복 제거)
@@ -365,7 +365,7 @@ export function CommentForm({
       setImageUrls((prev) => [...prev, ...newUrls]);
 
       toast.success(`${compressedFiles.length}개의 이미지가 추가되었습니다`);
-    } catch (error) {
+    } catch {
       toast.error("이미지 처리 중 오류가 발생했습니다");
     } finally {
       setUploadingImages(false);
@@ -402,7 +402,7 @@ export function CommentForm({
       if (images.length > 0) {
         for (const image of images) {
           const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.jpg`;
-          const { data, error } = await supabase.storage
+          const { error } = await supabase.storage
             .from("comment-images")
             .upload(fileName, image);
 
@@ -489,7 +489,7 @@ export function CommentForm({
               onChange={(e) => setBody(e.target.value)}
               onKeyDown={handleKeyDown}
               rows={3}
-              className="resize-none"
+              className="resize-none text-[13px] sm:text-sm"
             />
             {replyTo && (
               <Button
@@ -508,6 +508,7 @@ export function CommentForm({
             <div className="flex gap-2 flex-wrap">
               {imageUrls.map((url, index) => (
                 <div key={index} className="relative">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={url}
                     alt={`미리보기 ${index + 1}`}
@@ -544,9 +545,9 @@ export function CommentForm({
                 size="sm"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={uploadingImages || images.length >= 3}
-                className="flex items-center gap-1"
+                className="flex items-center gap-1 text-[11px] sm:text-xs h-7 sm:h-8 px-2"
               >
-                <Image className="h-3 w-3" />
+                <ImageIcon className="h-3 w-3" />
                 이미지
               </Button>
 
@@ -556,7 +557,7 @@ export function CommentForm({
                     type="button"
                     variant="outline"
                     size="sm"
-                    className="flex items-center gap-1"
+                    className="flex items-center gap-1 text-[11px] sm:text-xs h-7 sm:h-8 px-2"
                   >
                     <Smile className="h-3 w-3" />
                     이모지
@@ -572,7 +573,7 @@ export function CommentForm({
                       <button
                         key={emoji}
                         onClick={() => addEmoji(emoji)}
-                        className="w-6 h-6 sm:w-8 sm:h-8 text-base sm:text-lg hover:bg-muted rounded flex items-center justify-center"
+                        className="w-6 h-6 sm:w-8 sm:h-8 text-[15px] sm:text-lg hover:bg-muted rounded flex items-center justify-center"
                       >
                         {emoji}
                       </button>
@@ -618,7 +619,7 @@ export function CommentForm({
                 onClick={submit}
                 disabled={loading || (!body.trim() && images.length === 0)}
                 size="sm"
-                className="flex items-center gap-1"
+                className="flex items-center gap-1 text-[11px] sm:text-xs h-7 sm:h-8 px-2"
               >
                 <Send className="h-3 w-3" />
                 {loading ? "작성 중..." : replyTo ? "답글 작성" : "댓글 작성"}

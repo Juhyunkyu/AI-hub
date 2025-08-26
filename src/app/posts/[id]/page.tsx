@@ -12,6 +12,7 @@ import DOMPurify from "isomorphic-dompurify";
 import { PostContent } from "@/components/post-content";
 import { CommentSection } from "@/components/comment-section";
 import { formatDate } from "@/lib/utils/date-format";
+import { PostViewTracker } from "@/components/post-view-tracker";
 import Link from "next/link";
 import { Home, ChevronRight, Hash } from "lucide-react";
 import { PostOwnerActions } from "@/components/post-owner-actions";
@@ -23,6 +24,7 @@ type PostRow = {
   content: string | null;
   created_at: string;
   author_id: string;
+  view_count?: number | null;
   is_notice?: boolean;
   allow_comments?: boolean;
 };
@@ -52,7 +54,9 @@ export default async function PostDetail({
 
   const { data: postRaw } = await supabase
     .from("posts")
-    .select("id,title,content,created_at,author_id,is_notice,allow_comments")
+    .select(
+      "id,title,content,created_at,author_id,view_count,is_notice,allow_comments"
+    )
     .eq("id", id)
     .maybeSingle();
 
@@ -167,7 +171,8 @@ export default async function PostDetail({
   });
 
   return (
-    <div className="space-y-10 sm:space-y-12">
+    <div className="space-y-6 sm:space-y-8">
+      <PostViewTracker postId={post.id} />
       {/* Breadcrumb */}
       <div className="bg-card">
         <div className="pt-1 pb-0">
@@ -189,24 +194,33 @@ export default async function PostDetail({
         </div>
       </div>
 
-      <Section>
+      <Section className="-mt-2 sm:-mt-3">
         <article className="space-y-3">
-          <h1 className="text-xl sm:text-2xl font-bold">{post.title}</h1>
-          <div className="flex items-center justify-between text-xs sm:text-sm text-muted-foreground">
+          <h1 className="text-lg sm:text-2xl font-bold flex items-baseline">
+            <span className="truncate">{post.title}</span>
+            {comments.length > 0 && (
+              <span className="ml-1 text-[11px] sm:text-sm text-muted-foreground whitespace-nowrap">
+                {comments.length > 99 ? "99+" : comments.length}
+              </span>
+            )}
+          </h1>
+          <div className="flex items-center justify-between text-[11px] sm:text-sm text-muted-foreground">
             {isNotice ? (
               <div className="flex items-center gap-2">
-                <div className="h-10 w-10 rounded-full border bg-muted flex items-center justify-center">
-                  <AdminIcon className="h-5 w-5" />
+                <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-full border bg-muted flex items-center justify-center">
+                  <AdminIcon className="h-4 w-4 sm:h-5 sm:w-5" />
                 </div>
                 <div className="leading-tight">
-                  <div className="text-foreground font-medium">관리자</div>
-                  <div className="text-[11px] sm:text-xs text-muted-foreground">
+                  <div className="text-foreground font-medium text-[12px] sm:text-base">
+                    관리자
+                  </div>
+                  <div className="text-[10px] sm:text-xs text-muted-foreground">
                     {formatDate(post.created_at)}
                   </div>
                 </div>
               </div>
             ) : (
-              <div className="flex items-center gap-2">
+              <div className="w-full">
                 <UserAvatar
                   userId={author?.id || ""}
                   username={author?.username || null}
@@ -214,25 +228,18 @@ export default async function PostDetail({
                   size="lg"
                   showActions={true}
                   isOwner={false}
-                  showName={false}
+                  showName={true}
+                  secondaryText={
+                    <span>
+                      {formatDate(post.created_at)}
+                      {typeof post.view_count === "number" && (
+                        <span className="ml-2 text-[11px] sm:text-sm">
+                          · 조회 {post.view_count}
+                        </span>
+                      )}
+                    </span>
+                  }
                 />
-                <div className="leading-tight">
-                  <div className="text-foreground font-medium">
-                    {author?.username ? (
-                      <Link
-                        href={`/profile/${encodeURIComponent(author.username)}`}
-                        className="hover:underline"
-                      >
-                        {author.username}
-                      </Link>
-                    ) : (
-                      <span>익명</span>
-                    )}
-                  </div>
-                  <div className="text-[11px] sm:text-xs text-muted-foreground">
-                    {formatDate(post.created_at)}
-                  </div>
-                </div>
               </div>
             )}
             {isOwner && <PostOwnerActions postId={post.id} />}

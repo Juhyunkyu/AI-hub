@@ -76,7 +76,7 @@ export function ReportButton({
     setLoading(true);
     try {
       // INSERT 방식으로 신고 생성
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from("reports")
         .insert({
           target_id: targetId,
@@ -85,8 +85,7 @@ export function ReportButton({
           reason: "user_report",
           status: "open",
         })
-        .select("id")
-        .single();
+        .select("id");
 
       if (error) {
         // 이미 신고한 경우 에러 처리
@@ -119,9 +118,9 @@ export function ReportButton({
         variant="ghost"
         size="sm"
         disabled
-        className="h-8 px-2 text-xs text-muted-foreground"
+        className="h-7 sm:h-8 px-2 text-[11px] sm:text-xs text-muted-foreground"
       >
-        <Flag className="mr-1 h-4 w-4" /> 확인 중...
+        <Flag className="mr-1 h-3.5 w-3.5 sm:h-4 sm:w-4" /> 확인 중...
       </Button>
     );
   }
@@ -133,9 +132,9 @@ export function ReportButton({
           variant="default"
           size="sm"
           disabled
-          className="h-8 px-2 text-xs bg-green-600 text-white cursor-not-allowed"
+          className="h-7 sm:h-8 px-2 text-[11px] sm:text-xs bg-green-600 text-white cursor-not-allowed"
         >
-          <Check className="mr-1 h-4 w-4" /> 신고됨
+          <Check className="mr-1 h-3.5 w-3.5 sm:h-4 sm:w-4" /> 신고됨
         </Button>
       ) : (
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -144,9 +143,9 @@ export function ReportButton({
               variant="ghost"
               size="sm"
               disabled={loading}
-              className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground"
+              className="h-7 sm:h-8 px-2 text-[11px] sm:text-xs text-muted-foreground hover:text-foreground"
             >
-              <Flag className="mr-1 h-4 w-4" /> 신고
+              <Flag className="mr-1 h-3.5 w-3.5 sm:h-4 sm:w-4" /> 신고
             </Button>
           </DialogTrigger>
           <DialogContent>

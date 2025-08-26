@@ -27,6 +27,8 @@ import {
   Search,
   Home,
   ChevronRight,
+  ChevronLeft,
+  Calendar,
 } from "lucide-react";
 import {
   Tooltip,
@@ -34,6 +36,11 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Dialog,
   DialogContent,
@@ -128,10 +135,103 @@ export default function NewPostPage() {
   // 수정 모드 초기 로딩 중에는 공지/일반 판단 전까지 UI 깜빡임 방지
   const [uiReady, setUiReady] = useState<boolean>(!Boolean(editIdParam));
   // 관리자 핀 UI 상태
+  const [isAdmin, setIsAdmin] = useState<boolean>(false);
   const [isPinned, setIsPinned] = useState<boolean>(false);
   const [pinScope, setPinScope] = useState<"global" | "category">("global");
   const [pinnedUntil, setPinnedUntil] = useState<string>("");
   const [pinPriority, setPinPriority] = useState<number>(0);
+  const [expiryOpen, setExpiryOpen] = useState<boolean>(false);
+  const [expiryView, setExpiryView] = useState<Date>(() => new Date());
+  const [holidayDatesByYear, setHolidayDatesByYear] = useState<
+    Record<number, Set<string>>
+  >({});
+
+  function parsePinnedUntilToDate(
+    value: string | null | undefined
+  ): Date | null {
+    if (!value) return null;
+    const d = new Date(value);
+    if (!isNaN(d.getTime())) return d;
+    return null;
+  }
+
+  function formatDisplayDate(d: Date | null): string {
+    if (!d) return "설정 안 함";
+    return new Intl.DateTimeFormat("ko-KR", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).format(d);
+  }
+
+  function toLocalDateTimeString(d: Date): string {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    const hh = String(d.getHours()).padStart(2, "0");
+    const mm = String(d.getMinutes()).padStart(2, "0");
+    return `${y}-${m}-${day}T${hh}:${mm}`;
+  }
+
+  function toLocalDateKey(d: Date): string {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }
+
+  const ensureHolidaysForYear = useCallback(
+    async (year: number): Promise<void> => {
+      if (holidayDatesByYear[year]) return;
+      try {
+        const res = await fetch(
+          `https://date.nager.at/api/v3/PublicHolidays/${year}/KR`,
+          { cache: "force-cache" }
+        );
+        if (!res.ok) throw new Error("holiday fetch failed");
+        const items = (await res.json()) as Array<{
+          date: string;
+          types?: string[];
+          name?: string;
+        }>;
+        const setDates = new Set<string>();
+        for (const it of items) {
+          // Treat all returned public holidays as holidays; include substitute holidays
+          const isPublic = Array.isArray(it.types)
+            ? it.types.includes("Public")
+            : true;
+          if (!isPublic) continue;
+          setDates.add(it.date);
+        }
+        setHolidayDatesByYear((prev) => ({ ...prev, [year]: setDates }));
+      } catch {
+        // ignore failures; holiday highlighting will be skipped
+      }
+    },
+    [holidayDatesByYear]
+  );
+
+  const expirySelectedDate = useMemo<Date | null>(() => {
+    return parsePinnedUntilToDate(pinnedUntil) ?? null;
+  }, [pinnedUntil]);
+
+  useEffect(() => {
+    if (expiryOpen) {
+      setExpiryView(expirySelectedDate || new Date());
+    }
+  }, [expiryOpen, expirySelectedDate]);
+
+  useEffect(() => {
+    if (!expiryOpen) return;
+    const year = expiryView.getFullYear();
+    void ensureHolidaysForYear(year);
+    // Also prefetch adjacent years when viewing Dec/Jan navigation
+    if (expiryView.getMonth() === 11) void ensureHolidaysForYear(year + 1);
+    if (expiryView.getMonth() === 0) void ensureHolidaysForYear(year - 1);
+  }, [expiryOpen, expiryView, ensureHolidaysForYear]);
 
   async function ensureKakaoLoaded(): Promise<void> {
     if (typeof window === "undefined") return;
@@ -340,6 +440,15 @@ export default function NewPostPage() {
           toast.error(j?.error ?? "게시글 정보를 불러오지 못했습니다");
         }
         setUiReady(true);
+      }
+
+      // 관리자 여부 확인 (클라이언트 측 표시 제어용, 서버에서 최종 검증됨)
+      try {
+        const r = await fetch("/api/auth/is-admin", { cache: "no-store" });
+        const j = await r.json();
+        setIsAdmin(Boolean(j?.isAdmin));
+      } catch {
+        setIsAdmin(false);
       }
     }
     load();
@@ -1010,10 +1119,10 @@ export default function NewPostPage() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-6 space-y-4">
+    <div className="mx-auto max-w-4xl px-3 sm:px-4 py-4 sm:py-6 space-y-3 sm:space-y-4">
       {/* Breadcrumb */}
-      <div className="pt-1 pb-0">
-        <nav className="flex items-center space-x-1 text-xs sm:text-sm text-muted-foreground">
+      <div className="pt-1 pb-0 -mt-2 sm:mt-0">
+        <nav className="flex items-center space-x-1 text-[11px] sm:text-sm text-muted-foreground">
           <Link
             href="/"
             className="flex items-center hover:text-foreground transition-colors"
@@ -1051,7 +1160,7 @@ export default function NewPostPage() {
           <div>
             <label className="text-xs block mb-1">카테고리</label>
             <select
-              className="w-full rounded border p-2 bg-background"
+              className="w-full rounded border h-7 sm:h-8 px-2 bg-background text-[11px] sm:text-xs"
               value={selectedCategoryId}
               onChange={(e) => {
                 setSelectedCategoryId(e.target.value);
@@ -1071,12 +1180,14 @@ export default function NewPostPage() {
         {/* 태그 입력 (공지 모드에서는 숨김, 내부적으로 '공지' 고정) */}
         {uiReady && !activeNoticeMode && (
           <div>
-            <label className="text-xs block mb-1">태그(엔터로 추가)</label>
+            <label className="text-[11px] sm:text-xs block mb-1">
+              태그(엔터로 추가)
+            </label>
             <div className="flex gap-2">
               <div className="relative flex-1">
                 <Hash className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
-                  className="pl-8"
+                  className="pl-8 h-7 sm:h-8 text-[11px] sm:text-xs"
                   placeholder="태그 입력..."
                   value={tagInput}
                   onChange={(e) => setTagInput(e.target.value)}
@@ -1088,8 +1199,14 @@ export default function NewPostPage() {
                   }}
                 />
               </div>
-              <Button type="button" variant="outline" onClick={addTag}>
-                <Plus className="h-4 w-4" /> 추가
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={addTag}
+                className="h-7 sm:h-8 px-2 text-[11px] sm:text-xs"
+              >
+                <Plus className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> 추가
               </Button>
             </div>
             {tags.length > 0 && (
@@ -1114,11 +1231,12 @@ export default function NewPostPage() {
 
         {/* 제목 */}
         <div>
-          <label className="text-xs block mb-1">제목</label>
+          <label className="text-[11px] sm:text-xs block mb-1">제목</label>
           <Input
             placeholder="제목을 입력하세요"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
+            className="h-7 sm:h-8 text-[11px] sm:text-xs"
           />
         </div>
 
@@ -1146,8 +1264,8 @@ export default function NewPostPage() {
           </div>
         )}
 
-        {/* 관리자 전용: 고정(핀) 설정 */}
-        {uiReady && (
+        {/* 관리자 전용: 고정(핀) 설정 (표시만 제어; 서버에서 재검증) */}
+        {uiReady && isAdmin && (
           <div className="mt-2 space-y-2">
             <div className="text-[11px] text-muted-foreground">관리자 설정</div>
             <label className="text-xs inline-flex items-center gap-2">
@@ -1164,7 +1282,7 @@ export default function NewPostPage() {
                 <div>
                   <label className="text-xs block mb-1">고정 범위</label>
                   <select
-                    className="w-full rounded border p-2 bg-background"
+                    className="w-full rounded border p-2 bg-background text-[13px] sm:text-sm"
                     value={pinScope}
                     onChange={(e) =>
                       setPinScope(
@@ -1178,12 +1296,256 @@ export default function NewPostPage() {
                 </div>
                 <div>
                   <label className="text-xs block mb-1">만료 시각(선택)</label>
-                  <input
-                    type="datetime-local"
-                    className="w-full rounded border p-2 bg-background"
-                    value={pinnedUntil ? pinnedUntil.substring(0, 16) : ""}
-                    onChange={(e) => setPinnedUntil(e.target.value)}
-                  />
+                  <Popover open={expiryOpen} onOpenChange={setExpiryOpen}>
+                    <PopoverTrigger asChild>
+                      <button
+                        type="button"
+                        className="w-full rounded border p-2 bg-background text-left flex items-center justify-between hover:bg-muted/50"
+                      >
+                        <span className="truncate">
+                          {formatDisplayDate(expirySelectedDate)}
+                        </span>
+                        <Calendar className="h-4 w-4 text-muted-foreground" />
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-80" align="end">
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => {
+                              const d = new Date(expiryView);
+                              d.setMonth(d.getMonth() - 1);
+                              setExpiryView(d);
+                            }}
+                          >
+                            <ChevronLeft className="h-4 w-4" />
+                          </Button>
+                          <div className="text-sm font-medium">
+                            {expiryView.getFullYear()}.
+                            {String(expiryView.getMonth() + 1).padStart(2, "0")}
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => {
+                              const d = new Date(expiryView);
+                              d.setMonth(d.getMonth() + 1);
+                              setExpiryView(d);
+                            }}
+                          >
+                            <ChevronRight className="h-4 w-4" />
+                          </Button>
+                        </div>
+                        <div className="grid grid-cols-7 gap-1 text-center text-[11px] select-none">
+                          {["일", "월", "화", "수", "목", "금", "토"].map(
+                            (w, i) => (
+                              <div
+                                key={w}
+                                className={
+                                  "py-1 " +
+                                  (i === 6
+                                    ? "text-blue-500"
+                                    : i === 0
+                                      ? "text-red-500"
+                                      : "text-muted-foreground")
+                                }
+                              >
+                                {w}
+                              </div>
+                            )
+                          )}
+                        </div>
+                        <div className="grid grid-cols-7 gap-1 text-center text-xs select-none">
+                          {(() => {
+                            const base = new Date(
+                              expiryView.getFullYear(),
+                              expiryView.getMonth(),
+                              1
+                            );
+                            const startDay = new Date(base);
+                            // Sunday start: move start to the previous Sunday
+                            startDay.setDate(1 - base.getDay());
+                            const days: Date[] = [];
+                            for (let i = 0; i < 42; i++) {
+                              const d = new Date(startDay);
+                              d.setDate(startDay.getDate() + i);
+                              days.push(d);
+                            }
+                            const sel = expirySelectedDate;
+                            const yearSet =
+                              holidayDatesByYear[expiryView.getFullYear()];
+                            const today = new Date();
+                            today.setHours(0, 0, 0, 0);
+                            return days.map((d, idx) => {
+                              const isCurMonth =
+                                d.getMonth() === expiryView.getMonth();
+                              const isSel =
+                                sel &&
+                                d.getFullYear() === sel.getFullYear() &&
+                                d.getMonth() === sel.getMonth() &&
+                                d.getDate() === sel.getDate();
+                              const isToday =
+                                d.getFullYear() === today.getFullYear() &&
+                                d.getMonth() === today.getMonth() &&
+                                d.getDate() === today.getDate();
+                              const dow = d.getDay();
+                              const isHoliday = (() => {
+                                const setByYear =
+                                  holidayDatesByYear[d.getFullYear()] ||
+                                  yearSet;
+                                return setByYear
+                                  ? setByYear.has(toLocalDateKey(d))
+                                  : false;
+                              })();
+                              return (
+                                <button
+                                  key={idx}
+                                  type="button"
+                                  className={(() => {
+                                    const base = [
+                                      "py-1",
+                                      "rounded",
+                                    ] as string[];
+                                    if (isSel) {
+                                      base.push(
+                                        "bg-primary",
+                                        "text-primary-foreground"
+                                      );
+                                    } else if (!isCurMonth) {
+                                      base.push(
+                                        "text-muted-foreground/70",
+                                        "hover:bg-muted"
+                                      );
+                                    } else {
+                                      base.push("hover:bg-muted");
+                                      if (isHoliday || dow === 0)
+                                        base.push("text-red-500");
+                                      else if (dow === 6)
+                                        base.push("text-blue-500");
+                                      else base.push("text-foreground");
+                                      if (isToday)
+                                        base.push("border", "border-primary");
+                                    }
+                                    return base.join(" ");
+                                  })()}
+                                  onClick={() => {
+                                    const current = sel || new Date();
+                                    const nd = new Date(d);
+                                    nd.setHours(
+                                      current.getHours(),
+                                      current.getMinutes(),
+                                      0,
+                                      0
+                                    );
+                                    setPinnedUntil(toLocalDateTimeString(nd));
+                                  }}
+                                >
+                                  {d.getDate()}
+                                </button>
+                              );
+                            });
+                          })()}
+                        </div>
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 text-sm">
+                            <label className="text-xs text-muted-foreground">
+                              시간
+                            </label>
+                            <input
+                              type="number"
+                              min={0}
+                              max={23}
+                              className="w-14 rounded border p-1 bg-background"
+                              value={(() => {
+                                const d = expirySelectedDate || new Date();
+                                return d.getHours();
+                              })()}
+                              onChange={(e) => {
+                                const h = Math.max(
+                                  0,
+                                  Math.min(
+                                    23,
+                                    parseInt(e.target.value || "0", 10)
+                                  )
+                                );
+                                const base = expirySelectedDate || new Date();
+                                const nd = new Date(base);
+                                nd.setHours(h);
+                                setPinnedUntil(toLocalDateTimeString(nd));
+                              }}
+                            />
+                            <span>:</span>
+                            <input
+                              type="number"
+                              min={0}
+                              max={59}
+                              className="w-14 rounded border p-1 bg-background"
+                              value={(() => {
+                                const d = expirySelectedDate || new Date();
+                                return d.getMinutes();
+                              })()}
+                              onChange={(e) => {
+                                const m = Math.max(
+                                  0,
+                                  Math.min(
+                                    59,
+                                    parseInt(e.target.value || "0", 10)
+                                  )
+                                );
+                                const base = expirySelectedDate || new Date();
+                                const nd = new Date(base);
+                                nd.setMinutes(m);
+                                setPinnedUntil(toLocalDateTimeString(nd));
+                              }}
+                            />
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              onClick={() => {
+                                const now = new Date();
+                                setExpiryView(
+                                  new Date(now.getFullYear(), now.getMonth(), 1)
+                                );
+                              }}
+                            >
+                              오늘로 이동
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              onClick={() => {
+                                const now = new Date();
+                                setPinnedUntil(toLocalDateTimeString(now));
+                              }}
+                            >
+                              오늘 선택
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() => {
+                                setPinnedUntil("");
+                              }}
+                            >
+                              초기화
+                            </Button>
+                            <Button
+                              type="button"
+                              onClick={() => setExpiryOpen(false)}
+                            >
+                              확인
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
                 </div>
                 <div>
                   <label className="text-xs block mb-1">
@@ -1191,7 +1553,7 @@ export default function NewPostPage() {
                   </label>
                   <input
                     type="number"
-                    className="w-full rounded border p-2 bg-background"
+                    className="w-full rounded border p-2 bg-background text-[13px] sm:text-sm"
                     value={pinPriority}
                     onChange={(e) =>
                       setPinPriority(parseInt(e.target.value || "0", 10))
@@ -1202,7 +1564,7 @@ export default function NewPostPage() {
                   <div>
                     <label className="text-xs block mb-1">고정 카테고리</label>
                     <select
-                      className="w-full rounded border p-2 bg-background"
+                      className="w-full rounded border p-2 bg-background text-[13px] sm:text-sm"
                       value={selectedCategoryId}
                       onChange={(e) => setSelectedCategoryId(e.target.value)}
                     >
@@ -1233,7 +1595,7 @@ export default function NewPostPage() {
                     aria-label="굵게"
                     onClick={() => applyCommand("bold")}
                   >
-                    <Bold className="h-4 w-4" />
+                    <Bold className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>굵게</TooltipContent>
@@ -1247,7 +1609,7 @@ export default function NewPostPage() {
                     aria-label="기울임"
                     onClick={() => applyCommand("italic")}
                   >
-                    <Italic className="h-4 w-4" />
+                    <Italic className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>기울임</TooltipContent>
@@ -1261,7 +1623,7 @@ export default function NewPostPage() {
                     aria-label="취소선"
                     onClick={() => applyCommand("strikeThrough")}
                   >
-                    <Strikethrough className="h-4 w-4" />
+                    <Strikethrough className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>취소선</TooltipContent>
@@ -1275,7 +1637,7 @@ export default function NewPostPage() {
                     aria-label="목록"
                     onClick={() => applyCommand("insertUnorderedList")}
                   >
-                    <List className="h-4 w-4" />
+                    <List className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>목록</TooltipContent>
@@ -1302,9 +1664,9 @@ export default function NewPostPage() {
                     disabled={isUploadingImage}
                   >
                     {isUploadingImage ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <Loader2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 animate-spin" />
                     ) : (
-                      <ImageIcon className="h-4 w-4" />
+                      <ImageIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                     )}
                   </Button>
                 </TooltipTrigger>
@@ -1330,9 +1692,9 @@ export default function NewPostPage() {
                     disabled={isUploadingVideo}
                   >
                     {isUploadingVideo ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <Loader2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 animate-spin" />
                     ) : (
-                      <VideoIcon className="h-4 w-4" />
+                      <VideoIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                     )}
                   </Button>
                 </TooltipTrigger>
@@ -1363,7 +1725,7 @@ export default function NewPostPage() {
                     aria-label="장소"
                     onClick={() => setPlaceOpen(true)}
                   >
-                    <MapPin className="h-4 w-4" />
+                    <MapPin className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>장소 첨부</TooltipContent>
@@ -1381,7 +1743,7 @@ export default function NewPostPage() {
                     aria-label="링크"
                     onClick={onInsertLink}
                   >
-                    <Link2 className="h-4 w-4" />
+                    <Link2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>링크</TooltipContent>
@@ -1396,7 +1758,7 @@ export default function NewPostPage() {
                     aria-label="코드"
                     onClick={onInsertCodeBlock}
                   >
-                    <Code2 className="h-4 w-4" />
+                    <Code2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>코드 블록</TooltipContent>
@@ -1407,7 +1769,7 @@ export default function NewPostPage() {
           {/* 편진 영역 */}
           <div
             ref={editorRef}
-            className="w-full min-h-[300px] rounded border p-3 bg-background text-sm mt-2 focus:outline-none [&_img]:max-w-full [&_img]:h-auto [&_img]:rounded [&_img]:border [&_img]:border-border [&_video]:max-w-full [&_video]:h-auto [&_ul]:list-disc [&_ul]:pl-6 [&_pre]:bg-muted [&_pre]:p-2 [&_pre]:rounded"
+            className="w-full min-h-[300px] rounded border p-2.5 sm:p-3 bg-background text-[13px] sm:text-sm mt-1.5 sm:mt-2 focus:outline-none [&_img]:max-w-full [&_img]:h-auto [&_img]:rounded [&_img]:border [&_img]:border-border [&_video]:max-w-full [&_video]:h-auto [&_ul]:list-disc [&_ul]:pl-6 [&_pre]:bg-muted [&_pre]:p-2 [&_pre]:rounded"
             contentEditable
             role="textbox"
             aria-multiline

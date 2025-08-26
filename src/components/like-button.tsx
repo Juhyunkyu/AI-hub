@@ -79,9 +79,11 @@ export function LikeButton({ targetId }: { targetId: string }) {
       variant={liked ? "default" : "outline"}
       onClick={toggle}
       aria-pressed={liked}
-      className="h-8 px-2 text-xs"
+      className="h-7 sm:h-8 px-2 text-[11px] sm:text-xs"
     >
-      <Heart className={`mr-1 h-4 w-4 ${liked ? "fill-current" : ""}`} />{" "}
+      <Heart
+        className={`mr-1 h-3.5 w-3.5 sm:h-4 sm:w-4 ${liked ? "fill-current" : ""}`}
+      />{" "}
       {count}
     </Button>
   );

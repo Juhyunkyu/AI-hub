@@ -2,21 +2,21 @@ import Link from "next/link";
 import { unstable_noStore as noStore } from "next/cache";
 import { AdminIcon } from "@/components/admin-icon";
 
-import { createSupabasePublicClient } from "@/lib/supabase/public";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { Section } from "@/components/section";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { CategoryCard, Category } from "@/components/category-card";
 import { Button } from "@/components/ui/button";
 import { SearchBar } from "@/components/search-bar";
 
-export const revalidate = 60; // 60초 ISR
+export const revalidate = 15; // 댓글 수 빠른 반영을 위한 15초 ISR
 
 export default async function Home({
   searchParams,
 }: {
   searchParams: Promise<{ q?: string }>;
 }) {
-  const supabase = createSupabasePublicClient();
+  const supabase = createSupabaseServerClient();
   const { q = "" } = await searchParams;
   const query = (q || "").trim();
 
@@ -86,6 +86,19 @@ export default async function Home({
         a as { id: string; username: string | null; avatar_url: string | null }
       );
     });
+  }
+
+  // 댓글 수 집계 (홈 최근/핀 전역 대상)
+  const commentCountByPost = new Map<string, number>();
+  if (recentPostIds.length) {
+    const { data: commentRows } = await supabase
+      .from("comments")
+      .select("post_id")
+      .in("post_id", recentPostIds);
+    for (const r of commentRows ?? []) {
+      const pid = (r as { post_id: string }).post_id;
+      commentCountByPost.set(pid, (commentCountByPost.get(pid) || 0) + 1);
+    }
   }
 
   // 카테고리 맵(post -> { name, slug })
@@ -403,9 +416,18 @@ export default async function Home({
                   <div className="flex items-center justify-between gap-3">
                     <Link
                       href={`/posts/${p.id}`}
-                      className="hover:underline font-medium truncate text-sm sm:text-base"
+                      className="hover:underline font-medium truncate text-sm sm:text-base flex items-baseline"
                     >
-                      {p.title}
+                      <span className="truncate">{p.title}</span>
+                      {(() => {
+                        const n = commentCountByPost.get(p.id) || 0;
+                        if (n <= 0) return null;
+                        return (
+                          <span className="ml-1 text-[11px] sm:text-xs text-muted-foreground whitespace-nowrap">
+                            {n > 99 ? "99+" : n}
+                          </span>
+                        );
+                      })()}
                     </Link>
                     <span className="text-[11px] sm:text-xs text-muted-foreground shrink-0">
                       {new Date(p.created_at).toLocaleDateString()}
