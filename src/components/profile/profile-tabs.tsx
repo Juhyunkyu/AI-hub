@@ -7,12 +7,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Search } from "lucide-react";
 import { useAuthStore } from "@/stores/auth";
+import { formatDate } from "@/lib/utils/date-format";
 
 type PostItem = {
   id: string;
   title: string;
   content: string | null;
   created_at: string;
+  post_type?: string;
 };
 
 type CommentItem = {
@@ -23,16 +25,6 @@ type CommentItem = {
 };
 
 type ProfileItem = PostItem | CommentItem;
-
-// 날짜 포맷 함수를 일관되게 사용
-function formatDate(dateString: string): string {
-  const date = new Date(dateString);
-  return date.toLocaleDateString("ko-KR", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
-}
 
 export function ProfileTabs({
   userId,
@@ -122,10 +114,19 @@ export function ProfileTabs({
         if (tab === "posts") {
           const { data } = await supabase
             .from("posts")
-            .select("id,title,content,created_at")
+            .select("id,title,content,created_at,post_type")
             .eq("author_id", userId)
+            .eq("status", "published")
             .order("created_at", { ascending: false });
-          setItems((data as PostItem[]) ?? []);
+          
+          let posts = (data as PostItem[]) ?? [];
+          
+          // 다른 사용자 프로필에서는 익명 게시판 제외
+          if (!isOwner) {
+            posts = posts.filter(post => post.post_type !== 'anonymous');
+          }
+          
+          setItems(posts);
           setHasLoaded((prev) => ({ ...prev, posts: true }));
         } else if (tab === "saved") {
           if (!isOwner) {
@@ -136,7 +137,7 @@ export function ProfileTabs({
           const { data } = await supabase
             .from("collection_items")
             .select(
-              "posts(id,title,content,created_at), collections!inner(owner_id)"
+              "posts(id,title,content,created_at,post_type), collections!inner(owner_id)"
             )
             .eq("collections.owner_id", userId)
             .order("created_at", { ascending: false });

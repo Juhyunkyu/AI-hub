@@ -13,7 +13,7 @@ import {
   PaginationEllipsis,
 } from "@/components/ui/pagination";
 import { SearchBar } from "@/components/search-bar";
-import { Plus, Home, ChevronRight } from "lucide-react";
+import { Plus, Home, ChevronRight, User } from "lucide-react";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 
 export const revalidate = 15; // 댓글 수 빠른 반영 (검색 시에는 noStore)
@@ -39,6 +39,7 @@ type PostLite = {
 type PostLiteWithMeta = PostLite & {
   content?: string | null;
   matchedByTag?: boolean;
+  anonymous?: boolean;
 };
 
 const POSTS_PER_PAGE = 15; // 메인 정책에 맞춰 페이지당 게시글 수
@@ -98,7 +99,7 @@ export default async function CategoryPage({
       const { data: pinnedCategory } = await supabase
         .from("posts")
         .select(
-          "id, title, content, created_at, author_id, pin_priority, pinned_until"
+          "id, title, content, created_at, author_id, pin_priority, pinned_until, anonymous"
         )
         .eq("pin_scope", "category")
         .eq("pinned_category_id", category.id)
@@ -150,7 +151,7 @@ export default async function CategoryPage({
       const { data: postsData } = await supabase
         .from("posts")
         .select(
-          "id, title, content, created_at, author_id, pin_scope, is_notice"
+          "id, title, content, created_at, author_id, pin_scope, is_notice, anonymous"
         )
         .in("id", filteredIds)
         .order("created_at", { ascending: false })
@@ -161,14 +162,11 @@ export default async function CategoryPage({
         })[]
       )
         .filter((p) => {
-          const ps =
-            (p as unknown as { pin_scope?: string | null }).pin_scope || null;
           const isNotice = Boolean(
             (p as unknown as { is_notice?: boolean }).is_notice
           );
-          // 공지 중 고정되지 않은 글은 제외 (상단 고정 또는 공지 페이지에서만 노출)
-          const isPinned = ps === "global" || ps === "category";
-          if (isNotice && !isPinned) return false;
+          // 모든 공지글은 카테고리 페이지에서 제외 (공지사항 페이지에서만 노출)
+          if (isNotice) return false;
           return true;
         })
         .map((p) => ({
@@ -439,18 +437,26 @@ export default async function CategoryPage({
                                   </span>
                                 );
                               }
+                              const isAnonymous = post.anonymous;
+                              const name = isAnonymous
+                                ? "익명"
+                                : (author?.username ?? "익명");
+                              const avatarUrl = isAnonymous
+                                ? undefined
+                                : (author?.avatar_url ?? undefined);
                               return (
                                 <span className="inline-flex items-center gap-1.5">
                                   <Avatar className="size-5">
-                                    <AvatarImage
-                                      src={author?.avatar_url ?? undefined}
-                                      alt={author?.username ?? "익명"}
-                                    />
+                                    <AvatarImage src={avatarUrl} alt={name} />
                                     <AvatarFallback className="text-[10px]">
-                                      {(author?.username || "익명").slice(0, 1)}
+                                      {isAnonymous ? (
+                                        <User className="h-3 w-3" />
+                                      ) : (
+                                        name.slice(0, 1)
+                                      )}
                                     </AvatarFallback>
                                   </Avatar>
-                                  <span>{author?.username || "익명"}</span>
+                                  <span>{name}</span>
                                 </span>
                               );
                             })()}

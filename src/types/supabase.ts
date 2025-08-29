@@ -16,34 +16,34 @@ export type Database = {
     Tables: {
       categories: {
         Row: {
-          id: string
-          slug: string
-          name: string
+          color: string | null
+          created_at: string
           description: string | null
           icon: string | null
-          color: string | null
+          id: string
+          name: string
+          slug: string
           sort_order: number
-          created_at: string
         }
         Insert: {
-          id?: string
-          slug: string
-          name: string
+          color?: string | null
+          created_at?: string
           description?: string | null
           icon?: string | null
-          color?: string | null
+          id?: string
+          name: string
+          slug: string
           sort_order?: number
-          created_at?: string
         }
         Update: {
-          id?: string
-          slug?: string
-          name?: string
+          color?: string | null
+          created_at?: string
           description?: string | null
           icon?: string | null
-          color?: string | null
+          id?: string
+          name?: string
+          slug?: string
           sort_order?: number
-          created_at?: string
         }
         Relationships: []
       }
@@ -366,6 +366,7 @@ export type Database = {
           content: string | null
           created_at: string
           id: string
+          post_type: Database["public"]["Enums"]["post_type"]
           source: string | null
           status: Database["public"]["Enums"]["post_status"]
           thumbnail: string | null
@@ -378,6 +379,7 @@ export type Database = {
           content?: string | null
           created_at?: string
           id?: string
+          post_type?: Database["public"]["Enums"]["post_type"]
           source?: string | null
           status?: Database["public"]["Enums"]["post_status"]
           thumbnail?: string | null
@@ -390,6 +392,7 @@ export type Database = {
           content?: string | null
           created_at?: string
           id?: string
+          post_type?: Database["public"]["Enums"]["post_type"]
           source?: string | null
           status?: Database["public"]["Enums"]["post_status"]
           thumbnail?: string | null
@@ -416,6 +419,7 @@ export type Database = {
           following_count: number
           id: string
           links: Json
+          role: Database["public"]["Enums"]["user_role"]
           updated_at: string
           username: string | null
         }
@@ -427,6 +431,7 @@ export type Database = {
           following_count?: number
           id: string
           links?: Json
+          role?: Database["public"]["Enums"]["user_role"]
           updated_at?: string
           username?: string | null
         }
@@ -438,6 +443,7 @@ export type Database = {
           following_count?: number
           id?: string
           links?: Json
+          role?: Database["public"]["Enums"]["user_role"]
           updated_at?: string
           username?: string | null
         }
@@ -588,13 +594,18 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      make_admin: {
+        Args: { user_id: string }
+        Returns: undefined
+      }
     }
     Enums: {
       comment_status: "active" | "hidden" | "deleted"
       post_status: "draft" | "published" | "archived"
+      post_type: "general" | "notice" | "anonymous"
       reaction_target: "post" | "comment"
       reaction_type: "like"
+      user_role: "admin" | "user"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -678,9 +689,12 @@ export const Constants = {
     Enums: {
       comment_status: ["active", "hidden", "deleted"],
       post_status: ["draft", "published", "archived"],
+      post_type: ["general", "notice", "anonymous"],
       reaction_target: ["post", "comment"],
       reaction_type: ["like"],
+      user_role: ["admin", "user"],
     },
   },
 } as const
 
+type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]

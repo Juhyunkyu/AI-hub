@@ -4,7 +4,6 @@ import { Section } from "@/components/section";
 import { ProfileMeta } from "@/components/profile/profile-meta";
 import { ProfileTabs } from "@/components/profile/profile-tabs";
 import { FollowButton } from "@/components/profile/follow-button";
-import { AvatarWithEdit } from "@/components/profile/avatar-with-edit";
 import { UserAvatar } from "@/components/user-avatar";
 
 // 타입 정의
@@ -13,6 +12,7 @@ type Profile = {
   username: string | null;
   avatar_url: string | null;
   bio: string | null;
+  role: string | null;
 };
 
 type Post = {
@@ -20,6 +20,7 @@ type Post = {
   title: string;
   content: string | null;
   created_at: string;
+  post_type: string | null;
 };
 
 export default async function PublicProfilePage({
@@ -39,7 +40,7 @@ export default async function PublicProfilePage({
   // username으로 사용자 찾기 (UUID 접근은 차단)
   const { data: user } = await supabase
     .from("profiles")
-    .select("id,username,avatar_url,bio")
+    .select("id,username,avatar_url,bio,role")
     .eq("username", decodedUsername)
     .maybeSingle();
 
@@ -52,11 +53,13 @@ export default async function PublicProfilePage({
     redirect("/profile/me");
   }
 
-  // 공개 게시물만 가져오기 (본인이 아닌 경우)
+  // 공개 게시물만 가져오기 (익명 게시판 제외)
   const { data: publicPosts } = await supabase
     .from("posts")
-    .select("id,title,content,created_at")
+    .select("id,title,content,created_at,post_type")
     .eq("author_id", user.id)
+    .eq("status", "published")
+    .neq("post_type", "anonymous") // 익명 게시판 제외
     .order("created_at", { ascending: false })
     .limit(10);
 

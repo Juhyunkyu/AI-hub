@@ -10,13 +10,8 @@ export async function POST(request: NextRequest) {
     } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const isAdmin = (uid: string | null) => {
-      const allowed = (process.env.ADMIN_USER_IDS || "")
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean);
-      return !!uid && allowed.includes(uid);
-    };
+    // Import the utility function instead of defining inline
+    const { isAdmin, isGlobalNotice } = await import('@/lib/utils/post-utils');
 
     const body = await request.json().catch(() => ({}));
     const title: string = body?.title ?? "";
@@ -25,8 +20,8 @@ export async function POST(request: NextRequest) {
     const topicIds: string[] = Array.isArray(body?.topicIds) ? body.topicIds : [];
     const tags: string[] = Array.isArray(body?.tags) ? body.tags : [];
     const isNotice: boolean = Boolean(body?.isNotice);
-    const allowComments: boolean = body?.allowComments === false ? false : true;
-    const showInRecent: boolean = body?.showInRecent === false ? false : true;
+    const allowComments: boolean = body?.allowComments !== false;
+    const showInRecent: boolean = body?.showInRecent !== false;
     // pin fields (admin only)
     const pinned: boolean = body?.pinned === true;
     const pinScope: "global" | "category" | undefined = body?.pinScope;
@@ -36,9 +31,10 @@ export async function POST(request: NextRequest) {
     const pinnedCategoryId: string | undefined = body?.pinnedCategoryId;
 
     if (!title.trim()) return NextResponse.json({ error: "제목은 필수입니다" }, { status: 400 });
+    
     // 전역 공지인 경우에는 카테고리 필수 아님
-    const isGlobalNotice = isNotice && pinScope === "global";
-    if (!categoryId && !isGlobalNotice)
+    const globalNotice = isGlobalNotice(isNotice, pinScope);
+    if (!categoryId && !globalNotice)
       return NextResponse.json({ error: "카테고리를 선택해주세요" }, { status: 400 });
 
     if (isNotice && !isAdmin(user.id)) {
@@ -75,7 +71,7 @@ export async function POST(request: NextRequest) {
 
     // 2) decide topics: use provided topics or default topic of the category
     // 전역 공지는 카테고리/주제 매핑을 하지 않음
-    let finalTopicIds: string[] = isGlobalNotice ? [] : topicIds;
+    let finalTopicIds: string[] = globalNotice ? [] : topicIds;
     if (!finalTopicIds.length && !isGlobalNotice && categoryId) {
       const { data: defTopic } = await supabase
         .from("topics")

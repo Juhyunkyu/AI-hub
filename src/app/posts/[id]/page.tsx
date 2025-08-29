@@ -27,6 +27,7 @@ type PostRow = {
   view_count?: number | null;
   is_notice?: boolean;
   allow_comments?: boolean;
+  anonymous?: boolean;
 };
 
 type ProfileLite = {
@@ -55,7 +56,7 @@ export default async function PostDetail({
   const { data: postRaw } = await supabase
     .from("posts")
     .select(
-      "id,title,content,created_at,author_id,view_count,is_notice,allow_comments"
+      "id,title,content,created_at,author_id,view_count,is_notice,allow_comments,anonymous"
     )
     .eq("id", id)
     .maybeSingle();
@@ -123,7 +124,18 @@ export default async function PostDetail({
       .from("profiles")
       .select("id,username,avatar_url")
       .in("id", commentAuthorIds);
-    commentAuthors = (raw ?? []) as unknown as ProfileLite[];
+    const rawAuthors = (raw ?? []) as unknown as ProfileLite[];
+    
+    // 게시글이 익명이면 댓글 작성자도 익명으로 처리
+    if (post.anonymous) {
+      commentAuthors = rawAuthors.map(author => ({
+        ...author,
+        username: null,
+        avatar_url: null
+      }));
+    } else {
+      commentAuthors = rawAuthors;
+    }
   }
   // const commentAuthorById = new Map<string, ProfileLite>(
   //   commentAuthors.map((u) => [u.id, u])
@@ -223,8 +235,8 @@ export default async function PostDetail({
               <div className="w-full">
                 <UserAvatar
                   userId={author?.id || ""}
-                  username={author?.username || null}
-                  avatarUrl={author?.avatar_url || null}
+                  username={post.anonymous ? null : (author?.username || null)}
+                  avatarUrl={post.anonymous ? null : (author?.avatar_url || null)}
                   size="lg"
                   showActions={true}
                   isOwner={false}

@@ -10,6 +10,7 @@ type Profile = {
   username: string | null;
   avatar_url: string | null;
   bio: string | null;
+  role: string | null;
 };
 
 type Post = {
@@ -17,6 +18,7 @@ type Post = {
   title: string;
   content: string | null;
   created_at: string;
+  post_type?: string | undefined;
 };
 
 export default async function MyProfilePage() {
@@ -31,7 +33,7 @@ export default async function MyProfilePage() {
   // 본인 프로필 정보 가져오기
   const { data: user } = await supabase
     .from("profiles")
-    .select("id,username,avatar_url,bio")
+    .select("id,username,avatar_url,bio,role")
     .eq("id", session.user.id)
     .maybeSingle();
 
@@ -39,11 +41,12 @@ export default async function MyProfilePage() {
     redirect("/profile/setup");
   }
 
-  // 본인 활동 데이터 가져오기
+  // 본인 활동 데이터 가져오기 (관리자는 모든 타입, 일반 사용자는 익명 포함)
   const { data: initialPosts } = await supabase
     .from("posts")
-    .select("id,title,content,created_at")
+    .select("id,title,content,created_at,post_type")
     .eq("author_id", user.id)
+    .eq("status", "published")
     .order("created_at", { ascending: false })
     .limit(10);
 
@@ -58,7 +61,9 @@ export default async function MyProfilePage() {
   let initialSaved: Post[] = [];
   const { data: savedData } = await supabase
     .from("collection_items")
-    .select("posts(id,title,content,created_at), collections!inner(owner_id)")
+    .select(
+      "posts(id,title,content,created_at,post_type), collections!inner(owner_id)"
+    )
     .eq("collections.owner_id", user.id)
     .limit(10);
 
@@ -78,6 +83,7 @@ export default async function MyProfilePage() {
               title: unknown;
               content: unknown;
               created_at: unknown;
+              post_type: unknown;
             };
             if (
               typeof post.id === "string" &&
@@ -89,7 +95,8 @@ export default async function MyProfilePage() {
                 title: post.title,
                 content: post.content as string | null,
                 created_at: post.created_at,
-              };
+                post_type: post.post_type as string | undefined,
+              } satisfies Post;
             }
           }
         }

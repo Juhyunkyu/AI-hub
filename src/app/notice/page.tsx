@@ -76,7 +76,7 @@ export default async function NoticePage() {
       { id: string; title: string; created_at: string; author_id: string }
     >();
     (byFlag ?? []).forEach((p) => map.set((p as { id: string }).id, p as any));
-    (byTag ?? []).forEach((p) => map.set((p as { id: string }).id, p as any));
+    (byTag ?? []).forEach((p) => map.set((p as { id: string }).id, p as unknown));
     posts = Array.from(map.values()).sort((a, b) =>
       a.created_at < b.created_at ? 1 : -1
     );

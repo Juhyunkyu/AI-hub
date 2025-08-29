@@ -5,9 +5,10 @@ import { AdminIcon } from "@/components/admin-icon";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { Section } from "@/components/section";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import { CategoryCard, Category } from "@/components/category-card";
 import { Button } from "@/components/ui/button";
 import { SearchBar } from "@/components/search-bar";
+import { PostAuthor } from "@/components/post-author";
+import { User } from "lucide-react";
 
 export const revalidate = 15; // 댓글 수 빠른 반영을 위한 15초 ISR
 
@@ -35,15 +36,18 @@ export default async function Home({
         .order("sort_order", { ascending: true }),
       supabase
         .from("posts")
-        .select("id, title, created_at, author_id, pin_priority, pinned_until")
+        .select(
+          "id, title, created_at, author_id, pin_priority, pinned_until, anonymous, is_notice"
+        )
         .eq("pin_scope", "global")
+        .eq("is_notice", true)
         .or("pinned_until.is.null,pinned_until.gt." + new Date().toISOString())
         .order("pin_priority", { ascending: true })
         .order("pinned_until", { ascending: false })
         .limit(5),
       supabase
         .from("posts")
-        .select("id, title, created_at, author_id")
+        .select("id, title, created_at, author_id, anonymous")
         .eq("show_in_recent", true)
         .or("pin_scope.is.null,pin_scope.neq.global")
         .order("created_at", { ascending: false })
@@ -58,12 +62,14 @@ export default async function Home({
     title: string;
     created_at: string;
     author_id: string;
+    anonymous: boolean;
   }[];
   const recentPosts = (recent ?? []) as unknown as {
     id: string;
     title: string;
     created_at: string;
     author_id: string;
+    anonymous: boolean;
   }[];
   const recentAuthorIds = Array.from(
     new Set([...recentPosts, ...pinnedGlobal].map((r) => r.author_id))
@@ -163,13 +169,14 @@ export default async function Home({
     content?: string | null;
     created_at: string;
     author_id: string;
+    anonymous: boolean;
     matchedByTag?: boolean;
   }> | null = null;
   if (query.length >= 2) {
     // 1) 제목/본문 매치
     const { data: byText } = await supabase
       .from("posts")
-      .select("id,title,content,created_at,author_id")
+      .select("id,title,content,created_at,author_id,anonymous")
       .or(`title.ilike.%${query}%,content.ilike.%${query}%`)
       .order("created_at", { ascending: false })
       .limit(50);
@@ -199,6 +206,7 @@ export default async function Home({
         content?: string | null;
         created_at: string;
         author_id: string;
+        anonymous: boolean;
         matchedByTag?: boolean;
       }
     >();
@@ -208,12 +216,13 @@ export default async function Home({
       content?: string | null;
       created_at: string;
       author_id: string;
+      anonymous: boolean;
     }[])
       merged.set(p.id, { ...p, matchedByTag: tagPostIds.has(p.id) });
     if (tagPostIds.size) {
       const { data: tagPosts } = await supabase
         .from("posts")
-        .select("id,title,content,created_at,author_id")
+        .select("id,title,content,created_at,author_id,anonymous")
         .in("id", Array.from(tagPostIds))
         .order("created_at", { ascending: false });
       for (const p of (tagPosts ?? []) as {
@@ -222,6 +231,7 @@ export default async function Home({
         content?: string | null;
         created_at: string;
         author_id: string;
+        anonymous: boolean;
       }[])
         merged.set(p.id, { ...p, matchedByTag: true });
     }
@@ -347,53 +357,39 @@ export default async function Home({
         </Section>
       )}
 
-      {/* Categories Section - Only visible on small screens (hide on search) */}
-      {!query && (
-        <div className="md:hidden -mt-2">
-          <div className="grid grid-cols-3 gap-2">
-            {/* First row: 3 cards */}
-            {(categories ?? []).slice(0, 3).map((category) => (
-              <CategoryCard
-                key={category.id}
-                category={category as Category}
-                isMobile={true}
-              />
-            ))}
-          </div>
-          <div className="grid grid-cols-2 gap-2 mt-2">
-            {/* Second row: 2 cards */}
-            {(categories ?? []).slice(3, 5).map((category) => (
-              <CategoryCard
-                key={category.id}
-                category={category as Category}
-                isMobile={true}
-              />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Pinned Global Section (hide on search) */}
+      {/* Pinned Global Section */}
       {!query && pinnedGlobal.length > 0 && (
         <Section>
-          <ul className="space-y-2">
+          <ul className="space-y-0.5">
             {pinnedGlobal.map((p) => (
-              <li key={p.id} className="rounded px-3 py-2 bg-muted/30">
-                <div className="flex items-center gap-3">
+              <li key={p.id} className="px-3 py-1.5">
+                <div className="flex items-center justify-between gap-3">
                   <Link
                     href={`/posts/${p.id}`}
-                    className="hover:underline truncate text-[11px] sm:text-sm"
+                    className="hover:underline font-bold truncate text-[11px] sm:text-xs flex items-baseline"
                   >
-                    {p.title}
+                    <span className="text-muted-foreground font-bold mr-2">
+                      공지
+                    </span>
+                    <span className="truncate">{p.title}</span>
+                    {(() => {
+                      const n = commentCountByPost.get(p.id) || 0;
+                      if (n <= 0) return null;
+                      return (
+                        <span className="ml-1 text-[10px] text-muted-foreground whitespace-nowrap">
+                          {n > 99 ? "99+" : n}
+                        </span>
+                      );
+                    })()}
                   </Link>
-                </div>
-                <div className="mt-1 text-[10px] sm:text-xs text-muted-foreground flex items-center gap-2">
-                  <span className="text-[10px] px-1 py-0.5 rounded border text-muted-foreground">
-                    공지
-                  </span>
-                  <span className="inline-flex items-center gap-1">
-                    <AdminIcon /> 관리자
-                  </span>
+                  <div className="flex items-center gap-2 text-[11px] sm:text-xs text-muted-foreground shrink-0">
+                    <PostAuthor
+                      isNotice={true}
+                      isAnonymous={p.anonymous}
+                      author={authorMap.get(p.author_id)}
+                      size="sm"
+                    />
+                  </div>
                 </div>
               </li>
             ))}
@@ -444,25 +440,18 @@ export default async function Home({
                           {cat.name}
                         </Link>
                       ) : (
-                        <span>기타</span>
+                        <Link
+                          href="/categories/free"
+                          className="hover:underline"
+                        >
+                          자유게시판
+                        </Link>
                       );
                     })()}
-                    {(() => {
-                      const author = authorMap.get(p.author_id);
-                      const name = author?.username ?? "익명";
-                      const avatarUrl = author?.avatar_url ?? undefined;
-                      return (
-                        <span className="inline-flex items-center gap-1.5">
-                          <Avatar className="size-5">
-                            <AvatarImage src={avatarUrl} alt={name} />
-                            <AvatarFallback className="text-[10px]">
-                              {name.slice(0, 1)}
-                            </AvatarFallback>
-                          </Avatar>
-                          <span>· {name}</span>
-                        </span>
-                      );
-                    })()}
+                    <PostAuthor
+                      isAnonymous={p.anonymous}
+                      author={authorMap.get(p.author_id)}
+                    />
                   </div>
                 </li>
               ))}

@@ -1,11 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { User, MessageSquare, FileText, Users } from "lucide-react";
+import { User, MessageSquare, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AvatarUpload } from "@/components/profile/avatar-upload";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { toast } from "sonner";
 import { useAuthStore } from "@/stores/auth";
 
@@ -96,7 +95,7 @@ export function UserAvatar({
       // TODO: 팔로우/언팔로우 API 호출
       setIsFollowing(!isFollowing);
       toast.success(isFollowing ? "언팔로우했습니다" : "팔로우했습니다");
-    } catch (error) {
+    } catch {
       toast.error("팔로우 처리 중 오류가 발생했습니다");
     } finally {
       setFollowLoading(false);
@@ -122,13 +121,23 @@ export function UserAvatar({
         />
       ) : (
         <div className="h-full w-full flex items-center justify-center bg-gradient-to-br from-blue-100 to-purple-100 dark:from-blue-900/20 dark:to-purple-900/20">
-          <span
-            className={`font-bold text-blue-600 dark:text-blue-400 ${
-              size === "sm" ? "text-xs" : size === "md" ? "text-sm" : "text-lg"
-            }`}
-          >
-            {username?.charAt(0).toUpperCase() || "U"}
-          </span>
+          {username ? (
+            <span
+              className={`font-bold text-blue-600 dark:text-blue-400 ${
+                size === "sm"
+                  ? "text-xs"
+                  : size === "md"
+                    ? "text-sm"
+                    : "text-lg"
+              }`}
+            >
+              {username.charAt(0).toUpperCase()}
+            </span>
+          ) : (
+            <User
+              className={`text-blue-600 dark:text-blue-400 ${iconSizes[size]}`}
+            />
+          )}
         </div>
       )}
     </div>
@@ -250,7 +259,7 @@ export function UserAvatar({
         <AvatarUpload
           currentAvatarUrl={avatarUrl}
           onClose={() => setShowAvatarUpload(false)}
-          onSuccess={(newUrl) => {
+          onSuccess={() => {
             window.location.reload();
           }}
         />

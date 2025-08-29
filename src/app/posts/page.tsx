@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { unstable_noStore as noStore } from "next/cache";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { Section } from "@/components/section";
 import { Button } from "@/components/ui/button";
@@ -13,6 +12,7 @@ import {
   PaginationPrevious,
   PaginationEllipsis,
 } from "@/components/ui/pagination";
+import { User } from "lucide-react";
 
 const PAGE_SIZE = 15;
 
@@ -37,7 +37,7 @@ export default async function AllPosts({
 
   const { data: posts, count } = await supabase
     .from("posts")
-    .select("id,title,created_at,author_id", { count: "exact" })
+    .select("id,title,created_at,author_id,anonymous", { count: "exact" })
     .eq("is_notice", false)
     .order("created_at", { ascending: false })
     .range(from, to);
@@ -191,14 +191,25 @@ export default async function AllPosts({
                     })()}
                     {(() => {
                       const author = authorMap.get(p.author_id);
-                      const name = author?.username ?? "익명";
-                      const avatarUrl = author?.avatar_url ?? undefined;
+                      // anonymous 필드를 직접 접근
+                      const postData = p as unknown;
+                      const isAnonymous = Boolean(postData.anonymous);
+                      const name = isAnonymous
+                        ? "익명"
+                        : (author?.username ?? "익명");
+                      const avatarUrl = isAnonymous
+                        ? undefined
+                        : (author?.avatar_url ?? undefined);
                       return (
                         <span className="inline-flex items-center gap-1.5">
                           <Avatar className="size-5">
                             <AvatarImage src={avatarUrl} alt={name} />
                             <AvatarFallback className="text-[10px]">
-                              {name.slice(0, 1)}
+                              {isAnonymous ? (
+                                <User className="h-3 w-3" />
+                              ) : (
+                                name.slice(0, 1)
+                              )}
                             </AvatarFallback>
                           </Avatar>
                           <span>· {name}</span>
