@@ -5,6 +5,7 @@ import { AdminIcon } from "@/components/admin-icon";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { Section } from "@/components/section";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { CategoryCard, Category } from "@/components/category-card";
 import { Button } from "@/components/ui/button";
 import { SearchBar } from "@/components/search-bar";
 import { PostAuthor } from "@/components/post-author";
@@ -355,6 +356,35 @@ export default async function Home({
             )}
           </div>
         </Section>
+      )}
+
+      {/* Mobile Layout */}
+      {!query && (
+        <div className="md:hidden space-y-4">
+          {/* Categories Section - Mobile */}
+          <div className="-mt-2">
+            <div className="grid grid-cols-3 gap-2">
+              {/* First row: 3 cards */}
+              {(categories ?? []).slice(0, 3).map((category) => (
+                <CategoryCard
+                  key={category.id}
+                  category={category as Category}
+                  isMobile={true}
+                />
+              ))}
+            </div>
+            <div className="grid grid-cols-2 gap-2 mt-2">
+              {/* Second row: 2 cards */}
+              {(categories ?? []).slice(3, 5).map((category) => (
+                <CategoryCard
+                  key={category.id}
+                  category={category as Category}
+                  isMobile={true}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Pinned Global Section */}
