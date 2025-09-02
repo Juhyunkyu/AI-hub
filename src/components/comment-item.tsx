@@ -137,7 +137,7 @@ export function CommentItem({
           username={authorUsername}
           avatarUrl={authorAvatarUrl}
           size="sm"
-          showActions={true}
+          showActions={false}
           isOwner={false}
         />
       </div>
@@ -147,9 +147,15 @@ export function CommentItem({
         {/* 헤더: 닉네임, 배지, 메뉴 */}
         <div className="flex items-center justify-between gap-2 mb-0.5 sm:mb-1">
           <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
-            <span className="font-medium text-[13px] sm:text-sm truncate">
-              {authorUsername || "익명"}
-            </span>
+            <UserAvatar
+              userId={authorId}
+              username={authorUsername}
+              avatarUrl={authorAvatarUrl}
+              size="sm"
+              showActions={true}
+              isOwner={false}
+              showName={true}
+            />
             {isPostAuthor && (
               <Badge
                 variant="secondary"

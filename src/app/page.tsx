@@ -18,7 +18,7 @@ export default async function Home({
 }: {
   searchParams: Promise<{ q?: string }>;
 }) {
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
   const { q = "" } = await searchParams;
   const query = (q || "").trim();
 

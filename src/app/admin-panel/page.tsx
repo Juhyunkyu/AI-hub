@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 
 export default async function AdminDashboard() {
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
 
   // 통계 데이터 가져오기
   const [

@@ -19,7 +19,7 @@ export default async function UsersManagementPage({
 }: {
   searchParams: Promise<{ page?: string; limit?: string; search?: string }>;
 }) {
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
 
   const params = await searchParams;
   const page = parseInt(params.page || "1");
@@ -226,7 +226,7 @@ export default async function UsersManagementPage({
             <CardTitle>사용자 목록</CardTitle>
             <div className="flex items-center gap-2">
               <Button variant="outline" size="sm">
-                선택된 사용자에게 쪽지 보내기
+                선택된 사용자에게 채팅 보내기
               </Button>
               <Button variant="outline" size="sm">
                 선택된 사용자 역할 변경
@@ -301,9 +301,9 @@ export default async function UsersManagementPage({
                     <Button variant="outline" size="sm">
                       계정 정지
                     </Button>
-                    <Link href={`/messages/new?to=${user.id}`}>
+                    <Link href={`/chat?user=${user.id}`}>
                       <Button variant="outline" size="sm">
-                        쪽지 보내기
+                        채팅 보내기
                       </Button>
                     </Link>
                   </div>

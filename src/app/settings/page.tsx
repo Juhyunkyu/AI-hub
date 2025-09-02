@@ -4,7 +4,7 @@ import { SettingsPanel } from "@/components/settings/settings-panel";
 import { Section } from "@/components/section";
 
 export default async function SettingsPage() {
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
 
   // 로그인 상태 확인
   const { data: session } = await supabase.auth.getUser();

@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { FileText, Search, Filter, Eye, Edit, Trash2 } from "lucide-react";
 
 export default async function PostsManagementPage() {
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
 
   // 모든 게시글 데이터 가져오기 (작성자 정보 포함)
   const { data: posts, error } = await supabase

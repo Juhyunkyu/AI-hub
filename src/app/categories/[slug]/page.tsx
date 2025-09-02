@@ -60,7 +60,7 @@ export default async function CategoryPage({
   const currentPage = parseInt(page);
   const offset = (currentPage - 1) * POSTS_PER_PAGE;
 
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

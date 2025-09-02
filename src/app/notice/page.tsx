@@ -15,7 +15,7 @@ function isAdmin(userId: string | null): boolean {
 }
 
 export default async function NoticePage() {
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
 
   const {
     data: { user },

@@ -62,14 +62,73 @@ export function UserAvatar({
     if (showActions) setShowActionsMenu((v) => !v);
   };
 
-  const handleMessageClick = () => {
+  const handleMessageClick = async () => {
     if (!user) {
-      const next = `/messages/new?to=${encodeURIComponent(userId)}`;
+      const next = `/chat`;
       router.push(`/login?next=${encodeURIComponent(next)}`);
-    } else {
-      router.push(`/messages/new?to=${userId}`);
+      return;
     }
+
     setShowActionsMenu(false);
+
+    try {
+      console.log('Current user:', user);
+      console.log('Target user:', { userId, username });
+
+      // 특정 사용자 ID로 기존 채팅방 확인
+      const response = await fetch(`/api/chat/users?user_id=${userId}`);
+      if (response.ok) {
+        const data = await response.json();
+        const targetUser = data.users[0];
+        
+        if (targetUser?.has_chat && targetUser?.chat_room_id) {
+          // 기존 채팅방으로 이동
+          router.push(`/chat?room=${targetUser.chat_room_id}`);
+          return;
+        }
+      }
+
+      // 새 채팅방 생성
+      console.log('Creating new chat room with user:', { userId, username });
+      
+      const createResponse = await fetch('/api/chat/rooms', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'direct',
+          participant_ids: [userId]
+        })
+      });
+
+      console.log('Create response status:', createResponse.status);
+      console.log('Create response headers:', Object.fromEntries(createResponse.headers.entries()));
+
+      if (createResponse.ok) {
+        const responseData = await createResponse.json();
+        console.log('Create response data:', responseData);
+        const { room } = responseData;
+        
+        if (!room || !room.id) {
+          throw new Error('채팅방 정보를 받지 못했습니다');
+        }
+        
+        console.log('Created room:', room);
+        // 새 창이나 탭에서 채팅방 열기 대신 현재 창에서 이동
+        window.location.href = `/chat?room=${room.id}`;
+        toast.success('채팅을 시작했습니다');
+      } else {
+        const errorData = await createResponse.json().catch(() => ({ error: 'Unknown error' }));
+        console.error('Create room error:', errorData);
+        const errorMessage = errorData.details 
+          ? `${errorData.error}: ${errorData.details}`
+          : errorData.error || '채팅방 생성 실패';
+        throw new Error(errorMessage);
+      }
+    } catch (error) {
+      console.error('Error starting chat:', error);
+      const errorMessage = error instanceof Error ? error.message : '알 수 없는 오류';
+      toast.error(`채팅을 시작할 수 없습니다: ${errorMessage}`);
+    }
   };
 
   const handleProfileClick = () => {
@@ -195,7 +254,7 @@ export function UserAvatar({
                 className="w-full justify-start text-xs"
               >
                 <MessageSquare className={`${iconSizes.sm} mr-2`} />
-                쪽지 보내기
+                DM 보내기
               </Button>
             </div>
           </div>
@@ -248,7 +307,7 @@ export function UserAvatar({
               className="w-full justify-start text-xs"
             >
               <MessageSquare className={`${iconSizes.sm} mr-2`} />
-              쪽지 보내기
+              DM 보내기
             </Button>
           </div>
         </div>

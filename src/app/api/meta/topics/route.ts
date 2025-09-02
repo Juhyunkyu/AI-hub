@@ -21,7 +21,7 @@ export async function POST(req: Request) {
     if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
       return NextResponse.json({ error: 'service_role_missing', message: 'SUPABASE_SERVICE_ROLE_KEY not set' }, { status: 500 })
     }
-    const supabaseServer = createSupabaseServerClient()
+    const supabaseServer = await createSupabaseServerClient()
     const { data: u } = await supabaseServer.auth.getUser()
     const userId = u.user?.id ?? null
     if (!userId || !isAdmin(userId)) {
@@ -63,7 +63,7 @@ export async function DELETE(req: Request) {
     if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
       return NextResponse.json({ error: 'service_role_missing', message: 'SUPABASE_SERVICE_ROLE_KEY not set' }, { status: 500 })
     }
-    const supabaseServer = createSupabaseServerClient()
+    const supabaseServer = await createSupabaseServerClient()
     const { data: u } = await supabaseServer.auth.getUser()
     const userId = u.user?.id ?? null
     if (!userId || !isAdmin(userId)) {

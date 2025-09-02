@@ -4,7 +4,7 @@ import Link from "next/link"
 type CollectionItemJoined = { post_id: string; posts: { title: string } | null }
 
 export default async function CollectionsPage() {
-  const supabase = createSupabaseServerClient()
+  const supabase = await createSupabaseServerClient()
   const { data: user } = await supabase.auth.getUser()
   const sessionUser = user.user
   if (!sessionUser) {

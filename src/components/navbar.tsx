@@ -10,7 +10,7 @@ import {
   LogIn,
   User as UserIcon,
   Shield,
-  Inbox,
+  MessageCircle,
   Settings,
   LogOut,
   Grid3X3,
@@ -140,13 +140,17 @@ export function Navbar() {
         return;
       }
       try {
-        const { count } = await supabase
-          .from("messages")
-          .select("*", { count: "exact", head: true })
-          .eq("to_user_id", user.id)
-          .eq("read", false)
-          .eq("deleted_by_receiver", false);
-        if (!cancelled) setUnreadMessages(count || 0);
+        // 새 채팅 시스템의 읽지 않은 메시지 수 계산
+        const response = await fetch('/api/chat/rooms');
+        if (response.ok) {
+          const data = await response.json();
+          const totalUnread = data.rooms?.reduce((total: number, room: any) => {
+            return total + (room.unread_count || 0);
+          }, 0) || 0;
+          if (!cancelled) setUnreadMessages(totalUnread);
+        } else {
+          if (!cancelled) setUnreadMessages(0);
+        }
       } catch (error) {
         if (!cancelled) setUnreadMessages(0);
       }
@@ -338,11 +342,11 @@ export function Navbar() {
                 </Button>
               )}
               <Link
-                href="/messages"
-                aria-label="쪽지함"
+                href="/chat"
+                aria-label="채팅"
                 className="relative p-2 h-8 w-8 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors flex items-center justify-center"
               >
-                <Inbox className="h-5 w-5" />
+                <MessageCircle className="h-5 w-5" />
                 {unreadMessages > 0 && (
                   <Badge
                     variant="destructive"

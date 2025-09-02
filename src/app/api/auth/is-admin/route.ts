@@ -12,7 +12,7 @@ function isAdmin(userId: string | null): boolean {
 }
 
 export async function GET() {
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

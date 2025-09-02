@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { MessageSquare, Search, Filter, Eye, Edit, Trash2 } from "lucide-react";
 
 export default async function CommentsManagementPage() {
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
 
   // 모든 댓글 데이터 가져오기 (작성자 및 게시글 정보 포함)
   const { data: commentsRaw, error } = await supabase

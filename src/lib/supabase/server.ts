@@ -1,7 +1,7 @@
 import { cookies } from 'next/headers'
 import { createServerClient } from '@supabase/ssr'
 
-export function createSupabaseServerClient() {
+export async function createSupabaseServerClient() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
@@ -9,23 +9,23 @@ export function createSupabaseServerClient() {
     throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY')
   }
 
+  const cookieStore = await cookies()
+
   return createServerClient(supabaseUrl, supabaseAnonKey, {
     cookies: {
-      async getAll() {
-        const store = await (cookies() as unknown as Promise<ReturnType<typeof cookies>>)
-        return store.getAll().map((c) => ({ name: c.name, value: c.value }))
+      getAll() {
+        return cookieStore.getAll()
       },
-      async setAll(cookiesToSet) {
+      setAll(cookiesToSet) {
         try {
-          const store = await (cookies() as unknown as Promise<ReturnType<typeof cookies>>)
-          for (const { name, value, options } of cookiesToSet) {
-            store.set(name, value, options)
-          }
-        } catch (_) {
-          // In some server component contexts, setting cookies is not allowed.
-          // It's safe to ignore here; route handlers/middleware should still persist cookies.
+          cookiesToSet.forEach(({ name, value, options }) => {
+            cookieStore.set(name, value, options)
+          })
+        } catch (error) {
+          // Route Handler에서는 쿠키 설정이 가능해야 함
+          console.warn('Failed to set cookies:', error)
         }
-      }
-    }
+      },
+    },
   })
 }

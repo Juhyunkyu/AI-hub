@@ -29,7 +29,7 @@ export default async function PublicProfilePage({
   params: Promise<{ username: string }>;
 }) {
   const { username } = await params;
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
 
   // URL 디코딩 (한글 닉네임 지원)
   const decodedUsername = decodeURIComponent(username);

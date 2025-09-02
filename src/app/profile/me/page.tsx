@@ -22,7 +22,7 @@ type Post = {
 };
 
 export default async function MyProfilePage() {
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
 
   // 로그인 상태 확인
   const { data: session } = await supabase.auth.getUser();

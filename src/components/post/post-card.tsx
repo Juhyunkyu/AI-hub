@@ -29,7 +29,7 @@ export function PostCard({ post, showAuthorRole = false, className }: PostCardPr
               avatarUrl={post.author.avatar_url}
               size="sm"
               showName={true}
-              showActions={false}
+              showActions={true}
               secondaryText={formatDate(post.created_at)}
             />
             

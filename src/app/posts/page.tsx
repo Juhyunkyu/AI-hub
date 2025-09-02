@@ -25,7 +25,7 @@ export default async function AllPosts({
 }) {
   // 목록 페이지는 페이지 번호별로 ISR 캐시를 사용 (검색 없음)
   // noStore 미사용: 페이지 파라미터 단위로 캐싱됨
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -192,7 +192,7 @@ export default async function AllPosts({
                     {(() => {
                       const author = authorMap.get(p.author_id);
                       // anonymous 필드를 직접 접근
-                      const postData = p as unknown;
+                      const postData = p as { anonymous?: boolean };
                       const isAnonymous = Boolean(postData.anonymous);
                       const name = isAnonymous
                         ? "익명"

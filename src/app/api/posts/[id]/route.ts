@@ -7,7 +7,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const supabase = createSupabaseServerClient();
+    const supabase = await createSupabaseServerClient();
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -71,7 +71,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const supabase = createSupabaseServerClient();
+    const supabase = await createSupabaseServerClient();
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -109,7 +109,7 @@ export async function PATCH(
     if (typeof allowComments === "boolean") updateFields.allow_comments = allowComments;
     if (typeof showInRecent === "boolean") updateFields.show_in_recent = showInRecent;
     // pin updates only by admin
-    const supa = createSupabaseServerClient();
+    const supa = await createSupabaseServerClient();
     const {
       data: { user: me },
     } = await supa.auth.getUser();
@@ -219,7 +219,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const supabase = createSupabaseServerClient();
+    const supabase = await createSupabaseServerClient();
     const {
       data: { user },
     } = await supabase.auth.getUser();
