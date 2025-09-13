@@ -102,21 +102,39 @@ export async function GET(request: NextRequest) {
     const usersWithChatStatus = await Promise.all(
       users.map(async (searchUser: any) => {
         try {
-          // 기존 direct 채팅방이 있는지 확인
-          const { data: existingRooms } = await supabase
-            .from("chat_rooms")
-            .select(`
-              id,
-              participants:chat_room_participants(user_id)
-            `)
-            .eq("type", "direct");
+          let existingRoom = null;
 
-          const existingRoom = existingRooms?.find((room: any) => {
-            const participantIds = room.participants?.map((p: unknown) => p.user_id) || [];
-            return participantIds.length === 2 && 
-                   participantIds.includes(user.id) && 
-                   participantIds.includes(searchUser.id);
-          });
+          // 본인과의 채팅방인 경우 self 타입 확인
+          if (searchUser.id === user.id) {
+            const { data: selfRooms } = await supabase
+              .from("chat_rooms")
+              .select(`
+                id,
+                participants:chat_room_participants(user_id)
+              `)
+              .eq("type", "self");
+
+            existingRoom = selfRooms?.find((room: any) => {
+              const participantIds = room.participants?.map((p: unknown) => p.user_id) || [];
+              return participantIds.length === 1 && participantIds.includes(user.id);
+            });
+          } else {
+            // 다른 사용자와의 direct 채팅방 확인
+            const { data: directRooms } = await supabase
+              .from("chat_rooms")
+              .select(`
+                id,
+                participants:chat_room_participants(user_id)
+              `)
+              .eq("type", "direct");
+
+            existingRoom = directRooms?.find((room: any) => {
+              const participantIds = room.participants?.map((p: unknown) => p.user_id) || [];
+              return participantIds.length === 2 &&
+                     participantIds.includes(user.id) &&
+                     participantIds.includes(searchUser.id);
+            });
+          }
 
           return {
             ...searchUser,

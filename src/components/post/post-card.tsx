@@ -25,11 +25,11 @@ export function PostCard({ post, showAuthorRole = false, className }: PostCardPr
           <div className="flex items-center gap-3">
             <UserAvatar
               userId={post.author.id}
-              username={post.author.username}
-              avatarUrl={post.author.avatar_url}
+              username={isAnonymous ? null : post.author.username}
+              avatarUrl={isAnonymous ? null : post.author.avatar_url}
               size="sm"
               showName={true}
-              showActions={true}
+              showActions={!isAnonymous}
               secondaryText={formatDate(post.created_at)}
             />
             

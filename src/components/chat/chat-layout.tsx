@@ -1,4 +1,5 @@
 "use client";
+"use memo";
 
 import { useState, useEffect, useRef, useCallback, useMemo, memo, forwardRef, useImperativeHandle } from "react";
 import { useSearchParams } from "next/navigation";
@@ -259,6 +260,7 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(({ initialR
                 >
                   <ChatRoomAvatar
                     participants={room.participants}
+                    type={room.type}
                     size="md"
                   />
                   <div className="flex-1 min-w-0">
@@ -317,6 +319,7 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(({ initialR
                 </Button>
                 <ChatRoomAvatar
                   participants={currentRoom.participants}
+                  type={currentRoom.type}
                   size="sm"
                 />
                 <div>
@@ -334,7 +337,10 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(({ initialR
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => updateUIState({ showParticipantsModal: true })}
+                onClick={() => updateUIState({
+                  showParticipantsModal: true,
+                  currentModalRoom: currentRoom
+                })}
               >
                 <MoreHorizontal className="h-4 w-4" />
               </Button>
@@ -404,10 +410,15 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(({ initialR
         }}
         room={uiState.currentModalRoom}
         onRoomLeft={() => {
-          loadRooms();
-          if (currentRoom && uiState.currentModalRoom && currentRoom.id === uiState.currentModalRoom.id && isMobile) {
-            updateUIState({ showRoomList: true });
+          // 나간 채팅방이 현재 선택된 채팅방이면 메인으로 이동
+          if (currentRoom && uiState.currentModalRoom && currentRoom.id === uiState.currentModalRoom.id) {
+            clearCurrentRoom(); // 현재 채팅방 선택 해제
+            if (isMobile) {
+              updateUIState({ showRoomList: true });
+            }
           }
+          // 채팅방 목록 새로고침
+          loadRooms();
         }}
       />
     </div>
@@ -431,7 +442,7 @@ const MessageItem = memo(({ message, isOwnMessage }: {
       <Avatar className="h-8 w-8 flex-shrink-0">
         <AvatarImage src={message.sender?.avatar_url || ""} />
         <AvatarFallback>
-          {message.sender?.username?.[0]?.toUpperCase() || "U"}
+          {message.sender?.username?.[0]?.toUpperCase() || message.sender_id?.slice(-1)?.toUpperCase() || "U"}
         </AvatarFallback>
       </Avatar>
     )}
@@ -439,7 +450,7 @@ const MessageItem = memo(({ message, isOwnMessage }: {
     <div className={`flex flex-col ${isOwnMessage ? 'items-end' : 'items-start'} max-w-[70%]`}>
       {!isOwnMessage && (
         <div className="text-xs text-muted-foreground mb-1">
-          {message.sender?.username || "알 수 없는 사용자"}
+          {message.sender?.username || `사용자${message.sender_id?.slice(-4) || ''}`}
         </div>
       )}
 
@@ -462,4 +473,5 @@ const MessageItem = memo(({ message, isOwnMessage }: {
   </div>
   );
 });
+
 

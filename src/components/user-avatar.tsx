@@ -75,12 +75,57 @@ export function UserAvatar({
       console.log('Current user:', user);
       console.log('Target user:', { userId, username });
 
-      // 특정 사용자 ID로 기존 채팅방 확인
+      // 본인에게 DM을 보내는 경우 특별 처리
+      if (user.id === userId) {
+        console.log('Self chat requested');
+
+        // 본인과의 채팅방 생성/조회 (API에서 기존방 확인 후 처리)
+        const createResponse = await fetch('/api/chat/rooms', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'self',
+            participant_ids: [userId]
+          })
+        });
+
+        console.log('Self chat API response status:', createResponse.status);
+
+        if (createResponse.ok) {
+          const responseData = await createResponse.json();
+          console.log('Self chat API response data:', responseData);
+          const { room } = responseData;
+
+          if (!room || !room.id) {
+            throw new Error('채팅방 정보를 받지 못했습니다');
+          }
+
+          console.log('Self chat room:', room);
+          router.push(`/chat?room=${room.id}`);
+          toast.success('나에게 쓰기를 시작했습니다');
+          return;
+        } else {
+          const errorText = await createResponse.text();
+          console.error('Self chat API error status:', createResponse.status);
+          console.error('Self chat API error response:', errorText);
+
+          let errorData;
+          try {
+            errorData = JSON.parse(errorText);
+          } catch {
+            errorData = { error: errorText || 'Unknown error' };
+          }
+
+          throw new Error(errorData.error || `API Error: ${createResponse.status}`);
+        }
+      }
+
+      // 다른 사용자와의 채팅방 처리
       const response = await fetch(`/api/chat/users?user_id=${userId}`);
       if (response.ok) {
         const data = await response.json();
         const targetUser = data.users[0];
-        
+
         if (targetUser?.has_chat && targetUser?.chat_room_id) {
           // 기존 채팅방으로 이동
           router.push(`/chat?room=${targetUser.chat_room_id}`);
@@ -90,7 +135,7 @@ export function UserAvatar({
 
       // 새 채팅방 생성
       console.log('Creating new chat room with user:', { userId, username });
-      
+
       const createResponse = await fetch('/api/chat/rooms', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -113,8 +158,8 @@ export function UserAvatar({
         }
         
         console.log('Created room:', room);
-        // 새 창이나 탭에서 채팅방 열기 대신 현재 창에서 이동
-        window.location.href = `/chat?room=${room.id}`;
+        // Next.js router로 부드럽게 이동
+        router.push(`/chat?room=${room.id}`);
         toast.success('채팅을 시작했습니다');
       } else {
         const errorData = await createResponse.json().catch(() => ({ error: 'Unknown error' }));
@@ -203,17 +248,24 @@ export function UserAvatar({
   );
 
   // 닉네임과 함께 표시하는 경우 (아바타 왼쪽, 오른쪽에 이름/보조텍스트 수직 정렬)
-  if (showName && username) {
+  if (showName) {
+    const displayName = username || "익명";
+    const isAnonymous = !username;
+
     return (
       <div className="relative">
         <div className="flex items-center gap-2 group">
           {AvatarComponent}
           <div className="leading-tight">
             <span
-              onClick={handleNameClick}
-              className="text-[13px] sm:text-sm font-medium hover:underline cursor-pointer group-hover:text-primary transition-colors"
+              onClick={isAnonymous ? undefined : handleNameClick}
+              className={`text-[13px] sm:text-sm font-medium ${
+                isAnonymous
+                  ? "cursor-default text-muted-foreground"
+                  : "hover:underline cursor-pointer group-hover:text-primary transition-colors"
+              }`}
             >
-              {username}
+              {displayName}
             </span>
             {secondaryText ? (
               <div className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">
@@ -221,7 +273,7 @@ export function UserAvatar({
               </div>
             ) : null}
           </div>
-          {showFollowButton && !isOwner && (
+          {showFollowButton && !isOwner && !isAnonymous && (
             <Button
               size="sm"
               variant={isFollowing ? "outline" : "default"}
@@ -234,8 +286,8 @@ export function UserAvatar({
           )}
         </div>
 
-        {/* 액션 메뉴 */}
-        {showActionsMenu && showActions && !isOwner && (
+        {/* 액션 메뉴 (익명이 아닐 때만 표시) */}
+        {showActionsMenu && showActions && !isOwner && !isAnonymous && (
           <div className="absolute top-full left-0 mt-1 bg-background border rounded-lg shadow-lg z-50 min-w-[120px]">
             <div className="p-1">
               <Button
@@ -254,7 +306,7 @@ export function UserAvatar({
                 className="w-full justify-start text-xs"
               >
                 <MessageSquare className={`${iconSizes.sm} mr-2`} />
-                DM 보내기
+                {isOwner ? "나에게 쓰기" : "DM 보내기"}
               </Button>
             </div>
           </div>
@@ -272,7 +324,7 @@ export function UserAvatar({
         )}
 
         {/* 배경 오버레이 (메뉴 닫기용) */}
-        {showActionsMenu && (
+        {showActionsMenu && !isAnonymous && (
           <div
             className="fixed inset-0 z-40"
             onClick={() => setShowActionsMenu(false)}
@@ -307,7 +359,7 @@ export function UserAvatar({
               className="w-full justify-start text-xs"
             >
               <MessageSquare className={`${iconSizes.sm} mr-2`} />
-              DM 보내기
+              {isOwner ? "나에게 쓰기" : "DM 보내기"}
             </Button>
           </div>
         </div>

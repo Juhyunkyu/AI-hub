@@ -89,7 +89,7 @@ export default function LoginPage() {
         return;
       }
       setLoading(true);
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
@@ -98,9 +98,39 @@ export default function LoginPage() {
           },
         },
       });
+
+      if (error) {
+        setLoading(false);
+        return toast.error(getErrorMessage(error));
+      }
+
+      // 회원가입 성공 시 profiles 테이블에 레코드 생성
+      if (data.user) {
+        try {
+          const { error: profileError } = await supabase
+            .from('profiles')
+            .insert({
+              id: data.user.id,
+              username: username.trim(),
+              role: 'user'
+            });
+
+          if (profileError) {
+            console.error('Profile creation error:', profileError);
+            // 프로필 생성 실패해도 회원가입은 성공한 상태이므로 사용자에게 안내
+            toast.success("가입 메일을 확인하세요 (프로필은 로그인 후 설정됩니다)");
+          } else {
+            toast.success("가입 메일을 확인하세요");
+          }
+        } catch (profileError) {
+          console.error('Profile creation error:', profileError);
+          toast.success("가입 메일을 확인하세요 (프로필은 로그인 후 설정됩니다)");
+        }
+      } else {
+        toast.success("가입 메일을 확인하세요");
+      }
+
       setLoading(false);
-      if (error) return toast.error(getErrorMessage(error));
-      toast.success("가입 메일을 확인하세요");
       return;
     }
 

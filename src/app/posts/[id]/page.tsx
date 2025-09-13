@@ -39,6 +39,8 @@ type CommentRow = {
   parent_id: string | null;
   post_id: string;
   images?: string[];
+  anonymous?: boolean;
+  anonymous_number?: number | null;
 };
 
 export default async function PostDetail({
@@ -105,7 +107,7 @@ export default async function PostDetail({
 
   const { data: commentsRaw } = await supabase
     .from("comments")
-    .select("id,body,created_at,author_id,parent_id,images,post_id")
+    .select("id,body,created_at,author_id,parent_id,images,post_id,anonymous,anonymous_number")
     .eq("post_id", id)
     .order("created_at", { ascending: true });
 
@@ -120,6 +122,8 @@ export default async function PostDetail({
     post_id: id, // Use the current post id
     parent_id: row.parent_id,
     images: row.images || [],
+    anonymous: row.anonymous || false,
+    anonymous_number: row.anonymous_number,
   }));
 
   const commentAuthorIds = Array.from(
@@ -133,16 +137,8 @@ export default async function PostDetail({
       .in("id", commentAuthorIds);
     const rawAuthors = (raw ?? []) as unknown as ProfileLite[];
     
-    // 게시글이 익명이면 댓글 작성자도 익명으로 처리
-    if (post.anonymous) {
-      commentAuthors = rawAuthors.map(author => ({
-        ...author,
-        username: null,
-        avatar_url: null
-      }));
-    } else {
-      commentAuthors = rawAuthors;
-    }
+    // 작성자 정보 그대로 사용 (개별 댓글의 anonymous 필드로 처리)
+    commentAuthors = rawAuthors;
   }
   // const commentAuthorById = new Map<string, ProfileLite>(
   //   commentAuthors.map((u) => [u.id, u])
@@ -245,7 +241,7 @@ export default async function PostDetail({
                   username={post.anonymous ? null : (author?.username || null)}
                   avatarUrl={post.anonymous ? null : (author?.avatar_url || null)}
                   size="lg"
-                  showActions={true}
+                  showActions={!post.anonymous}
                   isOwner={false}
                   showName={true}
                   secondaryText={
@@ -292,6 +288,7 @@ export default async function PostDetail({
           commentAuthors={commentAuthors}
           postId={post.id}
           postAuthorId={post.author_id}
+          postAnonymous={post.anonymous}
         />
       )}
     </div>

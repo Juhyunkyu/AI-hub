@@ -20,6 +20,7 @@ export async function POST(request: NextRequest) {
     const topicIds: string[] = Array.isArray(body?.topicIds) ? body.topicIds : [];
     const tags: string[] = Array.isArray(body?.tags) ? body.tags : [];
     const isNotice: boolean = Boolean(body?.isNotice);
+    const isAnonymous: boolean = Boolean(body?.isAnonymous);
     const allowComments: boolean = body?.allowComments !== false;
     const showInRecent: boolean = body?.showInRecent !== false;
     // pin fields (admin only)
@@ -31,7 +32,12 @@ export async function POST(request: NextRequest) {
     const pinnedCategoryId: string | undefined = body?.pinnedCategoryId;
 
     if (!title.trim()) return NextResponse.json({ error: "제목은 필수입니다" }, { status: 400 });
-    
+
+    // 익명과 공지 동시 선택 불가
+    if (isAnonymous && isNotice) {
+      return NextResponse.json({ error: "익명과 공지사항은 동시에 선택할 수 없습니다" }, { status: 400 });
+    }
+
     // 전역 공지인 경우에는 카테고리 필수 아님
     const globalNotice = isGlobalNotice(isNotice, pinScope);
     if (!categoryId && !globalNotice)
@@ -49,6 +55,8 @@ export async function POST(request: NextRequest) {
         content,
         author_id: user.id,
         is_notice: isNotice,
+        anonymous: isAnonymous,
+        post_type: isAnonymous ? 'anonymous' : (isNotice ? 'notice' : 'general'),
         allow_comments: allowComments,
         show_in_recent: showInRecent,
         ...(isAdmin(user.id) && pinned
@@ -117,8 +125,8 @@ export async function POST(request: NextRequest) {
       if (e2) return NextResponse.json({ error: e2.message }, { status: 500 });
     }
 
-    // 3) upsert tags by slug/name then link
-    if (tags.length) {
+    // 3) upsert tags by slug/name then link (익명 게시글에서는 태그 사용 안 함)
+    if (tags.length && !isAnonymous) {
       const admin = createSupabaseAdminClient();
       const slugify = (raw: string): string => {
         const s = (raw || "").trim().toLowerCase();

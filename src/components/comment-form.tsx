@@ -24,6 +24,8 @@ interface OptimisticCommentData {
 
 interface CommentFormProps {
   postId: string;
+  postAuthorId: string;
+  postAnonymous?: boolean;
   replyTo?: {
     commentId: string;
     authorUsername: string;
@@ -35,6 +37,8 @@ interface CommentFormProps {
 
 export function CommentForm({
   postId,
+  postAuthorId,
+  postAnonymous = false,
   replyTo,
   onCancelReply,
   onSuccess,
@@ -46,6 +50,7 @@ export function CommentForm({
   const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [uploadingImages, setUploadingImages] = useState(false);
   const [emojiPage, setEmojiPage] = useState(0);
+  const [isAnonymous, setIsAnonymous] = useState(postAnonymous);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const user = useAuthStore((s) => s.user);
   // const router = useRouter();
@@ -454,16 +459,22 @@ export function CommentForm({
         }
       }
 
+      // 익명 게시글에서는 게시글 작성자가 무조건 익명으로 댓글 작성
+      const isPostAuthor = user.id === postAuthorId;
+      const finalIsAnonymous = postAnonymous ? (isPostAuthor ? true : isAnonymous) : isAnonymous;
+
       const commentData: {
         post_id: string;
         author_id: string;
         body: string;
         parent_id?: string;
         images?: string[];
+        anonymous: boolean;
       } = {
         post_id: postId,
         author_id: user.id,
         body: currentBody,
+        anonymous: finalIsAnonymous,
       };
 
       // 답글인 경우 parent_id 추가
@@ -476,14 +487,17 @@ export function CommentForm({
         commentData.images = uploadedImageUrls;
       }
 
-      const { error } = await supabase
-        .from("comments")
-        .insert(commentData)
-        .select()
-        .single();
+      const response = await fetch('/api/comments', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(commentData),
+      });
 
-      if (error) {
-        throw error;
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(errorData.error || '댓글 작성 실패');
       }
 
       setBody("");
@@ -661,6 +675,22 @@ export function CommentForm({
                   )}
                 </PopoverContent>
               </Popover>
+
+              {/* 익명 체크박스 */}
+              <label className="inline-flex items-center gap-1 text-[11px] sm:text-xs cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={postAnonymous && user?.id === postAuthorId ? true : isAnonymous}
+                  onChange={(e) => {
+                    // 익명 게시글에서 작성자는 체크박스 비활성화
+                    if (postAnonymous && user?.id === postAuthorId) return;
+                    setIsAnonymous(e.target.checked);
+                  }}
+                  disabled={postAnonymous && user?.id === postAuthorId}
+                  className="w-3 h-3 sm:w-4 sm:h-4"
+                />
+                익명
+              </label>
             </div>
 
             <div className="flex gap-2">

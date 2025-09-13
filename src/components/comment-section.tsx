@@ -28,6 +28,7 @@ interface CommentSectionProps {
   commentAuthors: ProfileLite[];
   postId: string;
   postAuthorId: string;
+  postAnonymous?: boolean;
 }
 
 export function CommentSection({
@@ -35,6 +36,7 @@ export function CommentSection({
   commentAuthors,
   postId,
   postAuthorId,
+  postAnonymous = false,
 }: CommentSectionProps) {
   const user = useAuthStore((s) => s.user);
   const [replyTo, setReplyTo] = useState<{
@@ -147,11 +149,44 @@ export function CommentSection({
     return optimisticComment;
   }, [user, addOptimisticComment]);
 
+  // 익명 댓글 표시명 결정 함수
+  const getAnonymousDisplayInfo = (comment: Comment) => {
+    if (!comment.anonymous) {
+      // 익명이 아닌 경우 원래 정보 반환
+      const author = commentAuthorById.get(comment.author_id);
+      return {
+        username: author?.username || null,
+        avatar_url: author?.avatar_url || null,
+        showActions: true,
+      };
+    }
+
+    // 익명 댓글인 경우
+    const isPostAuthor = comment.author_id === postAuthorId;
+
+    if (isPostAuthor) {
+      // 게시글 작성자의 익명 댓글 - "익명"으로 표시하고 작성자 배지는 별도로 처리
+      return {
+        username: "익명",
+        avatar_url: null,
+        showActions: false,
+      };
+    } else {
+      // 일반 사용자의 익명 댓글
+      const anonymousNumber = comment.anonymous_number || 1;
+      return {
+        username: `익명${anonymousNumber}`,
+        avatar_url: null,
+        showActions: false,
+      };
+    }
+  };
+
   // 재귀적으로 댓글과 답글을 렌더링하는 함수
   const renderCommentTree = (commentList: Comment[], level: number = 0) => {
     return commentList.map((c) => {
-      const commentAuthor = commentAuthorById.get(c.author_id);
-      const isPostAuthor = c.author_id === postAuthorId;
+      const displayInfo = getAnonymousDisplayInfo(c);
+      const isPostAuthor = c.author_id === postAuthorId; // 익명이든 아니든 작성자면 배지 표시
       const isReply = level > 0;
 
       return (
@@ -167,14 +202,15 @@ export function CommentSection({
               id={c.id}
               body={c.body}
               authorId={c.author_id}
-              authorUsername={commentAuthor?.username || null}
-              authorAvatarUrl={commentAuthor?.avatar_url || null}
+              authorUsername={displayInfo.username}
+              authorAvatarUrl={displayInfo.avatar_url}
               createdAt={c.created_at}
               isPostAuthor={isPostAuthor}
               postId={postId}
               isReply={isReply}
               images={c.images || []}
               isOptimistic={c.isOptimistic}
+              showActions={displayInfo.showActions}
               onReply={handleReply}
               onUpdate={handleCommentSuccess}
               onDelete={handleCommentSuccess}
@@ -203,6 +239,8 @@ export function CommentSection({
       <div className="mt-4 sm:mt-6 mb-8 sm:mb-10">
         <CommentForm
           postId={postId}
+          postAuthorId={postAuthorId}
+          postAnonymous={postAnonymous}
           replyTo={replyTo || undefined}
           onCancelReply={handleCancelReply}
           onSuccess={handleCommentSuccess}

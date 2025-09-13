@@ -1,4 +1,5 @@
 "use client";
+"use memo";
 
 import { useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -32,6 +33,7 @@ export default function ChatPage() {
 
   return <ChatLayout initialRoomId={roomId || undefined} />;
 }
+
 
 
 

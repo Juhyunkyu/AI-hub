@@ -72,28 +72,33 @@ export function ChatRoomParticipantsModal({
 
   const handleLeaveRoom = async () => {
     if (!user || !room) return;
-    
+
     setLoading(true);
     try {
       const response = await fetch(`/api/chat/rooms/${room.id}/leave`, {
         method: "POST",
       });
-      
+
       if (response.ok) {
         onOpenChange(false);
-        
+
         // Service Worker 캐시 무효화
         if (window.invalidateChatCache) {
           window.invalidateChatCache('rooms');
         }
-        
-        // 부모 컴포넌트에게 알림
+
+        // 부모 컴포넌트에게 알림 - 항상 호출하여 채팅방 목록 새로고침
         if (onRoomLeft) {
           onRoomLeft();
-        } else {
-          // fallback으로 새로고침
+        }
+
+        // 페이지 전체 새로고침 대신 부드러운 처리
+        // onRoomLeft가 없는 경우에만 새로고침
+        if (!onRoomLeft) {
           window.location.reload();
         }
+      } else {
+        console.error("Failed to leave room:", await response.text());
       }
     } catch (error) {
       console.error("Error leaving room:", error);
@@ -155,13 +160,13 @@ export function ChatRoomParticipantsModal({
                   <Avatar className="h-10 w-10">
                     <AvatarImage src={participant.user?.avatar_url} />
                     <AvatarFallback>
-                      {participant.user?.username?.charAt(0) || "?"}
+                      {participant.user?.username?.charAt(0)?.toUpperCase() || participant.user_id?.slice(-1)?.toUpperCase() || "U"}
                     </AvatarFallback>
                   </Avatar>
                   <div>
                     <div className="flex items-center space-x-2">
                       <span className="font-medium">
-                        {participant.user?.username || "알 수 없는 사용자"}
+                        {participant.user?.username || `사용자${participant.user_id?.slice(-4) || ''}`}
                         {isCurrentUser && " (나)"}
                       </span>
                       {isAdmin && (
@@ -209,13 +214,14 @@ export function ChatRoomParticipantsModal({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             닫기
           </Button>
-          
-          <Button 
-            variant="destructive" 
+
+          <Button
+            variant="ghost"
             onClick={handleLeaveRoom}
             disabled={loading}
+            className="text-destructive hover:text-destructive hover:bg-transparent"
           >
-            {isDirectChat ? "채팅 나가기" : "채팅방 나가기"}
+            나가기
           </Button>
         </div>
       </DialogContent>

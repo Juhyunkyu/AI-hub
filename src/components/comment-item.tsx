@@ -31,6 +31,7 @@ interface CommentItemProps {
   isReply?: boolean;
   images?: string[];
   isOptimistic?: boolean;
+  showActions?: boolean;
   onReply?: (commentId: string, authorUsername: string) => void;
   onUpdate?: () => void;
   onDelete?: () => void;
@@ -46,6 +47,7 @@ export function CommentItem({
   isPostAuthor,
   images = [],
   isOptimistic = false,
+  showActions = true,
   onReply,
   onUpdate,
   onDelete,
@@ -142,7 +144,7 @@ export function CommentItem({
             username={authorUsername}
             avatarUrl={authorAvatarUrl}
             size="sm"
-            showActions={true}
+            showActions={showActions}
             isOwner={false}
             showName={true}
           />

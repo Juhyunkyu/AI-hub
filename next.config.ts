@@ -53,7 +53,18 @@ const nextConfig: NextConfig = {
   // Next.js 15 Performance Optimizations
   experimental: {
     // Optimize package imports for better tree shaking
-    optimizePackageImports: ['lucide-react', '@radix-ui/react-icons', '@supabase/supabase-js'],
+    optimizePackageImports: [
+      'lucide-react',
+      '@radix-ui/react-icons',
+      '@supabase/supabase-js',
+      'zustand',
+      'sonner',
+      'react-window'
+    ],
+    // Enable React Compiler for automatic optimization (React 19 compatible)
+    reactCompiler: {
+      compilationMode: 'annotation', // opt-in mode for selective optimization
+    },
   },
   
   // Turbopack optimizations (moved from experimental.turbo as it's now stable)

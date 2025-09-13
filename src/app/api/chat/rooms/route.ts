@@ -201,10 +201,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 참여자 목록에 현재 사용자 추가 (중복 제거)
-    const allParticipantIds = Array.from(
-      new Set([user.id, ...participant_ids])
-    );
+    // 참여자 목록 설정
+    let allParticipantIds;
+    if (type === "self") {
+      // 본인과의 채팅방인 경우 본인만 참여
+      allParticipantIds = [user.id];
+    } else {
+      // 일반 채팅방인 경우 현재 사용자 추가 (중복 제거)
+      allParticipantIds = Array.from(
+        new Set([user.id, ...participant_ids])
+      );
+    }
 
     console.log("Chat room creation - All participants:", {
       allParticipantIds,
@@ -236,6 +243,38 @@ export async function POST(request: NextRequest) {
           roomParticipants.length === 2 &&
           roomParticipants.includes(user.id) &&
           roomParticipants.includes(participant_ids[0])
+        );
+      });
+
+      if (existingRoom) {
+        return NextResponse.json({ room: existingRoom });
+      }
+    }
+
+    // 본인과의 채팅방인 경우 기존 채팅방이 있는지 확인
+    if (type === "self" && participant_ids.length === 1 && participant_ids[0] === user.id) {
+      const { data: existingRooms } = await supabase
+        .from("chat_rooms")
+        .select(
+          `
+          id,
+          name,
+          type,
+          created_at,
+          updated_at,
+          participants:chat_room_participants(user_id)
+        `
+        )
+        .eq("type", "self");
+
+      // 본인만 참여한 self 채팅방이 있는지 확인
+      const existingRoom = existingRooms?.find((room: ExistingRoom) => {
+        const roomParticipants = room.participants.map(
+          (p: ExistingRoomParticipant) => p.user_id
+        );
+        return (
+          roomParticipants.length === 1 &&
+          roomParticipants.includes(user.id)
         );
       });
 

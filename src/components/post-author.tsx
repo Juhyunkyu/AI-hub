@@ -55,15 +55,16 @@ export function PostAuthor({
   }
   
   // 일반 게시글인 경우 - 작성자 정보 표시
-  const name = author?.username ?? "사용자";
+  const name = author?.username || `사용자${author?.id?.slice(-4) || ''}` || "사용자";
   const avatarUrl = author?.avatar_url ?? undefined;
-  
+  const fallbackChar = name ? name.charAt(0).toUpperCase() : (author?.id?.slice(-1)?.toUpperCase() || "U");
+
   return (
     <span className="inline-flex items-center gap-1.5">
       <Avatar className={avatarSize}>
         <AvatarImage src={avatarUrl} alt={name} />
         <AvatarFallback className={textSize}>
-          {name.slice(0, 1)}
+          {fallbackChar}
         </AvatarFallback>
       </Avatar>
       <span>· {name}</span>

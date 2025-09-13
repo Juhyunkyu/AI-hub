@@ -1,6 +1,7 @@
 "use client";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { StickyNote, HelpCircle } from "lucide-react";
 import { useAuthStore } from "@/stores/auth";
 
 interface Participant {
@@ -15,9 +16,10 @@ interface Participant {
 interface ChatRoomAvatarProps {
   participants?: Participant[];
   size?: "sm" | "md" | "lg";
+  type?: string; // self, direct, group
 }
 
-export function ChatRoomAvatar({ participants = [], size = "md" }: ChatRoomAvatarProps) {
+export function ChatRoomAvatar({ participants = [], size = "md", type }: ChatRoomAvatarProps) {
   const { user } = useAuthStore();
   
   // 현재 사용자를 제외한 참여자들
@@ -34,6 +36,23 @@ export function ChatRoomAvatar({ participants = [], size = "md" }: ChatRoomAvata
     md: "h-4 w-4",
     lg: "h-5 w-5"
   };
+
+  const iconSizes = {
+    sm: "h-4 w-4",
+    md: "h-5 w-5",
+    lg: "h-6 w-6"
+  };
+
+  // self 타입 채팅방 (나에게)
+  if (type === 'self') {
+    return (
+      <Avatar className={sizeClasses[size]}>
+        <AvatarFallback className="bg-blue-100 dark:bg-blue-900/20">
+          <StickyNote className={`${iconSizes[size]} text-blue-600 dark:text-blue-400`} />
+        </AvatarFallback>
+      </Avatar>
+    );
+  }
 
   // 1:1 채팅 (상대방 1명)
   if (otherParticipants.length === 1) {
@@ -119,10 +138,12 @@ export function ChatRoomAvatar({ participants = [], size = "md" }: ChatRoomAvata
     );
   }
 
-  // 참여자가 없는 경우 (기본)
+  // 참여자가 없는 경우 (대화할 상대방이 없습니다)
   return (
     <Avatar className={sizeClasses[size]}>
-      <AvatarFallback>?</AvatarFallback>
+      <AvatarFallback className="bg-gray-100 dark:bg-gray-800">
+        <HelpCircle className={`${iconSizes[size]} text-gray-500 dark:text-gray-400`} />
+      </AvatarFallback>
     </Avatar>
   );
 }

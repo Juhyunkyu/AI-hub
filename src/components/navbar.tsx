@@ -1,4 +1,5 @@
 "use client";
+"use memo";
 
 import Link from "next/link";
 import { useAuthStore } from "@/stores/auth";

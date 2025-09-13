@@ -131,6 +131,7 @@ export default function NewPostPage() {
   const [showInRecent, setShowInRecent] = useState<boolean>(true);
   // 수정 모드에서 응답의 공지 여부를 반영하기 위한 상태
   const [editNotice, setEditNotice] = useState<boolean>(false);
+  const [isAnonymous, setIsAnonymous] = useState<boolean>(false);
   const activeNoticeMode = isNoticeMode || editNotice;
   // 수정 모드 초기 로딩 중에는 공지/일반 판단 전까지 UI 깜빡임 방지
   const [uiReady, setUiReady] = useState<boolean>(!Boolean(editIdParam));
@@ -417,6 +418,9 @@ export default function NewPostPage() {
           if (typeof j.post.is_notice === "boolean") {
             setEditNotice(Boolean(j.post.is_notice));
           }
+          if (typeof j.post.anonymous === "boolean") {
+            setIsAnonymous(Boolean(j.post.anonymous));
+          }
           if (typeof j.post.allow_comments === "boolean") {
             setAllowComments(Boolean(j.post.allow_comments));
           }
@@ -500,10 +504,11 @@ export default function NewPostPage() {
         body: JSON.stringify({
           title,
           content: contentHtml,
-          tags: activeNoticeMode ? [] : tags,
+          tags: activeNoticeMode || isAnonymous ? [] : tags,
           isNotice: activeNoticeMode,
+          isAnonymous,
           allowComments,
-          showInRecent: activeNoticeMode ? showInRecent : true,
+          showInRecent: (activeNoticeMode || isAnonymous) ? showInRecent : true,
           // pin fields (관리자만 처리됨 - 서버에서 권한 검증)
           pinned: isPinned,
           pinScope,
@@ -525,10 +530,11 @@ export default function NewPostPage() {
           content: contentHtml,
           categoryId: selectedCategoryId,
           topicIds: selectedTopicIds,
-          tags: activeNoticeMode ? [] : tags,
+          tags: activeNoticeMode || isAnonymous ? [] : tags,
           isNotice: activeNoticeMode,
+          isAnonymous,
           allowComments,
-          showInRecent: activeNoticeMode ? showInRecent : true,
+          showInRecent: (activeNoticeMode || isAnonymous) ? showInRecent : true,
           // pin fields (관리자만 처리됨 - 서버에서 권한 검증)
           pinned: isPinned,
           pinScope,
@@ -1177,8 +1183,8 @@ export default function NewPostPage() {
           </div>
         )}
 
-        {/* 태그 입력 (공지 모드에서는 숨김, 내부적으로 '공지' 고정) */}
-        {uiReady && !activeNoticeMode && (
+        {/* 태그 입력 (공지 모드나 익명 모드에서는 숨김) */}
+        {uiReady && !activeNoticeMode && !isAnonymous && (
           <div>
             <label className="text-[11px] sm:text-xs block mb-1">
               태그(엔터로 추가)
@@ -1225,6 +1231,33 @@ export default function NewPostPage() {
                   </Badge>
                 ))}
               </div>
+            )}
+          </div>
+        )}
+
+        {/* 익명 체크박스 (공지 모드가 아닐 때만 표시) */}
+        {uiReady && !activeNoticeMode && (
+          <div>
+            <label className="text-xs inline-flex items-center gap-2">
+              <input
+                type="checkbox"
+                className="h-4 w-4"
+                checked={isAnonymous}
+                onChange={(e) => {
+                  setIsAnonymous(e.target.checked);
+                  // 익명 선택 시 태그 초기화
+                  if (e.target.checked) {
+                    setTags([]);
+                    setTagInput("");
+                  }
+                }}
+              />
+              익명으로 작성
+            </label>
+            {isAnonymous && (
+              <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">
+                익명으로 작성하면 작성자가 공개되지 않으며, 태그를 사용할 수 없습니다.
+              </p>
             )}
           </div>
         )}

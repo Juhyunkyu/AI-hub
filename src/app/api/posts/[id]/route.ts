@@ -16,7 +16,7 @@ export async function GET(
 
     const { data: post, error } = await supabase
       .from("posts")
-      .select("id,title,content,author_id,created_at,is_notice,allow_comments,show_in_recent")
+      .select("id,title,content,author_id,created_at,is_notice,anonymous,post_type,allow_comments,show_in_recent")
       .eq("id", id)
       .maybeSingle();
 
@@ -82,6 +82,8 @@ export async function PATCH(
     const content: string | undefined = body?.content;
     const isNotice: boolean | undefined =
       typeof body?.isNotice === "boolean" ? body.isNotice : undefined;
+    const isAnonymous: boolean | undefined =
+      typeof body?.isAnonymous === "boolean" ? body.isAnonymous : undefined;
     const allowComments: boolean | undefined =
       typeof body?.allowComments === "boolean" ? body.allowComments : undefined;
     const showInRecent: boolean | undefined =
@@ -98,14 +100,36 @@ export async function PATCH(
       ? (body.tags as string[])
       : undefined;
 
-    if (!title && !content && typeof isNotice === "undefined" && typeof allowComments === "undefined" && typeof showInRecent === "undefined" && typeof pinned === "undefined" && typeof pinScope === "undefined" && typeof pinnedUntilRaw === "undefined" && typeof pinPriority === "undefined" && typeof pinnedCategoryId === "undefined" && !tags) {
+    // 익명과 공지 동시 선택 불가
+    if (isAnonymous === true && isNotice === true) {
+      return NextResponse.json({ error: "익명과 공지사항은 동시에 선택할 수 없습니다" }, { status: 400 });
+    }
+
+    if (!title && !content && typeof isNotice === "undefined" && typeof isAnonymous === "undefined" && typeof allowComments === "undefined" && typeof showInRecent === "undefined" && typeof pinned === "undefined" && typeof pinScope === "undefined" && typeof pinnedUntilRaw === "undefined" && typeof pinPriority === "undefined" && typeof pinnedCategoryId === "undefined" && !tags) {
       return NextResponse.json({ error: "no_fields" }, { status: 400 });
     }
 
     const updateFields: Record<string, unknown> = {};
     if (typeof title === "string") updateFields.title = title;
     if (typeof content === "string") updateFields.content = content;
-    if (typeof isNotice === "boolean") updateFields.is_notice = isNotice;
+    if (typeof isNotice === "boolean") {
+      updateFields.is_notice = isNotice;
+      // 공지사항이 되면 익명이 아님
+      if (isNotice) {
+        updateFields.anonymous = false;
+        updateFields.post_type = 'notice';
+      }
+    }
+    if (typeof isAnonymous === "boolean") {
+      updateFields.anonymous = isAnonymous;
+      // 익명이 되면 공지사항이 아님
+      if (isAnonymous) {
+        updateFields.is_notice = false;
+        updateFields.post_type = 'anonymous';
+      } else {
+        updateFields.post_type = 'general';
+      }
+    }
     if (typeof allowComments === "boolean") updateFields.allow_comments = allowComments;
     if (typeof showInRecent === "boolean") updateFields.show_in_recent = showInRecent;
     // pin updates only by admin
@@ -164,8 +188,16 @@ export async function PATCH(
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     if (!updated) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
-    // 태그가 포함된 경우: 기존 매핑을 교체
-    if (tags) {
+    // 익명 게시글로 변경되는 경우 모든 태그 제거
+    if (isAnonymous === true) {
+      const { error: delErr } = await supabase
+        .from("post_tags")
+        .delete()
+        .eq("post_id", id);
+      if (delErr) return NextResponse.json({ error: delErr.message }, { status: 500 });
+    }
+    // 태그가 포함된 경우: 기존 매핑을 교체 (익명이 아닐 때만)
+    else if (tags) {
       // 1) 태그 upsert (slug 기반)
       if (tags.length) {
         const slugify = (raw: string): string => {

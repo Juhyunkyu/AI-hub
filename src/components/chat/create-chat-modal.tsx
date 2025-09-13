@@ -1,4 +1,5 @@
 "use client";
+"use memo";
 
 import { useState, useEffect } from "react";
 import {
@@ -424,6 +425,7 @@ export function CreateChatModal({
     </Dialog>
   );
 }
+
 
 
 

@@ -45,12 +45,28 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
   
   checkAuth: async () => {
-    const supabase = createSupabaseBrowserClient()
-    const { data } = await supabase.auth.getUser()
-    const user = data.user
-    set({ 
-      user: user ? { id: user.id, email: user.email ?? null } : null,
-      isLoading: false 
-    })
+    try {
+      const supabase = createSupabaseBrowserClient()
+      const { data, error } = await supabase.auth.getUser()
+
+      if (error) {
+        console.warn('Auth check error:', error)
+        // 토큰이 만료되거나 유효하지 않은 경우 로그아웃 처리
+        if (error.message?.includes('refresh') || error.message?.includes('token')) {
+          await supabase.auth.signOut()
+        }
+        set({ user: null, isLoading: false })
+        return
+      }
+
+      const user = data.user
+      set({
+        user: user ? { id: user.id, email: user.email ?? null } : null,
+        isLoading: false
+      })
+    } catch (error) {
+      console.error('Auth check failed:', error)
+      set({ user: null, isLoading: false })
+    }
   }
 }))

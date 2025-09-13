@@ -15,6 +15,8 @@ export interface Comment {
   images?: string[];
   replies?: Comment[];
   isOptimistic?: boolean; // Flag to identify optimistic comments
+  anonymous?: boolean;
+  anonymous_number?: number | null;
 }
 
 export interface ProfileLite {
