@@ -20,6 +20,13 @@ import {
 import { useAuthStore } from "@/stores/auth";
 import { CreateChatModal } from "./create-chat-modal";
 
+// Service Worker cache invalidation type
+declare global {
+  interface Window {
+    invalidateChatCache?: (pattern: string) => void;
+  }
+}
+
 interface Participant {
   id: string;
   user_id: string;
@@ -43,12 +50,14 @@ interface ChatRoomParticipantsModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   room: ChatRoom | null;
+  onRoomLeft?: () => void;
 }
 
 export function ChatRoomParticipantsModal({ 
   open, 
   onOpenChange, 
-  room 
+  room,
+  onRoomLeft
 }: ChatRoomParticipantsModalProps) {
   const { user } = useAuthStore();
   const [loading, setLoading] = useState(false);
@@ -72,8 +81,19 @@ export function ChatRoomParticipantsModal({
       
       if (response.ok) {
         onOpenChange(false);
-        // 채팅방 목록 새로고침 필요
-        window.location.reload();
+        
+        // Service Worker 캐시 무효화
+        if (window.invalidateChatCache) {
+          window.invalidateChatCache('rooms');
+        }
+        
+        // 부모 컴포넌트에게 알림
+        if (onRoomLeft) {
+          onRoomLeft();
+        } else {
+          // fallback으로 새로고침
+          window.location.reload();
+        }
       }
     } catch (error) {
       console.error("Error leaving room:", error);
@@ -190,15 +210,13 @@ export function ChatRoomParticipantsModal({
             닫기
           </Button>
           
-          {!isDirectChat && participants.length > 2 && (
-            <Button 
-              variant="destructive" 
-              onClick={handleLeaveRoom}
-              disabled={loading}
-            >
-              채팅방 나가기
-            </Button>
-          )}
+          <Button 
+            variant="destructive" 
+            onClick={handleLeaveRoom}
+            disabled={loading}
+          >
+            {isDirectChat ? "채팅 나가기" : "채팅방 나가기"}
+          </Button>
         </div>
       </DialogContent>
       

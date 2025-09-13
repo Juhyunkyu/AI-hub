@@ -41,25 +41,27 @@ export interface ChatMessage {
   read_by: string[];
 }
 
-export interface ChatMessageRead {
-  id: string;
-  message_id: string;
-  user_id: string;
-  read_at: string;
-}
+// 향후 메시지 읽음 기능을 위한 타입 (현재 미사용)
+// export interface ChatMessageRead {
+//   id: string;
+//   message_id: string;
+//   user_id: string;
+//   read_at: string;
+// }
 
-export interface ChatTypingStatus {
-  id: string;
-  room_id: string;
-  user_id: string;
-  is_typing: boolean;
-  last_activity: string;
-  user?: {
-    id: string;
-    username: string;
-    avatar_url?: string;
-  };
-}
+// 향후 타이핑 상태 기능을 위한 타입 (현재 미사용)
+// export interface ChatTypingStatus {
+//   id: string;
+//   room_id: string;
+//   user_id: string;
+//   is_typing: boolean;
+//   last_activity: string;
+//   user?: {
+//     id: string;
+//     username: string;
+//     avatar_url?: string;
+//   };
+// }
 
 export interface ChatRoomWithParticipants extends ChatRoom {
   participants: ChatRoomParticipant[];
@@ -88,20 +90,18 @@ export interface TypingStatusData {
   is_typing: boolean;
 }
 
-// Realtime 이벤트 타입
-export interface RealtimeMessage {
-  type: 'INSERT' | 'UPDATE' | 'DELETE';
-  table: string;
-  record: any;
-  old_record?: any;
-}
+// 향후 실시간 이벤트 기능을 위한 타입 (현재 미사용)
+// export interface RealtimeMessage {
+//   type: 'INSERT' | 'UPDATE' | 'DELETE';
+//   table: string;
+//   record: any;
+//   old_record?: any;
+// }
 
-export interface TypingIndicator {
-  user_id: string;
-  username: string;
-  is_typing: boolean;
-  last_activity: string;
-}
-
-
-
+// 향후 타이핑 표시 기능을 위한 타입 (현재 미사용)
+// export interface TypingIndicator {
+//   user_id: string;
+//   username: string;
+//   is_typing: boolean;
+//   last_activity: string;
+// }

@@ -30,6 +30,7 @@ interface CommentItemProps {
   postId: string;
   isReply?: boolean;
   images?: string[];
+  isOptimistic?: boolean;
   onReply?: (commentId: string, authorUsername: string) => void;
   onUpdate?: () => void;
   onDelete?: () => void;
@@ -44,6 +45,7 @@ export function CommentItem({
   createdAt,
   isPostAuthor,
   images = [],
+  isOptimistic = false,
   onReply,
   onUpdate,
   onDelete,
@@ -129,151 +131,156 @@ export function CommentItem({
   };
 
   return (
-    <div className="flex gap-1 sm:gap-1.5 p-2.5 sm:p-3 border rounded-lg hover:bg-muted/50 transition-colors">
-      {/* 사용자 아바타 */}
-      <div className="flex-shrink-0">
-        <UserAvatar
-          userId={authorId}
-          username={authorUsername}
-          avatarUrl={authorAvatarUrl}
-          size="sm"
-          showActions={false}
-          isOwner={false}
-        />
+    <div className={`p-2.5 sm:p-3 border rounded-lg hover:bg-muted/50 transition-colors space-y-2 ${
+      isOptimistic ? 'opacity-75 bg-blue-50/50 border-blue-200/50 dark:bg-blue-900/10 dark:border-blue-800/30' : ''
+    }`}>
+      {/* 헤더: 아바타, 사용자명, 배지, 메뉴 */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <UserAvatar
+            userId={authorId}
+            username={authorUsername}
+            avatarUrl={authorAvatarUrl}
+            size="sm"
+            showActions={true}
+            isOwner={false}
+            showName={true}
+          />
+          {isPostAuthor && (
+            <Badge
+              variant="secondary"
+              className="text-[9px] px-1 py-px bg-primary text-primary-foreground hover:bg-primary/90 flex-shrink-0 leading-none"
+            >
+              작성자
+            </Badge>
+          )}
+        </div>
+
+        {/* 메뉴 버튼 */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={isOptimistic}
+              className={`h-6 w-6 p-0 transition-opacity ${
+                isOptimistic ? 'opacity-50 cursor-not-allowed' : 'opacity-100'
+              }`}
+            >
+              <MoreHorizontal className="h-3 w-3" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            {isOwner && (
+              <>
+                <DropdownMenuItem onClick={() => setEditing(true)}>
+                  수정
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={remove}
+                  className="text-destructive"
+                >
+                  삭제
+                </DropdownMenuItem>
+              </>
+            )}
+            {!isOwner && (
+              <DropdownMenuItem asChild>
+                <ReportButton targetId={id} targetType="comment" />
+              </DropdownMenuItem>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       {/* 댓글 내용 */}
-      <div className="flex-1 min-w-0">
-        {/* 헤더: 닉네임, 배지, 메뉴 */}
-        <div className="flex items-center justify-between gap-2 mb-0.5 sm:mb-1">
-          <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
-            <UserAvatar
-              userId={authorId}
-              username={authorUsername}
-              avatarUrl={authorAvatarUrl}
+      {editing ? (
+        <div className="space-y-2">
+          <Textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            rows={3}
+            className="text-[13px] sm:text-sm"
+          />
+          <div className="flex gap-2">
+            <Button size="sm" onClick={save} disabled={loading}>
+              저장
+            </Button>
+            <Button
               size="sm"
-              showActions={true}
-              isOwner={false}
-              showName={true}
-            />
-            {isPostAuthor && (
-              <Badge
-                variant="secondary"
-                className="text-[9px] px-1 py-px bg-primary text-primary-foreground hover:bg-primary/90 flex-shrink-0 leading-none"
-              >
-                작성자
-              </Badge>
-            )}
+              variant="outline"
+              onClick={() => {
+                setEditing(false);
+                setText(body);
+              }}
+              disabled={loading}
+            >
+              취소
+            </Button>
           </div>
-
-          {/* 메뉴 버튼 */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-6 w-6 p-0 opacity-100 transition-opacity"
-              >
-                <MoreHorizontal className="h-3 w-3" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              {isOwner && (
-                <>
-                  <DropdownMenuItem onClick={() => setEditing(true)}>
-                    수정
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={remove}
-                    className="text-destructive"
-                  >
-                    삭제
-                  </DropdownMenuItem>
-                </>
-              )}
-              {!isOwner && (
-                <DropdownMenuItem asChild>
-                  <ReportButton targetId={id} targetType="comment" />
-                </DropdownMenuItem>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
         </div>
+      ) : (
+        <div className="text-[13px] sm:text-sm leading-relaxed">
+          {body}
+        </div>
+      )}
 
-        {/* 댓글 내용 */}
-        {editing ? (
-          <div className="space-y-2">
-            <Textarea
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              rows={3}
-              className="text-[13px] sm:text-sm"
+      {/* 이미지 표시 */}
+      {images && images.length > 0 && (
+        <div className="flex gap-1.5 sm:gap-2 flex-wrap">
+          {images.map((imageUrl, index) => (
+            <Image
+              key={index}
+              src={`/api/image-proxy?url=${encodeURIComponent(imageUrl)}`}
+              alt={`댓글 이미지 ${index + 1}`}
+              width={192}
+              height={192}
+              className="w-48 h-48 object-cover rounded border cursor-pointer hover:opacity-80 transition-opacity"
+              onClick={() => window.open(imageUrl, "_blank")}
             />
-            <div className="flex gap-2">
-              <Button size="sm" onClick={save} disabled={loading}>
-                저장
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  setEditing(false);
-                  setText(body);
-                }}
-                disabled={loading}
-              >
-                취소
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <div className="text-[13px] sm:text-sm leading-relaxed mb-1.5 sm:mb-2">
-            {body}
-          </div>
-        )}
+          ))}
+        </div>
+      )}
 
-        {/* 이미지 표시 */}
-        {images && images.length > 0 && (
-          <div className="flex gap-1.5 sm:gap-2 flex-wrap mb-2 sm:mb-3">
-            {images.map((imageUrl, index) => (
-              <Image
-                key={index}
-                src={`/api/image-proxy?url=${encodeURIComponent(imageUrl)}`}
-                alt={`댓글 이미지 ${index + 1}`}
-                width={192}
-                height={192}
-                className="w-48 h-48 object-cover rounded border cursor-pointer hover:opacity-80 transition-opacity"
-                onClick={() => window.open(imageUrl, "_blank")}
-              />
-            ))}
+      {/* 날짜와 액션 버튼들 */}
+      {!editing && (
+        <div className="flex items-center justify-between gap-2 text-[11px] sm:text-xs text-muted-foreground">
+          <span>
+            {formatDate(createdAt)}
+            {isOptimistic && (
+              <span className="ml-2 text-blue-600 dark:text-blue-400 text-[10px] sm:text-xs font-medium">
+                전송 중...
+              </span>
+            )}
+          </span>
+          <div className="flex items-center gap-2 sm:gap-3">
+            <button
+              onClick={handleReply}
+              disabled={isOptimistic}
+              className={`flex items-center gap-1 transition-colors ${
+                isOptimistic ? 'opacity-50 cursor-not-allowed' : 'hover:text-foreground'
+              }`}
+            >
+              <Reply className="h-3 w-3" />
+              답글
+            </button>
+            <button
+              onClick={toggleLike}
+              disabled={isOptimistic}
+              className={`flex items-center gap-1 transition-colors ${
+                isOptimistic 
+                  ? 'opacity-50 cursor-not-allowed' 
+                  : liked 
+                  ? "text-red-500" 
+                  : "hover:text-foreground"
+              }`}
+            >
+              <Heart className={`h-3 w-3 ${liked ? "fill-current" : ""}`} />
+              {likeCount > 0 && likeCount}
+            </button>
           </div>
-        )}
-
-        {/* 날짜와 액션 버튼들 */}
-        {!editing && (
-          <div className="flex items-center justify-between gap-2 text-[11px] sm:text-xs text-muted-foreground">
-            <span>{formatDate(createdAt)}</span>
-            <div className="flex items-center gap-2 sm:gap-3">
-              <button
-                onClick={handleReply}
-                className="flex items-center gap-1 hover:text-foreground transition-colors"
-              >
-                <Reply className="h-3 w-3" />
-                답글
-              </button>
-              <button
-                onClick={toggleLike}
-                className={`flex items-center gap-1 transition-colors ${
-                  liked ? "text-red-500" : "hover:text-foreground"
-                }`}
-              >
-                <Heart className={`h-3 w-3 ${liked ? "fill-current" : ""}`} />
-                {likeCount > 0 && likeCount}
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

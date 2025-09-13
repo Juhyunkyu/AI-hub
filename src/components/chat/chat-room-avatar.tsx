@@ -14,11 +14,10 @@ interface Participant {
 
 interface ChatRoomAvatarProps {
   participants?: Participant[];
-  type?: string;
   size?: "sm" | "md" | "lg";
 }
 
-export function ChatRoomAvatar({ participants = [], type, size = "md" }: ChatRoomAvatarProps) {
+export function ChatRoomAvatar({ participants = [], size = "md" }: ChatRoomAvatarProps) {
   const { user } = useAuthStore();
   
   // 현재 사용자를 제외한 참여자들

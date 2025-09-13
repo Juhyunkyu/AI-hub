@@ -17,6 +17,7 @@ import Link from "next/link";
 import { Home, ChevronRight, Hash } from "lucide-react";
 import { PostOwnerActions } from "@/components/post-owner-actions";
 import { Badge } from "@/components/ui/badge";
+import { Comment, ProfileLite } from "@/types/comments";
 
 type PostRow = {
   id: string;
@@ -30,18 +31,13 @@ type PostRow = {
   anonymous?: boolean;
 };
 
-type ProfileLite = {
-  id: string;
-  username: string | null;
-  avatar_url: string | null;
-};
-
 type CommentRow = {
   id: string;
   body: string;
   created_at: string;
   author_id: string;
   parent_id: string | null;
+  post_id: string;
   images?: string[];
 };
 
@@ -109,11 +105,22 @@ export default async function PostDetail({
 
   const { data: commentsRaw } = await supabase
     .from("comments")
-    .select("id,body,created_at,author_id,parent_id,images")
+    .select("id,body,created_at,author_id,parent_id,images,post_id")
     .eq("post_id", id)
     .order("created_at", { ascending: true });
 
-  const comments = (commentsRaw ?? []) as unknown as CommentRow[];
+  const commentRows = (commentsRaw ?? []) as unknown as CommentRow[];
+  
+  // Convert CommentRow to Comment type for the new system
+  const comments: Comment[] = commentRows.map(row => ({
+    id: row.id,
+    body: row.body,
+    author_id: row.author_id,
+    created_at: row.created_at,
+    post_id: id, // Use the current post id
+    parent_id: row.parent_id,
+    images: row.images || [],
+  }));
 
   const commentAuthorIds = Array.from(
     new Set(comments.map((c) => c.author_id))

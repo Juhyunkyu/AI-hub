@@ -30,7 +30,15 @@ export default function ChatPage() {
     );
   }
 
-  return <ChatLayout initialRoomId={roomId} />;
+  return <ChatLayout initialRoomId={roomId || undefined} />;
 }
+
+
+
+
+
+
+
+
 
 

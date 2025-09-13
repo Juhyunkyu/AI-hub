@@ -6,6 +6,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider } from "@/components/auth-provider";
 import { Navbar } from "@/components/navbar";
 import { SiteFooter } from "@/components/site-footer";
+import { ServiceWorkerRegister } from "@/components/service-worker-register";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -34,8 +35,9 @@ export default function RootLayout({
       >
         <ThemeProvider>
           <AuthProvider>
+            <ServiceWorkerRegister />
             <Navbar />
-            <main className="mx-auto w-full max-w-6xl px-3 sm:px-4 md:px-6 py-0">
+            <main className="mx-auto w-full max-w-6xl px-3 sm:px-4 md:px-6 py-0 md:py-6">
               {children}
             </main>
             <SiteFooter />

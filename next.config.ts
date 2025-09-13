@@ -43,10 +43,31 @@ const nextConfig: NextConfig = {
   images: imagesConfig,
   compiler: {
     // Remove console.* in production bundles except errors
-    removeConsole: {
-      exclude: ["error"],
+    removeConsole: process.env.NODE_ENV === "production" ? {
+      exclude: ["error", "warn"],
+    } : false,
+    // Enable React Compiler optimizations for React 19
+    reactRemoveProperties: process.env.NODE_ENV === "production",
+  },
+  
+  // Next.js 15 Performance Optimizations
+  experimental: {
+    // Optimize package imports for better tree shaking
+    optimizePackageImports: ['lucide-react', '@radix-ui/react-icons', '@supabase/supabase-js'],
+  },
+  
+  // Turbopack optimizations (moved from experimental.turbo as it's now stable)
+  turbopack: {
+    rules: {
+      '*.svg': {
+        loaders: ['@svgr/webpack'],
+        as: '*.js',
+      },
     },
   },
+  
+  // Bundle optimizations
+  bundlePagesRouterDependencies: true,
 };
 
 export default nextConfig;

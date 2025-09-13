@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useTransition } from "react";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -14,6 +14,14 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 
+interface OptimisticCommentData {
+  body: string;
+  post_id: string;
+  author_id: string;
+  parent_id: string | null;
+  images: string[];
+}
+
 interface CommentFormProps {
   postId: string;
   replyTo?: {
@@ -22,6 +30,7 @@ interface CommentFormProps {
   };
   onCancelReply?: () => void;
   onSuccess?: () => void;
+  onOptimisticSubmit?: (data: OptimisticCommentData, tempId: string) => void;
 }
 
 export function CommentForm({
@@ -29,6 +38,7 @@ export function CommentForm({
   replyTo,
   onCancelReply,
   onSuccess,
+  onOptimisticSubmit,
 }: CommentFormProps) {
   const [body, setBody] = useState("");
   const [loading, setLoading] = useState(false);
@@ -40,6 +50,7 @@ export function CommentForm({
   const user = useAuthStore((s) => s.user);
   // const router = useRouter();
   const supabase = createSupabaseBrowserClient();
+  const [isPending, startTransition] = useTransition();
 
   // 이모지 데이터 (중복 제거)
   const emojis = [
@@ -394,13 +405,40 @@ export function CommentForm({
     if (!body.trim() && images.length === 0) return;
     if (loading) return; // 중복 제출 방지
 
+    const tempId = `temp-${Date.now()}-${Math.random().toString(36).substring(2)}`;
+    const currentBody = body.trim();
+    const currentImages = [...images];
+    const currentImageUrls = [...imageUrls];
+    const currentReplyTo = replyTo;
+
+    // Add optimistic comment immediately if handler is provided
+    if (onOptimisticSubmit) {
+      const optimisticCommentData: OptimisticCommentData = {
+        body: currentBody,
+        post_id: postId,
+        author_id: user.id,
+        parent_id: currentReplyTo?.commentId || null,
+        images: [], // Will be populated after upload
+      };
+      
+      // Use startTransition for better performance with optimistic updates
+      startTransition(() => {
+        onOptimisticSubmit(optimisticCommentData, tempId);
+      });
+    }
+
+    // Clear form immediately for better UX
+    setBody("");
+    setImages([]);
+    setImageUrls([]);
+    
     setLoading(true);
 
     try {
       // 이미지 업로드
       const uploadedImageUrls: string[] = [];
-      if (images.length > 0) {
-        for (const image of images) {
+      if (currentImages.length > 0) {
+        for (const image of currentImages) {
           const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.jpg`;
           const { error } = await supabase.storage
             .from("comment-images")
@@ -425,12 +463,12 @@ export function CommentForm({
       } = {
         post_id: postId,
         author_id: user.id,
-        body: body.trim(),
+        body: currentBody,
       };
 
       // 답글인 경우 parent_id 추가
-      if (replyTo) {
-        commentData.parent_id = replyTo.commentId;
+      if (currentReplyTo) {
+        commentData.parent_id = currentReplyTo.commentId;
       }
 
       // 이미지가 있는 경우 추가
@@ -438,7 +476,11 @@ export function CommentForm({
         commentData.images = uploadedImageUrls;
       }
 
-      const { error } = await supabase.from("comments").insert(commentData);
+      const { error } = await supabase
+        .from("comments")
+        .insert(commentData)
+        .select()
+        .single();
 
       if (error) {
         throw error;
@@ -448,18 +490,25 @@ export function CommentForm({
       setImages([]);
       setImageUrls([]);
       toast.success(
-        replyTo ? "답글이 작성되었습니다" : "댓글이 작성되었습니다"
+        currentReplyTo ? "답글이 작성되었습니다" : "댓글이 작성되었습니다"
       );
 
       // 콜백 함수 호출
       onSuccess?.();
     } catch (error: unknown) {
+      // The useOptimistic hook in the parent component will automatically
+      // rollback the optimistic comment when this promise rejects
       const message =
         error && typeof error === "object" && "message" in error
           ? ((error as { message?: string }).message ??
             "댓글 작성 중 오류가 발생했습니다")
           : "댓글 작성 중 오류가 발생했습니다";
       toast.error(message);
+      
+      // Restore form state on error for user to retry
+      setBody(currentBody);
+      setImages(currentImages);
+      setImageUrls(currentImageUrls);
     } finally {
       setLoading(false);
     }
@@ -617,12 +666,12 @@ export function CommentForm({
             <div className="flex gap-2">
               <Button
                 onClick={submit}
-                disabled={loading || (!body.trim() && images.length === 0)}
+                disabled={loading || isPending || (!body.trim() && images.length === 0)}
                 size="sm"
                 className="flex items-center gap-1 text-[11px] sm:text-xs h-7 sm:h-8 px-2"
               >
                 <Send className="h-3 w-3" />
-                {loading ? "작성 중..." : replyTo ? "답글 작성" : "댓글 작성"}
+                {loading || isPending ? "작성 중..." : replyTo ? "답글 작성" : "댓글 작성"}
               </Button>
             </div>
           </div>

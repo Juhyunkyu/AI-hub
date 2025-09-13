@@ -341,8 +341,15 @@ export function Navbar() {
                   <Shield className="h-5 w-5" />
                 </Button>
               )}
-              <Link
-                href="/chat"
+              <button
+                onClick={() => {
+                  // 현재 채팅 페이지에 있으면 reset 파라미터와 함께 리로드
+                  if (pathname === '/chat') {
+                    router.push('/chat?reset=1');
+                  } else {
+                    router.push('/chat');
+                  }
+                }}
                 aria-label="채팅"
                 className="relative p-2 h-8 w-8 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors flex items-center justify-center"
               >
@@ -355,7 +362,7 @@ export function Navbar() {
                     {unreadMessages > 99 ? "99+" : unreadMessages}
                   </Badge>
                 )}
-              </Link>
+              </button>
 
               {/* 사용자 메뉴 드롭다운 */}
               <div className="relative" ref={userMenuRef}>

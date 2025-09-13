@@ -5,6 +5,15 @@ import { useAuthStore } from "@/stores/auth";
 import { ChatMessage, ChatRoomWithParticipants } from "@/types/chat";
 import { toast } from "sonner";
 
+// 채팅방 정렬 헬퍼 함수
+const sortRoomsByLastMessage = (rooms: ChatRoomWithParticipants[]) => {
+  return rooms.sort((a, b) => {
+    const aTime = a.last_message?.created_at || a.created_at;
+    const bTime = b.last_message?.created_at || b.created_at;
+    return new Date(bTime).getTime() - new Date(aTime).getTime();
+  });
+};
+
 export function useChatHook() {
   const { user } = useAuthStore();
   const [rooms, setRooms] = useState<ChatRoomWithParticipants[]>([]);
@@ -12,6 +21,7 @@ export function useChatHook() {
     useState<ChatRoomWithParticipants | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
+  const [messagesLoading, setMessagesLoading] = useState(false);
 
   // 채팅방 목록 로드
   const loadRooms = useCallback(async () => {
@@ -23,13 +33,7 @@ export function useChatHook() {
       if (response.ok) {
         const data = await response.json();
         // 최근 메시지 순으로 정렬
-        const sortedRooms = (data.rooms || []).sort(
-          (a: ChatRoomWithParticipants, b: ChatRoomWithParticipants) => {
-            const aTime = a.last_message?.created_at || a.created_at;
-            const bTime = b.last_message?.created_at || b.created_at;
-            return new Date(bTime).getTime() - new Date(aTime).getTime();
-          }
-        );
+        const sortedRooms = sortRoomsByLastMessage(data.rooms || []);
         setRooms(sortedRooms);
       }
     } catch {
@@ -46,9 +50,13 @@ export function useChatHook() {
       if (!user || !roomId) return;
 
       try {
+        setMessagesLoading(true);
+        setMessages([]); // 먼저 초기화
+
         const response = await fetch(
           `/api/chat/messages?room_id=${roomId}&page=1&limit=50`
         );
+
         if (response.ok) {
           const data = await response.json();
           // 메시지 로드 완료
@@ -57,6 +65,8 @@ export function useChatHook() {
       } catch {
         // 메시지 로드 실패
         toast.error("메시지를 불러오는데 실패했습니다");
+      } finally {
+        setMessagesLoading(false);
       }
     },
     [user]
@@ -72,6 +82,12 @@ export function useChatHook() {
     },
     [loadMessages]
   );
+
+  // 채팅방 선택 해제 (메인 페이지로 돌아가기)
+  const clearCurrentRoom = useCallback(() => {
+    setCurrentRoom(null);
+    setMessages([]);
+  }, []);
 
   // 메시지 전송
   const sendMessage = useCallback(
@@ -108,13 +124,7 @@ export function useChatHook() {
                 ? { ...room, last_message: messageWithTime }
                 : room
             );
-
-            // 최근 메시지 순으로 재정렬
-            return updatedRooms.sort((a, b) => {
-              const aTime = a.last_message?.created_at || a.created_at;
-              const bTime = b.last_message?.created_at || b.created_at;
-              return new Date(bTime).getTime() - new Date(aTime).getTime();
-            });
+            return sortRoomsByLastMessage(updatedRooms);
           });
 
           return messageWithTime;
@@ -139,9 +149,12 @@ export function useChatHook() {
     currentRoom,
     messages,
     loading,
+    messagesLoading,
     selectRoom,
+    clearCurrentRoom,
     sendMessage,
     loadRooms,
+    loadMessages,
   };
 }
 

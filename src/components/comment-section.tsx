@@ -1,25 +1,27 @@
 "use client";
 
-import { useState } from "react";
+/**
+ * CommentSection with React 19 useOptimistic Hook Integration
+ * 
+ * This component implements optimistic UI updates for comments using React 19's useOptimistic hook.
+ * When users submit comments or replies, they appear instantly in the UI while the server request 
+ * is processed in the background. If the server request fails, the optimistic update is automatically 
+ * rolled back.
+ * 
+ * Features:
+ * - Instant comment submission feedback
+ * - Automatic rollback on server errors
+ * - Support for nested replies with optimistic updates
+ * - Visual indicators for pending comments
+ * - Backward compatibility with existing real-time updates
+ */
+
+import { useState, useOptimistic, useCallback } from "react";
 import { CommentItem } from "./comment-item";
 import { CommentForm } from "./comment-form";
 import { Section } from "./section";
-
-interface Comment {
-  id: string;
-  body: string;
-  author_id: string;
-  created_at: string;
-  parent_id?: string | null;
-  replies?: Comment[];
-  images?: string[];
-}
-
-interface ProfileLite {
-  id: string;
-  username: string | null;
-  avatar_url: string | null;
-}
+import { Comment, ProfileLite, CommentAction, OptimisticCommentData } from "@/types/comments";
+import { useAuthStore } from "@/stores/auth";
 
 interface CommentSectionProps {
   comments: Comment[];
@@ -34,14 +36,49 @@ export function CommentSection({
   postId,
   postAuthorId,
 }: CommentSectionProps) {
+  const user = useAuthStore((s) => s.user);
   const [replyTo, setReplyTo] = useState<{
     commentId: string;
     authorUsername: string;
   } | null>(null);
 
+  // Optimistic reducer function
+  const optimisticReducer = (currentComments: Comment[], action: CommentAction): Comment[] => {
+    switch (action.type) {
+      case 'add':
+        return [...currentComments, action.comment];
+      case 'remove':
+        return currentComments.filter(c => c.id !== action.commentId);
+      case 'update':
+        return currentComments.map(c => 
+          c.id === action.commentId 
+            ? { ...c, body: action.body }
+            : c
+        );
+      default:
+        return currentComments;
+    }
+  };
+
+  // Initialize useOptimistic with comments from server
+  const [optimisticComments, addOptimisticComment] = useOptimistic(
+    comments,
+    optimisticReducer
+  );
+
+  // Create a combined author map that includes current user for optimistic comments
   const commentAuthorById = new Map<string, ProfileLite>(
     commentAuthors.map((u) => [u.id, u])
   );
+  
+  // Add current user to author map for optimistic comments
+  if (user && !commentAuthorById.has(user.id)) {
+    commentAuthorById.set(user.id, {
+      id: user.id,
+      username: user.user_metadata?.username || user.email || null,
+      avatar_url: user.user_metadata?.avatar_url || null,
+    });
+  }
 
   // 댓글을 계층 구조로 구성
   const buildCommentTree = (comments: Comment[]) => {
@@ -70,7 +107,7 @@ export function CommentSection({
     return rootComments;
   };
 
-  const commentTree = buildCommentTree(comments);
+  const commentTree = buildCommentTree(optimisticComments);
 
   const handleReply = (commentId: string, authorUsername: string) => {
     setReplyTo({ commentId, authorUsername });
@@ -88,6 +125,27 @@ export function CommentSection({
       window.location.reload();
     }, 100);
   };
+
+  // Optimistic comment submission handler
+  const handleOptimisticSubmit = useCallback((commentData: OptimisticCommentData, tempId: string) => {
+    if (!user) return;
+    
+    const optimisticComment: Comment = {
+      id: tempId,
+      body: commentData.body,
+      author_id: commentData.author_id,
+      post_id: commentData.post_id,
+      parent_id: commentData.parent_id,
+      created_at: new Date().toISOString(),
+      images: commentData.images || [],
+      isOptimistic: true,
+    };
+
+    // Add the optimistic comment immediately
+    addOptimisticComment({ type: 'add', comment: optimisticComment });
+    
+    return optimisticComment;
+  }, [user, addOptimisticComment]);
 
   // 재귀적으로 댓글과 답글을 렌더링하는 함수
   const renderCommentTree = (commentList: Comment[], level: number = 0) => {
@@ -116,6 +174,7 @@ export function CommentSection({
               postId={postId}
               isReply={isReply}
               images={c.images || []}
+              isOptimistic={c.isOptimistic}
               onReply={handleReply}
               onUpdate={handleCommentSuccess}
               onDelete={handleCommentSuccess}
@@ -147,6 +206,7 @@ export function CommentSection({
           replyTo={replyTo || undefined}
           onCancelReply={handleCancelReply}
           onSuccess={handleCommentSuccess}
+          onOptimisticSubmit={handleOptimisticSubmit}
         />
       </div>
     </Section>

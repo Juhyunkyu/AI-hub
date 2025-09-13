@@ -1,20 +1,6 @@
-interface Participant {
-  user_id: string;
-  user?: {
-    id: string;
-    username: string;
-    avatar_url?: string;
-  };
-}
+import { ChatRoomWithParticipants } from '@/types/chat';
 
-interface ChatRoom {
-  id: string;
-  name?: string;
-  type?: string;
-  participants?: Participant[];
-}
-
-export function getChatRoomDisplayName(room: ChatRoom, currentUserId?: string): string {
+export function getChatRoomDisplayName(room: ChatRoomWithParticipants, currentUserId?: string): string {
   // 이미 이름이 설정된 경우 (그룹 채팅방 등)
   if (room.name && room.name.trim()) {
     return room.name;
@@ -49,6 +35,3 @@ export function getChatRoomDisplayName(room: ChatRoom, currentUserId?: string): 
   return "채팅방";
 }
 
-export function getChatRoomParticipantCount(room: ChatRoom): number {
-  return room.participants?.length || 0;
-}
