@@ -72,7 +72,7 @@ export function FollowButton({ targetUserId }: { targetUserId: string }) {
       onClick={toggle}
       disabled={loading}
     >
-      {loading ? "..." : isFollowing ? "팔로잉" : "팔로우"}
+      {loading ? "..." : isFollowing ? "팔로잉중" : "팔로우"}
     </Button>
   );
 }

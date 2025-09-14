@@ -2,19 +2,39 @@
 "use memo";
 
 import { useState, useEffect, useRef, useCallback, useMemo, memo, forwardRef, useImperativeHandle } from "react";
+import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
 import { useChatHook } from "@/hooks/use-chat";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ArrowLeft, Send, MoreHorizontal, Edit } from "lucide-react";
+import { ArrowLeft, Send, MoreHorizontal, Edit, Search, Plus, X, Trash2 } from "lucide-react";
 import { useAuthStore } from "@/stores/auth";
 import { formatMessageTime, formatLastMessageTime } from "@/lib/date-utils";
 import { ChatRoomAvatar } from "./chat-room-avatar";
 import { ChatRoomParticipantsModal } from "./chat-room-participants-modal";
 import { getChatRoomDisplayName } from "@/lib/chat-utils";
 import { VirtualizedMessageList, type VirtualizedMessageListRef } from "./virtualized";
+import { deleteChatRooms } from "@/lib/chat-api";
+// Dynamic imports for performance optimization (lazy loading)
+const UserSearchModal = dynamic(() =>
+  import("./modals/user-search-modal").then(mod => ({ default: mod.UserSearchModal })), {
+  loading: () => <div className="p-4 text-center">로딩 중...</div>,
+  ssr: false
+});
+
+const ChatCreateModal = dynamic(() =>
+  import("./modals/chat-create-modal").then(mod => ({ default: mod.ChatCreateModal })), {
+  loading: () => <div className="p-4 text-center">로딩 중...</div>,
+  ssr: false
+});
+
+const DeleteRoomsModal = dynamic(() =>
+  import("./modals/delete-rooms-modal").then(mod => ({ default: mod.DeleteRoomsModal })), {
+  loading: () => <div className="p-4 text-center">로딩 중...</div>,
+  ssr: false
+});
 
 interface ChatLayoutProps {
   initialRoomId?: string;
@@ -46,7 +66,10 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(({ initialR
     showParticipantsModal: false,
     isEditMode: false,
     selectedRooms: new Set<string>(),
-    currentModalRoom: null as any
+    currentModalRoom: null as any,
+    showUserSearchModal: false,
+    showChatCreateModal: false,
+    showDeleteConfirmModal: false
   });
 
   // 메시지 컨테이너 높이 동적 계산
@@ -188,6 +211,69 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(({ initialR
     });
   }, [uiState.isEditMode, updateUIState]);
 
+  // 헤더 버튼 핸들러들
+  const handleUserSearch = useCallback(() => {
+    updateUIState({ showUserSearchModal: true });
+  }, [updateUIState]);
+
+  const handleChatCreate = useCallback(() => {
+    updateUIState({ showChatCreateModal: true });
+  }, [updateUIState]);
+
+  const handleDeleteRooms = useCallback(() => {
+    if (uiState.selectedRooms.size === 0) return;
+    updateUIState({ showDeleteConfirmModal: true });
+  }, [uiState.selectedRooms.size, updateUIState]);
+
+  const handleConfirmDelete = useCallback(async () => {
+    if (uiState.selectedRooms.size === 0) return;
+
+    try {
+      const roomIds = Array.from(uiState.selectedRooms);
+      const result = await deleteChatRooms(roomIds);
+
+      if (result.success) {
+        // 성공 시 상태 초기화 및 채팅방 목록 새로고침
+        updateUIState({
+          isEditMode: false,
+          selectedRooms: new Set(),
+          showDeleteConfirmModal: false
+        });
+
+        // 삭제된 채팅방이 현재 선택된 채팅방이면 선택 해제
+        if (currentRoom && uiState.selectedRooms.has(currentRoom.id)) {
+          clearCurrentRoom();
+          if (isMobile) {
+            updateUIState({ showRoomList: true });
+          }
+        }
+
+        // 채팅방 목록 새로고침
+        await loadRooms();
+
+        // 사용자에게 결과 알림 (선택사항)
+        console.log(`${result.deletedCount}개 채팅방이 삭제되었습니다.`);
+        if (result.error) {
+          console.warn(result.error);
+        }
+      } else {
+        // 실패 시 에러 처리
+        console.error('채팅방 삭제 실패:', result.error);
+        updateUIState({ showDeleteConfirmModal: false });
+      }
+    } catch (error) {
+      console.error('채팅방 삭제 중 오류:', error);
+      updateUIState({ showDeleteConfirmModal: false });
+    }
+  }, [uiState.selectedRooms, currentRoom, updateUIState, clearCurrentRoom, isMobile, loadRooms]);
+
+  const exitEditMode = useCallback(() => {
+    updateUIState({
+      isEditMode: false,
+      selectedRooms: new Set()
+    });
+  }, [updateUIState]);
+
   // 메시지 컨테이너 높이 동적 업데이트
   useEffect(() => {
     if (!messagesContainerRef.current) return;
@@ -260,14 +346,51 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(({ initialR
           >
             채팅방
           </button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleEditModeToggle}
-          >
-            <Edit className="h-4 w-4" />
-            편집
-          </Button>
+          <div className="flex items-center gap-1">
+            {uiState.isEditMode ? (
+              <>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  disabled={uiState.selectedRooms.size === 0}
+                  onClick={handleDeleteRooms}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  삭제 ({uiState.selectedRooms.size})
+                </Button>
+                <Button variant="ghost" size="sm" onClick={exitEditMode}>
+                  <X className="h-4 w-4" />
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleUserSearch}
+                  title="전체 사용자 검색"
+                >
+                  <Search className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleChatCreate}
+                  title="새 채팅방"
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleEditModeToggle}
+                  title="편집"
+                >
+                  <Edit className="h-4 w-4" />
+                </Button>
+              </>
+            )}
+          </div>
         </div>
 
         {/* 채팅방 목록 */}
@@ -452,6 +575,42 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(({ initialR
           // 채팅방 목록 새로고침
           loadRooms();
         }}
+      />
+
+      {/* 사용자 검색 모달 */}
+      <UserSearchModal
+        open={uiState.showUserSearchModal}
+        onClose={() => updateUIState({ showUserSearchModal: false })}
+        onChatCreated={(roomId) => {
+          console.log("Direct chat room created:", roomId);
+          // 채팅방 목록 새로고침 후 생성된 채팅방으로 이동
+          loadRooms().then(() => {
+            const targetRoom = rooms.find(room => room.id === roomId);
+            if (targetRoom) {
+              selectRoom(targetRoom);
+              if (isMobile) {
+                updateUIState({ showRoomList: false });
+              }
+            }
+          });
+        }}
+      />
+
+      {/* 채팅방 생성 모달 */}
+      <ChatCreateModal
+        open={uiState.showChatCreateModal}
+        onClose={() => updateUIState({ showChatCreateModal: false })}
+        onChatCreated={() => {
+          loadRooms(); // 채팅방 목록 새로고침
+        }}
+      />
+
+      {/* 채팅방 삭제 확인 모달 */}
+      <DeleteRoomsModal
+        open={uiState.showDeleteConfirmModal}
+        onClose={() => updateUIState({ showDeleteConfirmModal: false })}
+        onConfirm={handleConfirmDelete}
+        roomCount={uiState.selectedRooms.size}
       />
     </div>
   );
