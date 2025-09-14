@@ -14,6 +14,7 @@ import { formatMessageTime, formatLastMessageTime } from "@/lib/date-utils";
 import { ChatRoomAvatar } from "./chat-room-avatar";
 import { ChatRoomParticipantsModal } from "./chat-room-participants-modal";
 import { getChatRoomDisplayName } from "@/lib/chat-utils";
+import { VirtualizedMessageList, type VirtualizedMessageListRef } from "./virtualized";
 
 interface ChatLayoutProps {
   initialRoomId?: string;
@@ -48,12 +49,16 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(({ initialR
     currentModalRoom: null as any
   });
 
+  // 메시지 컨테이너 높이 동적 계산
+  const [messagesContainerHeight, setMessagesContainerHeight] = useState(400);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+
   // UI 상태 업데이트 헬퍼 함수
   const updateUIState = useCallback((updates: Partial<typeof uiState>) => {
     setUIState(prev => ({ ...prev, ...updates }));
   }, []);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const virtualizedListRef = useRef<VirtualizedMessageListRef>(null);
 
   // 반응형 화면 크기 감지 훅
   const [isMobile, setIsMobile] = useState(() => {
@@ -61,11 +66,11 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(({ initialR
     return window.innerWidth < 768;
   });
 
-  // 메시지 스크롤 최적화 - requestAnimationFrame으로 성능 향상
+  // 메시지 스크롤 최적화 - 가상화 전용
   const scrollToBottom = useCallback((behavior: "smooth" | "instant" = "smooth") => {
-    requestAnimationFrame(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior });
-    });
+    if (virtualizedListRef.current) {
+      virtualizedListRef.current.scrollToBottom(behavior);
+    }
   }, []);
 
   // 외부에서 호출할 수 있는 함수 노출
@@ -183,6 +188,34 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(({ initialR
     });
   }, [uiState.isEditMode, updateUIState]);
 
+  // 메시지 컨테이너 높이 동적 업데이트
+  useEffect(() => {
+    if (!messagesContainerRef.current) return;
+
+    const updateContainerHeight = () => {
+      if (messagesContainerRef.current) {
+        const height = messagesContainerRef.current.offsetHeight;
+        if (height > 0) {
+          setMessagesContainerHeight(height);
+        }
+      }
+    };
+
+    // 초기 높이 설정
+    updateContainerHeight();
+
+    // ResizeObserver로 크기 변경 감지
+    const resizeObserver = new ResizeObserver(() => {
+      updateContainerHeight();
+    });
+
+    resizeObserver.observe(messagesContainerRef.current);
+
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, [currentRoom, uiState.showRoomList]);
+
   const handleRoomSelect_Edit = useCallback((roomId: string) => {
     const newSelected = new Set(uiState.selectedRooms);
     if (newSelected.has(roomId)) {
@@ -284,7 +317,7 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(({ initialR
                     </div>
                     {room.last_message && (
                       <div className="flex items-center justify-between mt-1">
-                        <p className="text-sm text-muted-foreground truncate flex-1 mr-2">
+                        <p className="text-sm text-muted-foreground truncate max-w-[120px] md:max-w-[160px] mr-2">
                           {room.last_message.content}
                         </p>
                         <span className="text-xs text-muted-foreground flex-shrink-0">
@@ -347,22 +380,21 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(({ initialR
             </div>
 
             {/* 메시지 영역 */}
-            <div className="flex-1 overflow-y-auto p-4">
+            <div ref={messagesContainerRef} className="flex-1 overflow-hidden">
               {messagesLoading ? (
                 <div className="flex items-center justify-center h-full">
                   <div className="text-muted-foreground">메시지를 불러오는 중...</div>
                 </div>
               ) : (
-                <div className="space-y-2">
-                  {messages.map((message) => (
-                    <MessageItem
-                      key={message.id}
-                      message={message}
-                      isOwnMessage={message.sender_id === user?.id}
-                    />
-                  ))}
-                  <div ref={messagesEndRef} />
-                </div>
+                // 가상화 메시지 리스트 (항상 사용)
+                <VirtualizedMessageList
+                  ref={virtualizedListRef}
+                  messages={messages}
+                  currentUserId={user?.id}
+                  containerHeight={messagesContainerHeight}
+                  scrollToBottom={!messagesLoading && messages.length > 0}
+                  className="h-full"
+                />
               )}
             </div>
 
@@ -427,51 +459,5 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(({ initialR
 
 // displayName 설정 (forwardRef 사용 시 권장)
 ChatLayout.displayName = 'ChatLayout';
-
-// 메시지 아이템 최적화 컴포넌트 - React.memo로 성능 최적화
-const MessageItem = memo(({ message, isOwnMessage }: {
-  message: any;
-  isOwnMessage: boolean;
-}) => {
-  // 날짜 포맷팅 메모이제이션
-  const formattedTime = useMemo(() => formatMessageTime(message.created_at), [message.created_at]);
-
-  return (
-  <div className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'} gap-2`}>
-    {!isOwnMessage && (
-      <Avatar className="h-8 w-8 flex-shrink-0">
-        <AvatarImage src={message.sender?.avatar_url || ""} />
-        <AvatarFallback>
-          {message.sender?.username?.[0]?.toUpperCase() || message.sender_id?.slice(-1)?.toUpperCase() || "U"}
-        </AvatarFallback>
-      </Avatar>
-    )}
-
-    <div className={`flex flex-col ${isOwnMessage ? 'items-end' : 'items-start'} max-w-[70%]`}>
-      {!isOwnMessage && (
-        <div className="text-xs text-muted-foreground mb-1">
-          {message.sender?.username || `사용자${message.sender_id?.slice(-4) || ''}`}
-        </div>
-      )}
-
-      <div className={`flex items-end gap-2 ${isOwnMessage ? 'flex-row-reverse' : 'flex-row'}`}>
-        <div className={`px-3 py-2 rounded-lg max-w-full ${
-          isOwnMessage
-            ? 'bg-primary text-primary-foreground'
-            : 'bg-muted text-foreground'
-        }`}>
-          <div className="text-sm whitespace-pre-wrap break-words">
-            {message.content}
-          </div>
-        </div>
-
-        <div className="text-xs text-muted-foreground flex-shrink-0 pb-1">
-          {formattedTime}
-        </div>
-      </div>
-    </div>
-  </div>
-  );
-});
 
 

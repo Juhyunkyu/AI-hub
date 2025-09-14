@@ -7,16 +7,27 @@ import { useAuthStore } from "@/stores/auth";
 import { ChatLayout } from "@/components/chat/chat-layout";
 
 export default function ChatPage() {
-  const { user } = useAuthStore();
+  const { user, isLoading } = useAuthStore();
   const router = useRouter();
   const searchParams = useSearchParams();
   const roomId = searchParams.get("room");
 
   useEffect(() => {
-    if (!user) {
+    if (!isLoading && !user) {
       router.push("/login");
     }
-  }, [user, router]);
+  }, [user, isLoading, router]);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
+          <p className="text-muted-foreground">로딩 중...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!user) {
     return (
@@ -33,6 +44,8 @@ export default function ChatPage() {
 
   return <ChatLayout initialRoomId={roomId || undefined} />;
 }
+
+
 
 
 

@@ -35,7 +35,6 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Access denied" }, { status: 403 });
     }
 
-    console.log('Fetching messages for room:', room_id, 'offset:', offset, 'limit:', limit);
 
     // 메시지 조회
     const { data: messages, error } = await supabase
@@ -53,7 +52,6 @@ export async function GET(request: NextRequest) {
       .order("created_at", { ascending: false })
       .range(offset, offset + limit - 1);
 
-    console.log('Messages query result:', { messages: messages?.length, error });
 
     if (error) {
       console.error("Error fetching messages:", error);
@@ -174,6 +172,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
+
+
 
 
 

@@ -41,6 +41,41 @@ try {
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   images: imagesConfig,
+
+  // Security headers including CSP for OAuth
+  async headers() {
+    return [
+      {
+        source: '/(.*)',
+        headers: [
+          {
+            key: 'Content-Security-Policy',
+            value: `
+              default-src 'self';
+              script-src 'self' 'unsafe-eval' 'unsafe-inline';
+              style-src 'self' 'unsafe-inline';
+              img-src 'self' data: blob: https:;
+              font-src 'self' data:;
+              connect-src 'self'
+                https://vzrtznpmbanzjbfyjkcb.supabase.co
+                https://*.supabase.co
+                https://api.github.com
+                https://github.com
+                https://accounts.google.com
+                https://oauth2.googleapis.com
+                https://www.googleapis.com
+                https://kauth.kakao.com
+                https://kapi.kakao.com;
+              frame-src 'self'
+                https://accounts.google.com
+                https://kauth.kakao.com;
+            `.replace(/\s+/g, ' ').trim()
+          }
+        ]
+      }
+    ]
+  },
+
   compiler: {
     // Remove console.* in production bundles except errors
     removeConsole: process.env.NODE_ENV === "production" ? {
