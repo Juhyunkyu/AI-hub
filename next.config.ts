@@ -59,6 +59,8 @@ const nextConfig: NextConfig = {
               connect-src 'self'
                 https://vzrtznpmbanzjbfyjkcb.supabase.co
                 https://*.supabase.co
+                wss://vzrtznpmbanzjbfyjkcb.supabase.co
+                wss://*.supabase.co
                 https://api.github.com
                 https://github.com
                 https://accounts.google.com

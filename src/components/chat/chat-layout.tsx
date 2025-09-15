@@ -9,7 +9,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ArrowLeft, Send, MoreHorizontal, Edit, Search, Plus, X, Trash2 } from "lucide-react";
+import { ArrowLeft, Send, MoreHorizontal, Edit, Search, Plus, X, Trash2, Wifi, WifiOff, AlertCircle } from "lucide-react";
 import { useAuthStore } from "@/stores/auth";
 import { formatMessageTime, formatLastMessageTime } from "@/lib/date-utils";
 import { ChatRoomAvatar } from "./chat-room-avatar";
@@ -56,7 +56,11 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(({ initialR
     loadRooms,
     selectRoom,
     clearCurrentRoom,
-    sendMessage
+    sendMessage,
+    isRealtimeConnected,
+    realtimeConnectionState,
+    realtimeError,
+    reconnectRealtime
   } = useChatHook();
 
   // 통합된 UI 상태 관리
@@ -111,9 +115,19 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(({ initialR
 
   useEffect(() => {
     if (!messagesLoading && messages.length > 0) {
-      scrollToBottom("instant");
+      // 실시간 메시지인지 확인 (메시지가 추가된 경우)
+      const isNewMessage = messages.length > 0;
+
+      // 실시간 연결 상태에서는 부드러운 스크롤, 초기 로드 시에는 즉시 스크롤
+      if (isRealtimeConnected && isNewMessage) {
+        // 실시간 메시지: 부드러운 스크롤 (사용자가 하단에 있을 때만)
+        setTimeout(() => scrollToBottom("smooth"), 100);
+      } else {
+        // 초기 로드: 즉시 스크롤
+        scrollToBottom("instant");
+      }
     }
-  }, [messages, messagesLoading]);
+  }, [messages, messagesLoading, isRealtimeConnected, scrollToBottom]);
 
   // 반응형 화면 크기 변경 감지 최적화
   useEffect(() => {
@@ -164,14 +178,19 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(({ initialR
     e.preventDefault();
     if (!currentRoom || !uiState.newMessage.trim()) return;
 
-    await sendMessage(uiState.newMessage, currentRoom.id);
+    const messageContent = uiState.newMessage;
     updateUIState({ newMessage: "" });
+
+    // 메시지 전송
+    await sendMessage(messageContent, currentRoom.id);
+
+    // 실시간 연결 상태에 관계없이 메시지 전송 후 즉시 스크롤
     setTimeout(() => scrollToBottom("smooth"), 100);
 
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
-  }, [currentRoom, uiState.newMessage, sendMessage, updateUIState]);
+  }, [currentRoom, uiState.newMessage, sendMessage, updateUIState, scrollToBottom]);
 
   const handleTextareaChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     updateUIState({ newMessage: e.target.value });
@@ -324,6 +343,56 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(({ initialR
   const currentRoomDisplayName = useMemo(() => {
     return currentRoom ? getChatRoomDisplayName(currentRoom, user?.id) : '';
   }, [currentRoom, user?.id]);
+
+  // 실시간 연결 상태 표시 컴포넌트
+  const RealtimeStatus = useMemo(() => {
+    if (!currentRoom) return null;
+
+    const getStatusColor = () => {
+      switch (realtimeConnectionState) {
+        case 'connected': return 'text-green-500';
+        case 'connecting': return 'text-yellow-500';
+        case 'error': return 'text-red-500';
+        default: return 'text-gray-400';
+      }
+    };
+
+    const getStatusIcon = () => {
+      switch (realtimeConnectionState) {
+        case 'connected': return <Wifi className="h-3 w-3" />;
+        case 'connecting': return <div className="h-3 w-3 animate-spin border border-yellow-500 border-t-transparent rounded-full" />;
+        case 'error': return <WifiOff className="h-3 w-3" />;
+        default: return <WifiOff className="h-3 w-3" />;
+      }
+    };
+
+    const getStatusText = () => {
+      switch (realtimeConnectionState) {
+        case 'connected': return '실시간';
+        case 'connecting': return '연결 중...';
+        case 'error': return '연결 오류';
+        default: return '오프라인';
+      }
+    };
+
+    return (
+      <div className={`flex items-center space-x-1 text-xs ${getStatusColor()}`}>
+        {getStatusIcon()}
+        <span>{getStatusText()}</span>
+        {realtimeError && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-4 w-4 p-0 text-red-500 hover:text-red-600"
+            onClick={reconnectRealtime}
+            title={`재연결 시도 (에러: ${realtimeError})`}
+          >
+            <AlertCircle className="h-3 w-3" />
+          </Button>
+        )}
+      </div>
+    );
+  }, [currentRoom, realtimeConnectionState, realtimeError, reconnectRealtime]);
 
   if (loading) {
     return <div className="flex items-center justify-center h-96">로딩 중...</div>;
@@ -478,10 +547,13 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(({ initialR
                   type={currentRoom.type}
                   size="sm"
                 />
-                <div>
-                  <h3 className="font-semibold">
-                    {currentRoomDisplayName}
-                  </h3>
+                <div className="flex-1">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-semibold">
+                      {currentRoomDisplayName}
+                    </h3>
+                    {RealtimeStatus}
+                  </div>
                   {(currentRoom.participants?.length || 0) > 2 && (
                     <p className="text-xs text-muted-foreground">
                       {currentRoom.participants?.length}명
@@ -618,5 +690,6 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(({ initialR
 
 // displayName 설정 (forwardRef 사용 시 권장)
 ChatLayout.displayName = 'ChatLayout';
+
 
 

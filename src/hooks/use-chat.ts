@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useAuthStore } from "@/stores/auth";
 import { ChatMessage, ChatRoomWithParticipants } from "@/types/chat";
 import { toast } from "sonner";
+import { useRealtimeChat } from "./use-realtime-chat";
 
 // 채팅방 정렬 헬퍼 함수
 const sortRoomsByLastMessage = (rooms: ChatRoomWithParticipants[]) => {
@@ -22,6 +23,51 @@ export function useChatHook() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const [messagesLoading, setMessagesLoading] = useState(false);
+
+  // 실시간 메시지 핸들러들
+  const handleNewRealtimeMessage = useCallback((message: ChatMessage) => {
+    // 중복 방지: 이미 있는 메시지인지 확인
+    setMessages(prev => {
+      const exists = prev.some(m => m.id === message.id);
+      if (exists) return prev;
+
+      // 새 메시지를 리스트 끝에 추가 (시간순 정렬)
+      return [...prev, message];
+    });
+
+    // 채팅방 리스트의 최근 메시지도 업데이트
+    setRooms(prev => {
+      const updatedRooms = prev.map(room =>
+        room.id === message.room_id
+          ? { ...room, last_message: message }
+          : room
+      );
+      return sortRoomsByLastMessage(updatedRooms);
+    });
+  }, []);
+
+  const handleMessageUpdate = useCallback((message: ChatMessage) => {
+    setMessages(prev =>
+      prev.map(m => m.id === message.id ? message : m)
+    );
+  }, []);
+
+  const handleMessageDelete = useCallback((messageId: string) => {
+    setMessages(prev => prev.filter(m => m.id !== messageId));
+  }, []);
+
+  // 실시간 채팅 훅 사용
+  const {
+    isConnected,
+    connectionState,
+    error: realtimeError,
+    reconnect
+  } = useRealtimeChat({
+    roomId: currentRoom?.id || null,
+    onNewMessage: handleNewRealtimeMessage,
+    onMessageUpdate: handleMessageUpdate,
+    onMessageDelete: handleMessageDelete
+  });
 
   // 채팅방 목록 로드
   const loadRooms = useCallback(async () => {
@@ -89,7 +135,7 @@ export function useChatHook() {
     setMessages([]);
   }, []);
 
-  // 메시지 전송
+  // 메시지 전송 (실시간으로 자동 업데이트되므로 수동 업데이트 제거)
   const sendMessage = useCallback(
     async (content: string, roomId: string) => {
       if (!user || !content.trim()) return;
@@ -114,18 +160,19 @@ export function useChatHook() {
             created_at: message.created_at || new Date().toISOString(),
           };
 
-          // 현재 채팅방의 메시지 목록에 추가
-          setMessages((prev) => [...prev, messageWithTime]);
-
-          // 채팅방 리스트의 최근 메시지 업데이트 및 재정렬
-          setRooms((prev) => {
-            const updatedRooms = prev.map((room) =>
-              room.id === roomId
-                ? { ...room, last_message: messageWithTime }
-                : room
-            );
-            return sortRoomsByLastMessage(updatedRooms);
-          });
+          // 실시간 구독이 활성화되어 있으면 자동으로 메시지가 추가됨
+          // 실시간이 연결되지 않은 경우에만 수동 추가
+          if (!isConnected) {
+            setMessages((prev) => [...prev, messageWithTime]);
+            setRooms((prev) => {
+              const updatedRooms = prev.map((room) =>
+                room.id === roomId
+                  ? { ...room, last_message: messageWithTime }
+                  : room
+              );
+              return sortRoomsByLastMessage(updatedRooms);
+            });
+          }
 
           return messageWithTime;
         }
@@ -134,7 +181,7 @@ export function useChatHook() {
         toast.error("메시지 전송에 실패했습니다");
       }
     },
-    [user]
+    [user, isConnected]
   );
 
   // 초기 로드
@@ -155,8 +202,14 @@ export function useChatHook() {
     sendMessage,
     loadRooms,
     loadMessages,
+    // 실시간 상태 추가
+    isRealtimeConnected: isConnected,
+    realtimeConnectionState: connectionState,
+    realtimeError,
+    reconnectRealtime: reconnect,
   };
 }
+
 
 
 
