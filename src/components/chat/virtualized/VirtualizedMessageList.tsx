@@ -121,17 +121,23 @@ export const VirtualizedMessageList = forwardRef<
 
     try {
       const lastIndex = messages.length - 1;
+
+      // TanStack Virtual의 동적 크기 제한으로 인해 auto behavior 사용
       virtualizer.scrollToIndex(lastIndex, {
         align: 'end',
-        behavior: behavior === "smooth" ? "smooth" : "auto"
+        behavior: "auto" // smooth 대신 auto 사용하여 경고 제거
       });
     } catch (error) {
-      console.warn('Scroll to bottom failed:', error);
-      // Fallback: DOM 직접 조작
+      // 가상화 스크롤 실패 시 DOM 직접 조작으로 폴백
       if (parentRef.current) {
-        parentRef.current.scrollTo({
-          top: parentRef.current.scrollHeight,
-          behavior
+        // 렌더링 완료를 위한 짧은 지연 후 재시도
+        requestAnimationFrame(() => {
+          if (parentRef.current) {
+            parentRef.current.scrollTo({
+              top: parentRef.current.scrollHeight,
+              behavior: behavior === "smooth" ? "smooth" : "auto"
+            });
+          }
         });
       }
     }
@@ -234,10 +240,12 @@ export const VirtualizedMessageList = forwardRef<
       (wasAtBottomRef.current || scrollToBottom) &&
       !isUserScrolling
     ) {
-      // 약간의 지연을 두고 스크롤 (렌더링 완료 대기)
-      setTimeout(() => {
-        scrollToBottomImpl("smooth");
-      }, 100);
+      // 가상화 리스트 렌더링 완료를 기다린 후 스크롤
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          scrollToBottomImpl("instant"); // smooth 대신 instant 사용
+        });
+      });
     }
 
     lastMessageCountRef.current = currentMessageCount;

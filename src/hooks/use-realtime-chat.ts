@@ -218,6 +218,13 @@ export function useTypingIndicator({ roomId, onTypingUpdate }: TypingIndicatorPr
   const [typingChannel, setTypingChannel] = useState<RealtimeChannel | null>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout>();
 
+  // 타이핑 상태 변경 시 콜백 호출 (별도 useEffect로 분리)
+  useEffect(() => {
+    if (onTypingUpdate) {
+      onTypingUpdate(Array.from(typingUsers));
+    }
+  }, [typingUsers, onTypingUpdate]);
+
   // 타이핑 시작
   const startTyping = useCallback(async () => {
     if (!typingChannel || !user || !roomId) return;
@@ -267,6 +274,7 @@ export function useTypingIndicator({ roomId, onTypingUpdate }: TypingIndicatorPr
   useEffect(() => {
     if (!roomId || !user) {
       setTypingChannel(null);
+      setTypingUsers(new Set()); // 채널이 없으면 타이핑 사용자 초기화
       return;
     }
 
@@ -276,7 +284,6 @@ export function useTypingIndicator({ roomId, onTypingUpdate }: TypingIndicatorPr
         const { user_id } = payload.payload;
         if (user_id !== user.id) {
           setTypingUsers(prev => new Set([...prev, user_id]));
-          onTypingUpdate?.(Array.from(typingUsers));
         }
       })
       .on('broadcast', { event: 'typing_stop' }, (payload) => {
@@ -284,7 +291,6 @@ export function useTypingIndicator({ roomId, onTypingUpdate }: TypingIndicatorPr
         setTypingUsers(prev => {
           const next = new Set(prev);
           next.delete(user_id);
-          onTypingUpdate?.(Array.from(next));
           return next;
         });
       })
@@ -296,10 +302,10 @@ export function useTypingIndicator({ roomId, onTypingUpdate }: TypingIndicatorPr
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current);
       }
-      stopTyping();
+      // 정리 시에는 브로드캐스트를 보내지 않음 (이미 연결이 끊어졌을 수 있음)
       supabase.removeChannel(channel);
     };
-  }, [roomId, user, onTypingUpdate, stopTyping]);
+  }, [roomId, user]); // onTypingUpdate, stopTyping 제거
 
   return {
     typingUsers: Array.from(typingUsers),

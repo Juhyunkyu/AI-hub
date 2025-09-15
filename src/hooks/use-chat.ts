@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useAuthStore } from "@/stores/auth";
 import { ChatMessage, ChatRoomWithParticipants } from "@/types/chat";
 import { toast } from "sonner";
-import { useRealtimeChat } from "./use-realtime-chat";
+import { useRealtimeChat, useTypingIndicator } from "./use-realtime-chat";
 
 // 채팅방 정렬 헬퍼 함수
 const sortRoomsByLastMessage = (rooms: ChatRoomWithParticipants[]) => {
@@ -31,26 +31,84 @@ export function useChatHook() {
       const exists = prev.some(m => m.id === message.id);
       if (exists) return prev;
 
+      // 실시간 메시지에 sender 정보가 없는 경우 현재 방의 참가자 정보에서 찾아서 보강
+      let enrichedMessage = message;
+      if (!message.sender && currentRoom) {
+        const senderParticipant = currentRoom.participants.find(
+          p => p.user_id === message.sender_id || p.user?.id === message.sender_id
+        );
+        if (senderParticipant?.user) {
+          enrichedMessage = {
+            ...message,
+            sender: {
+              id: senderParticipant.user.id,
+              username: senderParticipant.user.username,
+              avatar_url: senderParticipant.user.avatar_url
+            }
+          };
+        }
+      }
+
       // 새 메시지를 리스트 끝에 추가 (시간순 정렬)
-      return [...prev, message];
+      return [...prev, enrichedMessage];
     });
 
-    // 채팅방 리스트의 최근 메시지도 업데이트
+    // 채팅방 리스트의 최근 메시지도 업데이트 (sender 정보 포함)
     setRooms(prev => {
-      const updatedRooms = prev.map(room =>
-        room.id === message.room_id
-          ? { ...room, last_message: message }
-          : room
-      );
+      const updatedRooms = prev.map(room => {
+        if (room.id === message.room_id) {
+          // 최근 메시지에도 sender 정보 보강
+          let enrichedLastMessage = message;
+          if (!message.sender) {
+            const senderParticipant = room.participants.find(
+              p => p.user_id === message.sender_id || p.user?.id === message.sender_id
+            );
+            if (senderParticipant?.user) {
+              enrichedLastMessage = {
+                ...message,
+                sender: {
+                  id: senderParticipant.user.id,
+                  username: senderParticipant.user.username,
+                  avatar_url: senderParticipant.user.avatar_url
+                }
+              };
+            }
+          }
+          return { ...room, last_message: enrichedLastMessage };
+        }
+        return room;
+      });
       return sortRoomsByLastMessage(updatedRooms);
     });
-  }, []);
+  }, [currentRoom]);
 
   const handleMessageUpdate = useCallback((message: ChatMessage) => {
     setMessages(prev =>
-      prev.map(m => m.id === message.id ? message : m)
+      prev.map(m => {
+        if (m.id === message.id) {
+          // 업데이트된 메시지에 sender 정보가 없는 경우 현재 방의 참가자 정보에서 찾아서 보강
+          let enrichedMessage = message;
+          if (!message.sender && currentRoom) {
+            const senderParticipant = currentRoom.participants.find(
+              p => p.user_id === message.sender_id || p.user?.id === message.sender_id
+            );
+            if (senderParticipant?.user) {
+              enrichedMessage = {
+                ...message,
+                sender: {
+                  id: senderParticipant.user.id,
+                  username: senderParticipant.user.username,
+                  avatar_url: senderParticipant.user.avatar_url
+                }
+              };
+            }
+          }
+          return enrichedMessage;
+        }
+        return m;
+      })
     );
-  }, []);
+  }, [currentRoom]);
 
   const handleMessageDelete = useCallback((messageId: string) => {
     setMessages(prev => prev.filter(m => m.id !== messageId));
@@ -67,6 +125,16 @@ export function useChatHook() {
     onNewMessage: handleNewRealtimeMessage,
     onMessageUpdate: handleMessageUpdate,
     onMessageDelete: handleMessageDelete
+  });
+
+  // 타이핑 인디케이터
+  const {
+    typingUsers,
+    updateTyping,
+    startTyping,
+    stopTyping
+  } = useTypingIndicator({
+    roomId: currentRoom?.id || null
   });
 
   // 채팅방 목록 로드
@@ -207,6 +275,11 @@ export function useChatHook() {
     realtimeConnectionState: connectionState,
     realtimeError,
     reconnectRealtime: reconnect,
+    // 타이핑 기능 추가
+    typingUsers,
+    updateTyping,
+    startTyping,
+    stopTyping
   };
 }
 

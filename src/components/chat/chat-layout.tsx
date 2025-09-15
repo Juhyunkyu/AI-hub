@@ -16,6 +16,7 @@ import { ChatRoomAvatar } from "./chat-room-avatar";
 import { ChatRoomParticipantsModal } from "./chat-room-participants-modal";
 import { getChatRoomDisplayName } from "@/lib/chat-utils";
 import { VirtualizedMessageList, type VirtualizedMessageListRef } from "./virtualized";
+import { TypingIndicator } from "./TypingIndicator";
 import { deleteChatRooms } from "@/lib/chat-api";
 // Dynamic imports for performance optimization (lazy loading)
 const UserSearchModal = dynamic(() =>
@@ -60,7 +61,11 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(({ initialR
     isRealtimeConnected,
     realtimeConnectionState,
     realtimeError,
-    reconnectRealtime
+    reconnectRealtime,
+    typingUsers,
+    updateTyping,
+    startTyping,
+    stopTyping
   } = useChatHook();
 
   // 통합된 UI 상태 관리
@@ -193,11 +198,21 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(({ initialR
   }, [currentRoom, uiState.newMessage, sendMessage, updateUIState, scrollToBottom]);
 
   const handleTextareaChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    updateUIState({ newMessage: e.target.value });
+    const value = e.target.value;
+    updateUIState({ newMessage: value });
+
+    // 텍스트 에리어 높이 자동 조절
     const textarea = e.target;
     textarea.style.height = 'auto';
     textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
-  }, [updateUIState]);
+
+    // 타이핑 상태 업데이트
+    if (value.trim()) {
+      updateTyping(); // 타이핑 시작 + 2초 후 자동 중지
+    } else {
+      stopTyping(); // 입력이 비어있으면 즉시 중지
+    }
+  }, [updateUIState, updateTyping, stopTyping]);
 
   const handleRoomSelect = useCallback((room: any) => {
     selectRoom(room);
@@ -593,6 +608,12 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(({ initialR
               )}
             </div>
 
+            {/* 타이핑 인디케이터 */}
+            <TypingIndicator
+              typingUsers={typingUsers}
+              participants={currentRoom?.participants}
+            />
+
             {/* 메시지 입력 */}
             <div className="p-4 border-t">
               <form onSubmit={handleSendMessage} className="flex gap-2 items-end">
@@ -606,6 +627,7 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(({ initialR
                       handleSendMessage(e as any);
                     }
                   }}
+                  onBlur={stopTyping} // 포커스 아웃 시 타이핑 중지
                   placeholder="메시지를 입력하세요... (Shift+Enter: 줄바꿈, Enter: 전송)"
                   className="flex-1 min-h-[40px] max-h-[120px] resize-none overflow-y-auto"
                   rows={1}
