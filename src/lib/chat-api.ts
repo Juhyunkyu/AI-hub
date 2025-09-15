@@ -69,22 +69,31 @@ export async function deleteChatRooms(roomIds: string[]): Promise<DeleteChatRoom
     }
 
     // 트랜잭션으로 삭제 작업 수행
-    // 1. 메시지 읽음 상태 삭제
-    const { error: readsError } = await supabase
-      .from('chat_message_reads')
-      .delete()
-      .in('message_id',
-        supabase
-          .from('chat_messages')
-          .select('id')
-          .in('room_id', authorizedRoomIds)
-      )
+    // 1. 먼저 해당 채팅방의 메시지 ID들을 가져옴
+    const { data: messagesData, error: fetchMessagesError } = await supabase
+      .from('chat_messages')
+      .select('id')
+      .in('room_id', authorizedRoomIds)
 
-    if (readsError) {
-      console.error('Error deleting message reads:', readsError)
+    if (fetchMessagesError) {
+      console.error('Error fetching messages:', fetchMessagesError)
     }
 
-    // 2. 메시지 삭제
+    const messageIds = messagesData?.map(msg => msg.id) || []
+
+    // 2. 메시지 읽음 상태 삭제
+    if (messageIds.length > 0) {
+      const { error: readsError } = await supabase
+        .from('chat_message_reads')
+        .delete()
+        .in('message_id', messageIds)
+
+      if (readsError) {
+        console.error('Error deleting message reads:', readsError)
+      }
+    }
+
+    // 3. 메시지 삭제
     const { error: messagesError } = await supabase
       .from('chat_messages')
       .delete()
@@ -94,7 +103,7 @@ export async function deleteChatRooms(roomIds: string[]): Promise<DeleteChatRoom
       console.error('Error deleting messages:', messagesError)
     }
 
-    // 3. 타이핑 상태 삭제
+    // 4. 타이핑 상태 삭제
     const { error: typingError } = await supabase
       .from('chat_typing_status')
       .delete()
@@ -104,7 +113,7 @@ export async function deleteChatRooms(roomIds: string[]): Promise<DeleteChatRoom
       console.error('Error deleting typing status:', typingError)
     }
 
-    // 4. 채팅방 참여자 삭제
+    // 5. 채팅방 참여자 삭제
     const { error: participantsError } = await supabase
       .from('chat_room_participants')
       .delete()
@@ -115,7 +124,7 @@ export async function deleteChatRooms(roomIds: string[]): Promise<DeleteChatRoom
       return { success: false, deletedCount: 0, error: "참여자 정보 삭제 중 오류가 발생했습니다." }
     }
 
-    // 5. 채팅방 삭제
+    // 6. 채팅방 삭제
     const { error: roomsDeleteError } = await supabase
       .from('chat_rooms')
       .delete()
