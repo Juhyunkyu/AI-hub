@@ -1,18 +1,28 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useAuthStore } from "@/stores/auth";
 import { ChatMessage, ChatRoomWithParticipants } from "@/types/chat";
 import { toast } from "sonner";
 import { useRealtimeChat, useTypingIndicator } from "./use-realtime-chat";
 
-// 채팅방 정렬 헬퍼 함수
+// 채팅방 정렬 헬퍼 함수 (React 19에서는 함수 컴포넌트 외부로 이동하여 불필요한 재생성 방지)
 const sortRoomsByLastMessage = (rooms: ChatRoomWithParticipants[]) => {
-  return rooms.sort((a, b) => {
+  return [...rooms].sort((a, b) => {
     const aTime = a.last_message?.created_at || a.created_at;
     const bTime = b.last_message?.created_at || b.created_at;
     return new Date(bTime).getTime() - new Date(aTime).getTime();
   });
+};
+
+// 메시지 찾기 헬퍼 함수
+const findTempMessage = (messages: ChatMessage[], targetMessage: ChatMessage) => {
+  return messages.findIndex(m =>
+    m.id.startsWith('temp-') &&
+    m.content === targetMessage.content &&
+    m.sender_id === targetMessage.sender_id &&
+    Math.abs(new Date(m.created_at).getTime() - new Date(targetMessage.created_at).getTime()) < 10000
+  );
 };
 
 export function useChatHook() {
@@ -24,56 +34,47 @@ export function useChatHook() {
   const [loading, setLoading] = useState(false);
   const [messagesLoading, setMessagesLoading] = useState(false);
 
-  // 실시간 메시지 핸들러들
+  // 실시간 메시지 핸들러들 (React 19 최적화)
   const handleNewRealtimeMessage = useCallback((message: ChatMessage) => {
-    console.log(`🔄 Processing realtime message: ${message.id}`, message);
-
     setMessages(prev => {
-      // 임시 메시지 찾기 (optimistic update의 임시 메시지)
-      const tempMessageIndex = prev.findIndex(m =>
-        m.id.startsWith('temp-') &&
-        m.content === message.content &&
-        m.sender_id === message.sender_id &&
-        Math.abs(new Date(m.created_at).getTime() - new Date(message.created_at).getTime()) < 10000 // 10초 내
-      );
+      // 임시 메시지 찾기 (헬퍼 함수 사용)
+      const tempMessageIndex = findTempMessage(prev, message);
 
-      // 임시 메시지가 있으면 교체, 없으면 추가
+      // 임시 메시지가 있으면 교체
       if (tempMessageIndex !== -1) {
-        console.log(`🔄 Replacing optimistic message with real message: ${message.id}`);
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`🔄 Replacing optimistic message with real message: ${message.id}`);
+        }
         const newMessages = [...prev];
         newMessages[tempMessageIndex] = {
           ...message,
-          sender: message.sender || prev[tempMessageIndex].sender // sender 정보 보존
+          sender: message.sender || prev[tempMessageIndex].sender
         };
         return newMessages;
       }
 
       // 이미 실제 메시지가 있는지 확인
-      const exists = prev.some(m => m.id === message.id);
-      if (exists) {
-        console.log(`🔄 Message already exists: ${message.id}`);
+      if (prev.some(m => m.id === message.id)) {
         return prev;
       }
 
-      // 실시간 메시지에 sender 정보가 없는 경우 현재 방의 참가자 정보에서 찾아서 보강
-      let enrichedMessage = message;
-      if (!message.sender && currentRoom) {
-        const senderParticipant = currentRoom.participants.find(
-          p => p.user_id === message.sender_id || p.user?.id === message.sender_id
-        );
-        if (senderParticipant?.user) {
-          enrichedMessage = {
-            ...message,
-            sender: {
-              id: senderParticipant.user.id,
-              username: senderParticipant.user.username || "Unknown",
-              avatar_url: senderParticipant.user.avatar_url
-            }
-          };
-        }
-      }
+      // sender 정보 보강 (currentRoom이 있을 때만)
+      const enrichedMessage = currentRoom && !message.sender
+        ? (() => {
+            const senderParticipant = currentRoom.participants.find(
+              p => p.user_id === message.sender_id || p.user?.id === message.sender_id
+            );
+            return senderParticipant?.user ? {
+              ...message,
+              sender: {
+                id: senderParticipant.user.id,
+                username: senderParticipant.user.username || "Unknown",
+                avatar_url: senderParticipant.user.avatar_url
+              }
+            } : message;
+          })()
+        : message;
 
-      console.log(`✅ Adding new realtime message: ${message.id}`);
       return [...prev, enrichedMessage];
     });
 
@@ -286,7 +287,9 @@ export function useChatHook() {
             created_at: message.created_at || new Date().toISOString(),
           };
 
-          console.log(`✅ Message sent successfully: ${serverMessage.id}`, serverMessage);
+          if (process.env.NODE_ENV === 'development') {
+            console.log(`✅ Message sent successfully: ${serverMessage.id}`);
+          }
 
           // Optimistic 메시지를 실제 메시지로 교체
           setMessages((prev) =>
@@ -307,13 +310,11 @@ export function useChatHook() {
           return serverMessage;
         } else {
           // 서버 요청 실패시 optimistic 메시지 제거
-          console.error("❌ Failed to send message - removing optimistic message");
           setMessages((prev) => prev.filter((msg) => msg.id !== optimisticMessage.id));
           toast.error("메시지 전송에 실패했습니다");
         }
       } catch (error) {
         // 네트워크 오류시 optimistic 메시지 제거
-        console.error("❌ Network error sending message:", error);
         setMessages((prev) => prev.filter((msg) => msg.id !== optimisticMessage.id));
         toast.error("메시지 전송에 실패했습니다");
       }

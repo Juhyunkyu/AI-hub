@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import { useAuthStore } from "@/stores/auth";
 
 interface TypingIndicatorProps {
@@ -15,7 +16,8 @@ interface TypingIndicatorProps {
   }[];
 }
 
-export function TypingIndicator({ typingUsers, participants = [] }: TypingIndicatorProps) {
+// React 19 최적화: memo로 래핑하여 불필요한 리렌더링 방지
+export const TypingIndicator = memo(function TypingIndicator({ typingUsers, participants = [] }: TypingIndicatorProps) {
   const { user } = useAuthStore();
 
   // 현재 사용자 제외한 타이핑 중인 사용자들
@@ -23,18 +25,6 @@ export function TypingIndicator({ typingUsers, participants = [] }: TypingIndica
 
   if (otherTypingUsers.length === 0) return null;
 
-  // 디버깅: 데이터 구조 확인
-  if (process.env.NODE_ENV === 'development') {
-    console.log('TypingIndicator Debug:', {
-      typingUsers,
-      otherTypingUsers,
-      participants: participants.map(p => ({
-        id: p.id,
-        user_id: p.user_id,
-        username: p.user?.username
-      }))
-    });
-  }
 
   // 타이핑 중인 사용자 이름들 가져오기
   const typingUserNames = otherTypingUsers
@@ -69,4 +59,4 @@ export function TypingIndicator({ typingUsers, participants = [] }: TypingIndica
       </div>
     </div>
   );
-}
+});

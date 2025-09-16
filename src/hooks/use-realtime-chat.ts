@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { RealtimeChannel, RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 import { ChatMessage } from "@/types/chat";
 import { useAuthStore } from "@/stores/auth";
@@ -43,23 +43,30 @@ export function useRealtimeChat({
   // 메시지 중복 방지를 위한 처리된 메시지 ID 캐시
   const processedMessagesRef = useRef<Set<string>>(new Set());
 
-  // 연결 정리 함수
+  // 연결 정리 함수 (메모리 누수 방지 강화)
   const cleanup = useCallback(() => {
+    // 채널 정리
     if (channelRef.current) {
       supabase.removeChannel(channelRef.current);
       channelRef.current = null;
     }
 
+    // 타이머 정리
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = undefined;
     }
 
+    // 상태 초기화
     setIsConnected(false);
     setConnectionState('disconnected');
     setError(null);
 
     // 메시지 캐시 정리 (메모리 관리)
     processedMessagesRef.current.clear();
+
+    // 재시도 카운터 초기화
+    retryCountRef.current = 0;
   }, []);
 
   // 메시지 변경 핸들러
@@ -76,7 +83,9 @@ export function useRealtimeChat({
 
           // 중복 방지 체크 - 이미 처리된 메시지는 무시
           if (processedMessagesRef.current.has(messageId)) {
-            console.log(`🔄 Duplicate message filtered: ${messageId}`);
+            if (process.env.NODE_ENV === 'development') {
+              console.log(`🔄 Duplicate message filtered: ${messageId}`);
+            }
             return;
           }
 
@@ -89,7 +98,9 @@ export function useRealtimeChat({
             processedMessagesRef.current.delete(firstMessage);
           }
 
-          console.log(`📨 New realtime message received: ${messageId}`, newRecord);
+          if (process.env.NODE_ENV === 'development') {
+            console.log(`📨 New realtime message received: ${messageId}`);
+          }
           onNewMessage(newRecord);
         }
         break;
@@ -120,23 +131,23 @@ export function useRealtimeChat({
       setError(null);
 
       // Realtime 인증 설정 (최신 Supabase 버전에서 필요)
-      console.log(`🔐 Setting up realtime auth for user: ${user.id}`);
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.access_token) {
         await supabase.realtime.setAuth(session.access_token);
-        console.log(`✅ Realtime auth set with token`);
-      } else {
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`✅ Realtime auth set for user: ${user.id}`);
+        }
+      } else if (process.env.NODE_ENV === 'development') {
         console.warn(`⚠️ No access token available for realtime auth`);
       }
 
       // 기존 채널 정리
       if (channelRef.current) {
-        console.log(`🧹 Cleaning up previous channel for room: ${roomId}`);
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`🧹 Cleaning up previous channel for room: ${roomId}`);
+        }
         supabase.removeChannel(channelRef.current);
       }
-
-      // 새 채널 생성 및 구독 (단순한 방식으로)
-      console.log(`🔧 Setting up postgres_changes subscription for room: ${roomId}`);
       const channel = supabase
         .channel(`room:${roomId}:messages`)
         .on(
@@ -148,60 +159,41 @@ export function useRealtimeChat({
             filter: `room_id=eq.${roomId}`
           },
           (payload) => {
-            console.log(`🔥 Raw postgres_changes event received for room ${roomId}:`, payload);
+            if (process.env.NODE_ENV === 'development') {
+              console.log(`🔥 postgres_changes event received for room ${roomId}`);
+            }
             handleMessageChange(payload);
           }
         )
         .subscribe((status, err) => {
-          console.log(`🔗 Realtime connection status change: ${status}`, {
-            roomId,
-            channelName: `room:${roomId}:messages`,
-            timestamp: new Date().toISOString(),
-            err
-          });
-
           if (status === 'SUBSCRIBED') {
             setIsConnected(true);
             setConnectionState('connected');
             setError(null);
             retryCountRef.current = 0;
-            console.log(`✅ Realtime postgres_changes SUBSCRIBED for room: ${roomId}`, {
-              channelName: `room:${roomId}:messages`,
-              table: 'chat_messages',
-              filter: `room_id=eq.${roomId}`,
-              isConnected: true,
-              timestamp: new Date().toISOString()
-            });
-
-            // 구독 성공 후 테스트 메시지 확인
-            console.log(`🔍 Now listening for postgres_changes on chat_messages table with filter: room_id=eq.${roomId}`);
-
+            if (process.env.NODE_ENV === 'development') {
+              console.log(`✅ Realtime SUBSCRIBED for room: ${roomId}`);
+            }
           } else if (status === 'CHANNEL_ERROR') {
             setIsConnected(false);
             setConnectionState('error');
             setError(err?.message || '채널 연결 오류');
-            console.error('❌ Realtime channel error:', {
-              roomId,
-              channelName: `room:${roomId}:messages`,
-              err,
-              possibleCauses: [
-                'RLS policies missing',
-                'Invalid room_id',
-                'Authentication issues',
-                'Table not in realtime publication'
-              ]
-            });
+            if (process.env.NODE_ENV === 'development') {
+              console.error('❌ Realtime channel error:', { roomId, err });
+            }
           } else if (status === 'TIMED_OUT') {
             setIsConnected(false);
             setConnectionState('error');
             setError('연결 시간 초과');
-            console.error('⏰ Realtime connection timed out:', { roomId });
+            if (process.env.NODE_ENV === 'development') {
+              console.error('⏰ Realtime connection timed out:', { roomId });
+            }
           } else if (status === 'CLOSED') {
             setIsConnected(false);
             setConnectionState('disconnected');
-            console.warn('🔌 Realtime connection closed:', { roomId });
-          } else {
-            console.log(`📊 Realtime status: ${status}`, { roomId, timestamp: new Date().toISOString() });
+            if (process.env.NODE_ENV === 'development') {
+              console.warn('🔌 Realtime connection closed:', { roomId });
+            }
           }
         });
 
@@ -221,7 +213,9 @@ export function useRealtimeChat({
     const retryDelay = Math.min(1000 * Math.pow(2, retryCountRef.current), 30000);
     retryCountRef.current += 1;
 
-    console.log(`🔄 Reconnecting in ${retryDelay}ms (attempt ${retryCountRef.current})`);
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`🔄 Reconnecting in ${retryDelay}ms (attempt ${retryCountRef.current})`);
+    }
 
     reconnectTimeoutRef.current = setTimeout(() => {
       subscribeToRoom(roomId);
@@ -263,21 +257,14 @@ export function useRealtimeChat({
 // 타이핑 상태 관리를 위한 별도 훅
 interface TypingIndicatorProps {
   roomId: string | null;
-  onTypingUpdate?: (typingUsers: string[]) => void;
 }
 
-export function useTypingIndicator({ roomId, onTypingUpdate }: TypingIndicatorProps) {
+export function useTypingIndicator({ roomId }: TypingIndicatorProps) {
   const { user } = useAuthStore();
   const [typingUsers, setTypingUsers] = useState<Set<string>>(new Set());
   const [typingChannel, setTypingChannel] = useState<RealtimeChannel | null>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout>();
 
-  // 타이핑 상태 변경 시 콜백 호출 (별도 useEffect로 분리)
-  useEffect(() => {
-    if (onTypingUpdate) {
-      onTypingUpdate(Array.from(typingUsers));
-    }
-  }, [typingUsers, onTypingUpdate]);
 
   // 타이핑 시작
   const startTyping = useCallback(async () => {
@@ -336,37 +323,43 @@ export function useTypingIndicator({ roomId, onTypingUpdate }: TypingIndicatorPr
       .channel(`room:${roomId}:typing`)
       .on('broadcast', { event: 'typing_start' }, (payload) => {
         const { user_id } = payload.payload;
-        console.log(`⌨️ User started typing: ${user_id}`, { roomId, currentUser: user.id });
         if (user_id !== user.id) {
           setTypingUsers(prev => new Set([...prev, user_id]));
         }
       })
       .on('broadcast', { event: 'typing_stop' }, (payload) => {
         const { user_id } = payload.payload;
-        console.log(`⌨️ User stopped typing: ${user_id}`, { roomId });
         setTypingUsers(prev => {
           const next = new Set(prev);
           next.delete(user_id);
           return next;
         });
       })
-      .subscribe((status) => {
-        console.log(`⌨️ Typing channel status: ${status}`, { roomId });
-      });
+      .subscribe();
 
     setTypingChannel(channel);
 
     return () => {
+      // 타이머 정리
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = undefined;
       }
-      // 정리 시에는 브로드캐스트를 보내지 않음 (이미 연결이 끊어졌을 수 있음)
+
+      // 채널 정리 (정리 시에는 브로드캐스트를 보내지 않음)
       supabase.removeChannel(channel);
+
+      // 상태 초기화
+      setTypingUsers(new Set());
+      setTypingChannel(null);
     };
-  }, [roomId, user]); // onTypingUpdate, stopTyping 제거
+  }, [roomId, user]);
+
+  // React 19 최적화: useMemo로 타이핑 사용자 배열 메모이제이션
+  const typingUsersArray = useMemo(() => Array.from(typingUsers), [typingUsers]);
 
   return {
-    typingUsers: Array.from(typingUsers),
+    typingUsers: typingUsersArray,
     updateTyping,
     startTyping,
     stopTyping
