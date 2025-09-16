@@ -71,19 +71,25 @@ export function useRealtimeChat({
     switch (eventType) {
       case 'INSERT':
         if (newRecord && onNewMessage) {
-          // 중복 방지 체크
-          if (processedMessagesRef.current.has(newRecord.id)) {
+          // 임시 메시지(optimistic update)는 실시간으로 받은 실제 메시지로 교체되어야 함
+          const messageId = newRecord.id;
+
+          // 중복 방지 체크 - 이미 처리된 메시지는 무시
+          if (processedMessagesRef.current.has(messageId)) {
+            console.log(`🔄 Duplicate message filtered: ${messageId}`);
             return;
           }
 
-          processedMessagesRef.current.add(newRecord.id);
+          processedMessagesRef.current.add(messageId);
 
           // 메모리 관리: 1000개 제한
           if (processedMessagesRef.current.size > 1000) {
-            const firstId = Array.from(processedMessagesRef.current)[0];
-            processedMessagesRef.current.delete(firstId);
+            const messagesArray = Array.from(processedMessagesRef.current);
+            const firstMessage = messagesArray[0];
+            processedMessagesRef.current.delete(firstMessage);
           }
 
+          console.log(`📨 New realtime message received: ${messageId}`, newRecord);
           onNewMessage(newRecord);
         }
         break;
@@ -113,12 +119,24 @@ export function useRealtimeChat({
       setConnectionState('connecting');
       setError(null);
 
+      // Realtime 인증 설정 (최신 Supabase 버전에서 필요)
+      console.log(`🔐 Setting up realtime auth for user: ${user.id}`);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        await supabase.realtime.setAuth(session.access_token);
+        console.log(`✅ Realtime auth set with token`);
+      } else {
+        console.warn(`⚠️ No access token available for realtime auth`);
+      }
+
       // 기존 채널 정리
       if (channelRef.current) {
+        console.log(`🧹 Cleaning up previous channel for room: ${roomId}`);
         supabase.removeChannel(channelRef.current);
       }
 
-      // 새 채널 생성 및 구독
+      // 새 채널 생성 및 구독 (단순한 방식으로)
+      console.log(`🔧 Setting up postgres_changes subscription for room: ${roomId}`);
       const channel = supabase
         .channel(`room:${roomId}:messages`)
         .on(
@@ -129,25 +147,61 @@ export function useRealtimeChat({
             table: 'chat_messages',
             filter: `room_id=eq.${roomId}`
           },
-          handleMessageChange
+          (payload) => {
+            console.log(`🔥 Raw postgres_changes event received for room ${roomId}:`, payload);
+            handleMessageChange(payload);
+          }
         )
         .subscribe((status, err) => {
+          console.log(`🔗 Realtime connection status change: ${status}`, {
+            roomId,
+            channelName: `room:${roomId}:messages`,
+            timestamp: new Date().toISOString(),
+            err
+          });
+
           if (status === 'SUBSCRIBED') {
             setIsConnected(true);
             setConnectionState('connected');
             setError(null);
             retryCountRef.current = 0;
-            console.log(`✅ Realtime connected to room: ${roomId}`);
+            console.log(`✅ Realtime postgres_changes SUBSCRIBED for room: ${roomId}`, {
+              channelName: `room:${roomId}:messages`,
+              table: 'chat_messages',
+              filter: `room_id=eq.${roomId}`,
+              isConnected: true,
+              timestamp: new Date().toISOString()
+            });
+
+            // 구독 성공 후 테스트 메시지 확인
+            console.log(`🔍 Now listening for postgres_changes on chat_messages table with filter: room_id=eq.${roomId}`);
+
           } else if (status === 'CHANNEL_ERROR') {
             setIsConnected(false);
             setConnectionState('error');
             setError(err?.message || '채널 연결 오류');
-            console.error('❌ Realtime channel error:', err);
+            console.error('❌ Realtime channel error:', {
+              roomId,
+              channelName: `room:${roomId}:messages`,
+              err,
+              possibleCauses: [
+                'RLS policies missing',
+                'Invalid room_id',
+                'Authentication issues',
+                'Table not in realtime publication'
+              ]
+            });
           } else if (status === 'TIMED_OUT') {
             setIsConnected(false);
             setConnectionState('error');
             setError('연결 시간 초과');
-            console.error('⏰ Realtime connection timed out');
+            console.error('⏰ Realtime connection timed out:', { roomId });
+          } else if (status === 'CLOSED') {
+            setIsConnected(false);
+            setConnectionState('disconnected');
+            console.warn('🔌 Realtime connection closed:', { roomId });
+          } else {
+            console.log(`📊 Realtime status: ${status}`, { roomId, timestamp: new Date().toISOString() });
           }
         });
 
@@ -282,19 +336,23 @@ export function useTypingIndicator({ roomId, onTypingUpdate }: TypingIndicatorPr
       .channel(`room:${roomId}:typing`)
       .on('broadcast', { event: 'typing_start' }, (payload) => {
         const { user_id } = payload.payload;
+        console.log(`⌨️ User started typing: ${user_id}`, { roomId, currentUser: user.id });
         if (user_id !== user.id) {
           setTypingUsers(prev => new Set([...prev, user_id]));
         }
       })
       .on('broadcast', { event: 'typing_stop' }, (payload) => {
         const { user_id } = payload.payload;
+        console.log(`⌨️ User stopped typing: ${user_id}`, { roomId });
         setTypingUsers(prev => {
           const next = new Set(prev);
           next.delete(user_id);
           return next;
         });
       })
-      .subscribe();
+      .subscribe((status) => {
+        console.log(`⌨️ Typing channel status: ${status}`, { roomId });
+      });
 
     setTypingChannel(channel);
 

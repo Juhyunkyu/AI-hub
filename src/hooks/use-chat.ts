@@ -26,10 +26,34 @@ export function useChatHook() {
 
   // 실시간 메시지 핸들러들
   const handleNewRealtimeMessage = useCallback((message: ChatMessage) => {
-    // 중복 방지: 이미 있는 메시지인지 확인
+    console.log(`🔄 Processing realtime message: ${message.id}`, message);
+
     setMessages(prev => {
+      // 임시 메시지 찾기 (optimistic update의 임시 메시지)
+      const tempMessageIndex = prev.findIndex(m =>
+        m.id.startsWith('temp-') &&
+        m.content === message.content &&
+        m.sender_id === message.sender_id &&
+        Math.abs(new Date(m.created_at).getTime() - new Date(message.created_at).getTime()) < 10000 // 10초 내
+      );
+
+      // 임시 메시지가 있으면 교체, 없으면 추가
+      if (tempMessageIndex !== -1) {
+        console.log(`🔄 Replacing optimistic message with real message: ${message.id}`);
+        const newMessages = [...prev];
+        newMessages[tempMessageIndex] = {
+          ...message,
+          sender: message.sender || prev[tempMessageIndex].sender // sender 정보 보존
+        };
+        return newMessages;
+      }
+
+      // 이미 실제 메시지가 있는지 확인
       const exists = prev.some(m => m.id === message.id);
-      if (exists) return prev;
+      if (exists) {
+        console.log(`🔄 Message already exists: ${message.id}`);
+        return prev;
+      }
 
       // 실시간 메시지에 sender 정보가 없는 경우 현재 방의 참가자 정보에서 찾아서 보강
       let enrichedMessage = message;
@@ -42,14 +66,14 @@ export function useChatHook() {
             ...message,
             sender: {
               id: senderParticipant.user.id,
-              username: senderParticipant.user.username,
+              username: senderParticipant.user.username || "Unknown",
               avatar_url: senderParticipant.user.avatar_url
             }
           };
         }
       }
 
-      // 새 메시지를 리스트 끝에 추가 (시간순 정렬)
+      console.log(`✅ Adding new realtime message: ${message.id}`);
       return [...prev, enrichedMessage];
     });
 
@@ -68,7 +92,7 @@ export function useChatHook() {
                 ...message,
                 sender: {
                   id: senderParticipant.user.id,
-                  username: senderParticipant.user.username,
+                  username: senderParticipant.user.username || "Unknown",
                   avatar_url: senderParticipant.user.avatar_url
                 }
               };
@@ -203,10 +227,44 @@ export function useChatHook() {
     setMessages([]);
   }, []);
 
-  // 메시지 전송 (실시간으로 자동 업데이트되므로 수동 업데이트 제거)
+  // 메시지 전송 (Optimistic Update + 실시간 백업)
   const sendMessage = useCallback(
     async (content: string, roomId: string) => {
       if (!user || !content.trim()) return;
+
+      // Optimistic update - 즉시 UI에 메시지 표시
+      const optimisticMessage = {
+        id: `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        room_id: roomId,
+        sender_id: user.id,
+        content: content.trim(),
+        message_type: "text" as const,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        sender: {
+          id: user.id,
+          username: user.username || "Unknown",
+          avatar_url: user.avatar_url || null,
+        },
+        file_url: null,
+        file_name: null,
+        file_size: null,
+        reply_to_id: null,
+        reply_to: null,
+        reads: [],
+        read_by: [user.id],
+      };
+
+      // 즉시 UI 업데이트 (optimistic)
+      setMessages((prev) => [...prev, optimisticMessage]);
+      setRooms((prev) => {
+        const updatedRooms = prev.map((room) =>
+          room.id === roomId
+            ? { ...room, last_message: optimisticMessage }
+            : room
+        );
+        return sortRoomsByLastMessage(updatedRooms);
+      });
 
       try {
         const response = await fetch("/api/chat/messages", {
@@ -222,34 +280,45 @@ export function useChatHook() {
         if (response.ok) {
           const { message } = await response.json();
 
-          // created_at이 없다면 현재 시간으로 설정
-          const messageWithTime = {
+          // 서버에서 받은 실제 메시지로 교체
+          const serverMessage = {
             ...message,
             created_at: message.created_at || new Date().toISOString(),
           };
 
-          // 실시간 구독이 활성화되어 있으면 자동으로 메시지가 추가됨
-          // 실시간이 연결되지 않은 경우에만 수동 추가
-          if (!isConnected) {
-            setMessages((prev) => [...prev, messageWithTime]);
-            setRooms((prev) => {
-              const updatedRooms = prev.map((room) =>
-                room.id === roomId
-                  ? { ...room, last_message: messageWithTime }
-                  : room
-              );
-              return sortRoomsByLastMessage(updatedRooms);
-            });
-          }
+          console.log(`✅ Message sent successfully: ${serverMessage.id}`, serverMessage);
 
-          return messageWithTime;
+          // Optimistic 메시지를 실제 메시지로 교체
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === optimisticMessage.id ? serverMessage : msg
+            )
+          );
+
+          setRooms((prev) => {
+            const updatedRooms = prev.map((room) =>
+              room.id === roomId
+                ? { ...room, last_message: serverMessage }
+                : room
+            );
+            return sortRoomsByLastMessage(updatedRooms);
+          });
+
+          return serverMessage;
+        } else {
+          // 서버 요청 실패시 optimistic 메시지 제거
+          console.error("❌ Failed to send message - removing optimistic message");
+          setMessages((prev) => prev.filter((msg) => msg.id !== optimisticMessage.id));
+          toast.error("메시지 전송에 실패했습니다");
         }
-      } catch {
-        // 메시지 전송 실패
+      } catch (error) {
+        // 네트워크 오류시 optimistic 메시지 제거
+        console.error("❌ Network error sending message:", error);
+        setMessages((prev) => prev.filter((msg) => msg.id !== optimisticMessage.id));
         toast.error("메시지 전송에 실패했습니다");
       }
     },
-    [user, isConnected]
+    [user]
   );
 
   // 초기 로드
@@ -282,6 +351,8 @@ export function useChatHook() {
     stopTyping
   };
 }
+
+
 
 
 
