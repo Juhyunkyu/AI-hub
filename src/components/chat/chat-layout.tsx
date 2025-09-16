@@ -5,10 +5,12 @@ import { useState, useEffect, useRef, useCallback, useMemo, memo, forwardRef, us
 import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
 import { useChatHook } from "@/hooks/use-chat";
+import { useNotifications } from "@/hooks/use-notifications";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Send, MoreHorizontal, Edit, Search, Plus, X, Trash2, Wifi, WifiOff, AlertCircle } from "lucide-react";
 import { useAuthStore } from "@/stores/auth";
 import { formatMessageTime, formatLastMessageTime } from "@/lib/date-utils";
@@ -66,6 +68,9 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(({ initialR
     startTyping,
     stopTyping
   } = useChatHook();
+
+  // 알림 시스템
+  const { getUnreadCount, markAsRead } = useNotifications();
 
   // 통합된 UI 상태 관리
   const [uiState, setUIState] = useState({
@@ -173,10 +178,22 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(({ initialR
       const targetRoom = rooms.find(room => room.id === initialRoomId);
       if (targetRoom) {
         selectRoom(targetRoom);
+        markAsRead(targetRoom.id); // 초기 방 선택 시에도 읽음 처리
         // 데스크탑에서는 리스트를 절대 숨기지 않음
       }
     }
-  }, [initialRoomId, rooms, selectRoom]);
+  }, [initialRoomId, rooms, selectRoom, markAsRead]);
+
+  // 현재 방에서 새 메시지를 받으면 자동으로 읽음 처리
+  useEffect(() => {
+    if (currentRoom && messages.length > 0 && !messagesLoading) {
+      const lastMessage = messages[messages.length - 1];
+      if (lastMessage && lastMessage.sender_id !== user?.id) {
+        // 다른 사용자의 메시지인 경우 읽음 처리
+        markAsRead(currentRoom.id, lastMessage.id);
+      }
+    }
+  }, [currentRoom, messages, messagesLoading, user?.id, markAsRead]);
 
   const handleSendMessage = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
@@ -213,13 +230,17 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(({ initialR
     }
   }, [updateUIState, updateTyping, stopTyping]);
 
-  const handleRoomSelect = useCallback((room: any) => {
+  const handleRoomSelect = useCallback(async (room: any) => {
     selectRoom(room);
+
+    // 채팅방을 선택하면 읽음 상태로 표시
+    await markAsRead(room.id);
+
     // 모바일에서만 리스트 숨김 (데스크탑에서는 항상 표시)
     if (isMobile) {
       updateUIState({ showRoomList: false });
     }
-  }, [selectRoom, updateUIState, isMobile]);
+  }, [selectRoom, updateUIState, isMobile, markAsRead]);
 
   const handleBackToRooms = useCallback(() => {
     if (uiState.isEditMode) {
@@ -504,14 +525,27 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(({ initialR
                   />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between">
-                      <p className="font-medium truncate">
-                        {getChatRoomDisplayName(room, user?.id)}
-                      </p>
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <p className="font-medium truncate">
+                          {getChatRoomDisplayName(room, user?.id)}
+                        </p>
+                        {(() => {
+                          const unreadCount = getUnreadCount(room.id);
+                          return unreadCount > 0 ? (
+                            <Badge
+                              variant="destructive"
+                              className="h-5 w-5 rounded-full p-0 text-xs flex items-center justify-center flex-shrink-0"
+                            >
+                              {unreadCount > 99 ? "99+" : unreadCount}
+                            </Badge>
+                          ) : null;
+                        })()}
+                      </div>
                       {!uiState.isEditMode && (
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="opacity-70 hover:opacity-100 transition-opacity h-6 w-6 p-0"
+                          className="opacity-70 hover:opacity-100 transition-opacity h-6 w-6 p-0 flex-shrink-0"
                           onClick={(e) => {
                             e.stopPropagation();
                             openParticipantsModal(room);

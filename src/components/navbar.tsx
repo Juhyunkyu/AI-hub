@@ -20,6 +20,7 @@ import { useEffect, useState, useMemo, useRef } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useRouter, usePathname } from "next/navigation";
 import { createPortal } from "react-dom";
+import { useNotifications } from "@/hooks/use-notifications";
 
 type Category = {
   id: string;
@@ -39,7 +40,6 @@ export function Navbar() {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [unreadMessages, setUnreadMessages] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showCategoryMenu, setShowCategoryMenu] = useState(false);
@@ -49,6 +49,9 @@ export function Navbar() {
   const categoryMenuRef = useRef<HTMLDivElement>(null);
   const categoryDropdownRef = useRef<HTMLDivElement>(null);
   const userDropdownRef = useRef<HTMLDivElement>(null);
+
+  // 새로운 알림 시스템 사용
+  const { hasUnreadMessages, totalUnreadCount } = useNotifications();
 
   // 클라이언트 마운트 확인
   useEffect(() => {
@@ -135,33 +138,10 @@ export function Navbar() {
   useEffect(() => {
     let cancelled = false;
 
-    async function fetchUnreadCount() {
-      if (!user) {
-        setUnreadMessages(0);
-        return;
-      }
-      try {
-        // 새 채팅 시스템의 읽지 않은 메시지 수 계산
-        const response = await fetch('/api/chat/rooms');
-        if (response.ok) {
-          const data = await response.json();
-          const totalUnread = data.rooms?.reduce((total: number, room: any) => {
-            return total + (room.unread_count || 0);
-          }, 0) || 0;
-          if (!cancelled) setUnreadMessages(totalUnread);
-        } else {
-          if (!cancelled) setUnreadMessages(0);
-        }
-      } catch (error) {
-        if (!cancelled) setUnreadMessages(0);
-      }
-    }
-
     async function load() {
       if (!user) {
         setAvatarUrl(null);
         setIsAdmin(false);
-        setUnreadMessages(0);
         setIsLoading(false);
         return;
       }
@@ -195,26 +175,13 @@ export function Navbar() {
           setAvatarUrl(null);
           setIsLoading(false);
         }
-      } finally {
-        fetchUnreadCount();
       }
     }
 
     load();
 
-    // messages:refresh 이벤트 구독
-    const handleRefresh = () => {
-      fetchUnreadCount();
-    };
-    if (typeof window !== "undefined") {
-      window.addEventListener("messages:refresh", handleRefresh);
-    }
-
     return () => {
       cancelled = true;
-      if (typeof window !== "undefined") {
-        window.removeEventListener("messages:refresh", handleRefresh);
-      }
     };
   }, [supabase, user]);
 
@@ -355,13 +322,10 @@ export function Navbar() {
                 className="relative p-2 h-8 w-8 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors flex items-center justify-center"
               >
                 <MessageCircle className="h-5 w-5" />
-                {unreadMessages > 0 && (
-                  <Badge
-                    variant="destructive"
-                    className="absolute -top-1 -right-1 h-5 w-5 rounded-full p-0 text-xs flex items-center justify-center"
-                  >
-                    {unreadMessages > 99 ? "99+" : unreadMessages}
-                  </Badge>
+                {hasUnreadMessages && (
+                  <div className="absolute -top-1 -right-1 h-3 w-3 bg-red-500 rounded-full flex items-center justify-center">
+                    <div className="h-2 w-2 bg-red-500 rounded-full animate-pulse" />
+                  </div>
                 )}
               </button>
 

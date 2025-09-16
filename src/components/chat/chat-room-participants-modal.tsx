@@ -6,6 +6,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -144,6 +145,12 @@ export function ChatRoomParticipantsModal({
               {isDirectChat ? "사용자 추가" : "초대"}
             </Button>
           </DialogTitle>
+          <DialogDescription>
+            {isDirectChat
+              ? "채팅 참여자들의 정보를 확인하고 관리할 수 있습니다."
+              : "채팅방 참여자 목록을 확인하고 관리할 수 있습니다."
+            }
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-2 max-h-96 overflow-y-auto">
