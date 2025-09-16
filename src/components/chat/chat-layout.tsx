@@ -16,7 +16,6 @@ import { ChatRoomAvatar } from "./chat-room-avatar";
 import { ChatRoomParticipantsModal } from "./chat-room-participants-modal";
 import { getChatRoomDisplayName } from "@/lib/chat-utils";
 import { VirtualizedMessageList, type VirtualizedMessageListRef } from "./virtualized";
-import { TypingIndicator } from "./TypingIndicator";
 import { deleteChatRooms } from "@/lib/chat-api";
 // Dynamic imports for performance optimization (lazy loading)
 const UserSearchModal = dynamic(() =>
@@ -596,7 +595,7 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(({ initialR
                   <div className="text-muted-foreground">메시지를 불러오는 중...</div>
                 </div>
               ) : (
-                // 가상화 메시지 리스트 (항상 사용)
+                // 가상화 메시지 리스트 (타이핑 인디케이터 포함)
                 <VirtualizedMessageList
                   ref={virtualizedListRef}
                   messages={messages}
@@ -604,15 +603,12 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(({ initialR
                   containerHeight={messagesContainerHeight}
                   scrollToBottom={!messagesLoading && messages.length > 0}
                   className="h-full"
+                  typingUsers={typingUsers}
+                  participants={currentRoom?.participants}
                 />
               )}
             </div>
 
-            {/* 타이핑 인디케이터 */}
-            <TypingIndicator
-              typingUsers={typingUsers}
-              participants={currentRoom?.participants}
-            />
 
             {/* 메시지 입력 */}
             <div className="p-4 border-t">

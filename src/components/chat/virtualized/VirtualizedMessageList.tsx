@@ -13,6 +13,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import type { ChatMessage } from "@/types/chat";
 import { MessageRenderer } from "./MessageRenderer";
 import { useMessageHeight } from "./useMessageHeight";
+import { TypingIndicatorMessage } from "../TypingIndicatorMessage";
 
 interface VirtualizedMessageListProps {
   messages: ChatMessage[];
@@ -25,6 +26,17 @@ interface VirtualizedMessageListProps {
   searchQuery?: string;
   highlightIndices?: number[];
   className?: string;
+  // 타이핑 인디케이터 props 추가
+  typingUsers?: string[];
+  participants?: {
+    id: string;
+    user_id: string;
+    user?: {
+      id: string;
+      username: string;
+      avatar_url?: string | null;
+    };
+  }[];
 }
 
 export interface VirtualizedMessageListRef {
@@ -57,7 +69,9 @@ export const VirtualizedMessageList = forwardRef<
   scrollToBottom = false,
   searchQuery,
   highlightIndices = [],
-  className = ""
+  className = "",
+  typingUsers = [],
+  participants = []
 }, ref) => {
   // Refs
   const parentRef = useRef<HTMLDivElement>(null);
@@ -71,33 +85,65 @@ export const VirtualizedMessageList = forwardRef<
   // 높이 관리 훅 (단순화됨)
   const { estimateSize } = useMessageHeight();
 
-  // 무한 스크롤을 위한 총 아이템 수 (로딩 아이템 포함)
-  const itemCount = hasNextPage ? messages.length + 1 : messages.length;
+  // 타이핑 중인 사용자 필터링 (현재 사용자 제외)
+  const otherTypingUsers = useMemo(() => {
+    return typingUsers.filter(userId => userId !== currentUserId);
+  }, [typingUsers, currentUserId]);
+
+  // 타이핑 인디케이터 아이템 수 (각 타이핑 사용자당 하나씩)
+  const typingItemCount = otherTypingUsers.length;
+
+  // 무한 스크롤을 위한 총 아이템 수 (메시지 + 타이핑 인디케이터 + 로딩 아이템)
+  const itemCount = messages.length + typingItemCount + (hasNextPage ? 1 : 0);
 
   // TanStack Virtual 설정 (메시지 겹침 방지 및 안정적인 높이 계산)
   const virtualizer = useVirtualizer({
     count: itemCount,
     getScrollElement: () => parentRef.current,
     estimateSize: useCallback((index: number) => {
-      // 로딩 아이템인 경우
-      if (index >= messages.length) {
+      // 로딩 아이템인 경우 (가장 마지막)
+      if (hasNextPage && index === itemCount - 1) {
         return 60; // 로딩 인디케이터 현실적 높이
       }
-      // 현실적인 추정 높이 - measureElement와 큰 차이 방지
-      const size = estimateSize(index, messages);
-      // 최소 높이 보장으로 getTotalSize 0 방지
-      return Math.max(size, 40);
-    }, [messages, estimateSize]),
+
+      // 타이핑 인디케이터인 경우 (메시지 다음, 로딩 전)
+      if (index >= messages.length && index < messages.length + typingItemCount) {
+        return 70; // 타이핑 인디케이터 높이
+      }
+
+      // 일반 메시지인 경우
+      if (index < messages.length) {
+        const size = estimateSize(index, messages);
+        return Math.max(size, 40);
+      }
+
+      // 기본값
+      return 40;
+    }, [messages, estimateSize, itemCount, typingItemCount, hasNextPage]),
     overscan: 3, // 부드러운 스크롤을 위해 증가
     // 스크롤 위치 조정 비활성화 (겹침과 무한 루프 방지)
     shouldAdjustScrollPositionOnItemSizeChange: () => false,
     // 안정적인 키 관리
     getItemKey: useCallback((index: number) => {
-      if (index >= messages.length) {
+      // 로딩 아이템인 경우
+      if (hasNextPage && index === itemCount - 1) {
         return `loading-${index}`;
       }
-      return messages[index]?.id || `msg-${index}`;
-    }, [messages]),
+
+      // 타이핑 인디케이터인 경우
+      if (index >= messages.length && index < messages.length + typingItemCount) {
+        const typingIndex = index - messages.length;
+        const userId = otherTypingUsers[typingIndex];
+        return `typing-${userId}`;
+      }
+
+      // 일반 메시지인 경우
+      if (index < messages.length) {
+        return messages[index]?.id || `msg-${index}`;
+      }
+
+      return `item-${index}`;
+    }, [messages, hasNextPage, itemCount, typingItemCount, otherTypingUsers]),
     // 디버그 모드 비활성화 (성능 문제 방지)
     debug: false
   });
@@ -117,10 +163,11 @@ export const VirtualizedMessageList = forwardRef<
    * 스크롤을 맨 아래로 이동
    */
   const scrollToBottomImpl = useCallback((behavior: ScrollBehavior = "smooth") => {
-    if (!virtualizer || messages.length === 0) return;
+    if (!virtualizer || itemCount === 0) return;
 
     try {
-      const lastIndex = messages.length - 1;
+      // 마지막 아이템으로 스크롤 (타이핑 인디케이터 또는 마지막 메시지)
+      const lastIndex = itemCount - 1;
 
       // TanStack Virtual의 동적 크기 제한으로 인해 auto behavior 사용
       virtualizer.scrollToIndex(lastIndex, {
@@ -141,7 +188,7 @@ export const VirtualizedMessageList = forwardRef<
         });
       }
     }
-  }, [virtualizer, messages.length]);
+  }, [virtualizer, itemCount]);
 
   /**
    * 특정 인덱스로 스크롤
@@ -228,15 +275,16 @@ export const VirtualizedMessageList = forwardRef<
   }, [handleScroll]);
 
   /**
-   * 새 메시지 추가 시 자동 스크롤 처리
+   * 새 메시지나 타이핑 상태 변경 시 자동 스크롤 처리
    */
   useEffect(() => {
     const currentMessageCount = messages.length;
     const previousMessageCount = lastMessageCountRef.current;
+    const hasTypingUsers = typingItemCount > 0;
 
-    // 새 메시지가 추가되었고, 맨 아래에 있거나 자동 스크롤이 요청된 경우
+    // 새 메시지가 추가되었거나, 타이핑 사용자가 변경되었고, 맨 아래에 있거나 자동 스크롤이 요청된 경우
     if (
-      currentMessageCount > previousMessageCount &&
+      (currentMessageCount > previousMessageCount || hasTypingUsers) &&
       (wasAtBottomRef.current || scrollToBottom) &&
       !isUserScrolling
     ) {
@@ -249,7 +297,7 @@ export const VirtualizedMessageList = forwardRef<
     }
 
     lastMessageCountRef.current = currentMessageCount;
-  }, [messages.length, scrollToBottom, scrollToBottomImpl, isUserScrolling]);
+  }, [messages.length, typingItemCount, scrollToBottom, scrollToBottomImpl, isUserScrolling]);
 
   // 메시지 목록 변경 시 TanStack Virtual이 자동으로 처리
 
@@ -315,8 +363,8 @@ export const VirtualizedMessageList = forwardRef<
           {virtualItems.map((virtualItem) => {
             const { index, start, size } = virtualItem;
 
-            // 로딩 아이템인 경우
-            if (index >= messages.length) {
+            // 로딩 아이템인 경우 (가장 마지막)
+            if (hasNextPage && index === itemCount - 1) {
               return (
                 <div
                   key={`loading-${index}`}
@@ -330,6 +378,33 @@ export const VirtualizedMessageList = forwardRef<
                   }}
                 >
                   <LoadingIndicator />
+                </div>
+              );
+            }
+
+            // 타이핑 인디케이터인 경우
+            if (index >= messages.length && index < messages.length + typingItemCount) {
+              const typingIndex = index - messages.length;
+              const userId = otherTypingUsers[typingIndex];
+
+              return (
+                <div
+                  key={`typing-${userId}`}
+                  data-index={index}
+                  ref={virtualizer.measureElement}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    transform: `translateY(${start}px)`,
+                    contain: 'layout',
+                  }}
+                >
+                  <TypingIndicatorMessage
+                    userId={userId}
+                    participants={participants}
+                  />
                 </div>
               );
             }
