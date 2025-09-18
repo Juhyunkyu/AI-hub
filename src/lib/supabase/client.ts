@@ -10,12 +10,12 @@ export function createSupabaseBrowserClient() {
 
   const client = createBrowserClient(supabaseUrl, supabaseAnonKey)
 
-  // 인증 에러 처리 개선
+  // 인증 상태 변경 처리
   client.auth.onAuthStateChange((event, session) => {
     if (event === 'TOKEN_REFRESHED') {
-      console.log('Token refreshed successfully')
+      // 토큰 갱신 성공 - 로그 출력하지 않음 (정상 동작)
     } else if (event === 'SIGNED_OUT') {
-      console.log('User signed out')
+      // 로그아웃 - 로그 출력하지 않음 (정상 동작)
       // 로컬 스토리지 정리
       if (typeof window !== 'undefined') {
         localStorage.removeItem('supabase.auth.token')

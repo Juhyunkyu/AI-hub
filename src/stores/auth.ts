@@ -15,7 +15,7 @@ export type AuthState = {
   setUser: (user: AuthUser | null) => void
 }
 
-export const useAuthStore = create<AuthState>((set, get) => ({
+export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   isLoading: true,
   
@@ -50,7 +50,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const { data, error } = await supabase.auth.getUser()
 
       if (error) {
-        console.warn('Auth check error:', error)
+        // AuthSessionMissingError는 정상적인 로그아웃 상태이므로 로그 출력하지 않음
+        if (error.name !== 'AuthSessionMissingError') {
+          console.warn('Auth check error:', error)
+        }
+
         // 토큰이 만료되거나 유효하지 않은 경우 로그아웃 처리
         if (error.message?.includes('refresh') || error.message?.includes('token')) {
           await supabase.auth.signOut()
