@@ -4,6 +4,7 @@ import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider } from "@/components/auth-provider";
+import { QueryProvider } from "@/providers/query-provider";
 import { Navbar } from "@/components/navbar";
 import { SiteFooter } from "@/components/site-footer";
 import { ServiceWorkerRegister } from "@/components/service-worker-register";
@@ -34,15 +35,17 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-dvh bg-background text-foreground`}
       >
         <ThemeProvider>
-          <AuthProvider>
-            <ServiceWorkerRegister />
-            <Navbar />
-            <main className="mx-auto w-full max-w-6xl px-3 sm:px-4 md:px-6 py-0 md:py-6">
-              {children}
-            </main>
-            <SiteFooter />
-            <Toaster richColors position="top-right" />
-          </AuthProvider>
+          <QueryProvider>
+            <AuthProvider>
+              <ServiceWorkerRegister />
+              <Navbar />
+              <main className="mx-auto w-full max-w-6xl px-3 sm:px-4 md:px-6 py-0 md:py-6">
+                {children}
+              </main>
+              <SiteFooter />
+              <Toaster richColors position="top-right" />
+            </AuthProvider>
+          </QueryProvider>
         </ThemeProvider>
       </body>
     </html>

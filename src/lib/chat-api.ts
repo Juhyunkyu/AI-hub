@@ -1,4 +1,11 @@
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
+import {
+  CreateChatRoomSchema,
+  PostgreSQLFunctionResponseSchema,
+  validateDirectChatRoom,
+  type PostgreSQLFunctionResponse,
+  type CreateChatRoom
+} from '@/lib/schemas'
 
 const supabase = createSupabaseBrowserClient()
 
@@ -31,6 +38,7 @@ export interface FollowResult {
 export interface CreateChatRoomResult {
   success: boolean
   roomId?: string
+  isNew?: boolean
   error?: string
 }
 
@@ -314,7 +322,8 @@ export async function getFollowingUsers(): Promise<{ users: User[], error?: stri
 }
 
 /**
- * 1:1 채팅방을 생성합니다
+ * 1:1 채팅방을 생성하거나 기존 채팅방을 반환합니다
+ * PostgreSQL 함수를 사용하여 무한 재귀 문제 해결 및 원자성 보장
  */
 export async function createDirectChatRoom(targetUserId: string): Promise<CreateChatRoomResult> {
   try {
@@ -324,76 +333,64 @@ export async function createDirectChatRoom(targetUserId: string): Promise<Create
       return { success: false, error: "로그인이 필요합니다." }
     }
 
-    // 이미 존재하는 1:1 채팅방 확인
-    const { data: existingRooms, error: checkError } = await supabase
-      .from('chat_room_participants')
-      .select(`
-        room_id,
-        chat_rooms!inner (
-          id,
-          type
-        )
-      `)
-      .eq('user_id', user.id)
-      .eq('chat_rooms.type', 'direct')
-
-    if (checkError) {
-      console.error('Error checking existing rooms:', checkError)
-      return { success: false, error: "기존 채팅방 확인 중 오류가 발생했습니다." }
-    }
-
-    // 기존 채팅방 중에 대상 사용자와의 1:1 채팅방이 있는지 확인
-    for (const roomParticipant of existingRooms || []) {
-      const { data: participants, error: participantsError } = await supabase
-        .from('chat_room_participants')
-        .select('user_id')
-        .eq('room_id', roomParticipant.room_id)
-
-      if (participantsError) continue
-
-      const participantIds = participants?.map(p => p.user_id) || []
-
-      // 정확히 2명이고, 현재 사용자와 대상 사용자만 있는 경우
-      if (participantIds.length === 2 &&
-          participantIds.includes(user.id) &&
-          participantIds.includes(targetUserId)) {
-        return { success: true, roomId: roomParticipant.room_id }
+    // 스키마 검증을 통한 입력 검증 및 보안 강화
+    try {
+      validateDirectChatRoom(user.id, targetUserId);
+    } catch (validationError) {
+      return {
+        success: false,
+        error: validationError instanceof Error
+          ? validationError.message
+          : "유효하지 않은 입력입니다."
       }
     }
 
-    // 새 채팅방 생성
-    const { data: newRoom, error: roomError } = await supabase
-      .from('chat_rooms')
-      .insert({
-        type: 'direct'
+    // PostgreSQL 함수를 호출하여 채팅방 생성/조회 (원자성 보장)
+    const { data: result, error: functionError } = await supabase
+      .rpc('create_or_get_direct_chat_room', {
+        p_current_user_id: user.id,
+        p_target_user_id: targetUserId
       })
-      .select()
-      .single()
 
-    if (roomError) {
-      console.error('Error creating chat room:', roomError)
-      return { success: false, error: "채팅방 생성 중 오류가 발생했습니다." }
+    if (functionError) {
+      console.error('Error calling create_or_get_direct_chat_room function:', functionError)
+      return {
+        success: false,
+        error: "채팅방 생성 중 오류가 발생했습니다."
+      }
     }
 
-    // 참여자 추가
-    const { error: participantsError } = await supabase
-      .from('chat_room_participants')
-      .insert([
-        { room_id: newRoom.id, user_id: user.id },
-        { room_id: newRoom.id, user_id: targetUserId }
-      ])
-
-    if (participantsError) {
-      console.error('Error adding participants:', participantsError)
-      // 생성된 채팅방 삭제
-      await supabase.from('chat_rooms').delete().eq('id', newRoom.id)
-      return { success: false, error: "참여자 추가 중 오류가 발생했습니다." }
+    // PostgreSQL 함수 응답 스키마 검증
+    // RPC 함수는 중첩된 객체를 반환하므로 함수명 키로 접근
+    const actualResult = result?.create_or_get_direct_chat_room || result;
+    let validatedResult: PostgreSQLFunctionResponse;
+    try {
+      validatedResult = PostgreSQLFunctionResponseSchema.parse(actualResult);
+    } catch (schemaError) {
+      console.error('PostgreSQL function response validation failed:', schemaError);
+      console.error('Received result:', result);
+      return { success: false, error: "서버 응답 형식이 올바르지 않습니다." }
     }
 
-    return { success: true, roomId: newRoom.id }
+    // 함수 실행 결과에 따른 응답
+    if (validatedResult.success) {
+      return {
+        success: true,
+        roomId: validatedResult.room_id!,
+        isNew: validatedResult.is_new
+      }
+    } else {
+      return {
+        success: false,
+        error: validatedResult.error || "알 수 없는 오류가 발생했습니다."
+      }
+    }
 
   } catch (error) {
     console.error('Unexpected error during chat room creation:', error)
-    return { success: false, error: "채팅방 생성 중 예상치 못한 오류가 발생했습니다." }
+    return {
+      success: false,
+      error: "채팅방 생성 중 예상치 못한 오류가 발생했습니다."
+    }
   }
 }

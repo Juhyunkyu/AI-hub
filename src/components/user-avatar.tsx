@@ -59,6 +59,14 @@ export function UserAvatar({
 
   const handleNameClick = () => {
     if (!username) return;
+
+    // 비로그인 사용자는 메뉴를 표시하지 않고 로그인 페이지로 이동
+    if (!user) {
+      const next = `/profile/${encodeURIComponent(username)}`;
+      router.push(`/login?next=${encodeURIComponent(next)}`);
+      return;
+    }
+
     if (showActions) setShowActionsMenu((v) => !v);
   };
 
@@ -286,8 +294,8 @@ export function UserAvatar({
           )}
         </div>
 
-        {/* 액션 메뉴 (익명이 아닐 때만 표시) */}
-        {showActionsMenu && showActions && !isOwner && !isAnonymous && (
+        {/* 액션 메뉴 (로그인된 사용자, 익명이 아닐 때만 표시) */}
+        {showActionsMenu && showActions && !isOwner && !isAnonymous && user && (
           <div className="absolute top-full left-0 mt-1 bg-background border rounded-lg shadow-lg z-50 min-w-[120px]">
             <div className="p-1">
               <Button
@@ -324,7 +332,7 @@ export function UserAvatar({
         )}
 
         {/* 배경 오버레이 (메뉴 닫기용) */}
-        {showActionsMenu && !isAnonymous && (
+        {showActionsMenu && !isAnonymous && user && (
           <div
             className="fixed inset-0 z-40"
             onClick={() => setShowActionsMenu(false)}

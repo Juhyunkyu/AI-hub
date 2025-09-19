@@ -1,5 +1,6 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
+import { ChatUserProfile, ChatRoomWithParticipantIds, ChatRoomParticipantBase } from "@/types/chat";
 
 // 채팅 초대용 사용자 검색
 export async function GET(request: NextRequest) {
@@ -18,7 +19,7 @@ export async function GET(request: NextRequest) {
     const userId = searchParams.get("user_id"); // 특정 사용자 ID로 검색
     const limit = parseInt(searchParams.get("limit") || "20");
 
-    let users: any[] = [];
+    let users: ChatUserProfile[] = [];
 
     if (type === "followers") {
       // 나를 팔로우하는 사용자들
@@ -41,7 +42,7 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: "Failed to fetch followers" }, { status: 500 });
       }
 
-      users = data?.map((item: any) => item.follower).filter(Boolean) || [];
+      users = data?.map((item: { follower: ChatUserProfile }) => item.follower).filter(Boolean) || [];
     } else if (type === "following") {
       // 내가 팔로우하는 사용자들
       const { data, error } = await supabase
@@ -63,7 +64,7 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: "Failed to fetch following" }, { status: 500 });
       }
 
-      users = data?.map((item: any) => item.following).filter(Boolean) || [];
+      users = data?.map((item: { following: ChatUserProfile }) => item.following).filter(Boolean) || [];
     } else {
       // 특정 사용자 ID로 검색하는 경우
       if (userId) {
@@ -100,7 +101,7 @@ export async function GET(request: NextRequest) {
 
     // 각 사용자와의 기존 채팅방 여부 확인
     const usersWithChatStatus = await Promise.all(
-      users.map(async (searchUser: any) => {
+      users.map(async (searchUser: ChatUserProfile) => {
         try {
           let existingRoom = null;
 
@@ -114,8 +115,8 @@ export async function GET(request: NextRequest) {
               `)
               .eq("type", "self");
 
-            existingRoom = selfRooms?.find((room: any) => {
-              const participantIds = room.participants?.map((p: unknown) => p.user_id) || [];
+            existingRoom = selfRooms?.find((room: ChatRoomWithParticipantIds) => {
+              const participantIds = room.participants?.map((p: ChatRoomParticipantBase) => p.user_id) || [];
               return participantIds.length === 1 && participantIds.includes(user.id);
             });
           } else {
@@ -128,8 +129,8 @@ export async function GET(request: NextRequest) {
               `)
               .eq("type", "direct");
 
-            existingRoom = directRooms?.find((room: any) => {
-              const participantIds = room.participants?.map((p: unknown) => p.user_id) || [];
+            existingRoom = directRooms?.find((room: ChatRoomWithParticipantIds) => {
+              const participantIds = room.participants?.map((p: ChatRoomParticipantBase) => p.user_id) || [];
               return participantIds.length === 2 &&
                      participantIds.includes(user.id) &&
                      participantIds.includes(searchUser.id);

@@ -1,23 +1,25 @@
 "use client";
 "use memo";
 
-import { useState, useEffect, useRef, useCallback, useMemo, memo, forwardRef, useImperativeHandle } from "react";
+import { useEffect, useCallback, useMemo, forwardRef, useImperativeHandle } from "react";
 import dynamic from "next/dynamic";
-import { useSearchParams } from "next/navigation";
 import { useChatHook } from "@/hooks/use-chat";
 import { useNotifications } from "@/hooks/use-notifications";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { useChatUIState } from "@/hooks/use-chat-ui-state";
+import { useChatMessageHandler } from "@/hooks/use-chat-message-handler";
+import { useResponsive } from "@/hooks/use-responsive";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Send, MoreHorizontal, Edit, Search, Plus, X, Trash2, Wifi, WifiOff, AlertCircle } from "lucide-react";
+import { ArrowLeft, Send, MoreHorizontal, Edit, Search, Plus, X, Trash2 } from "lucide-react";
 import { useAuthStore } from "@/stores/auth";
-import { formatMessageTime, formatLastMessageTime } from "@/lib/date-utils";
+import { formatLastMessageTime } from "@/lib/date-utils";
 import { ChatRoomAvatar } from "./chat-room-avatar";
 import { ChatRoomParticipantsModal } from "./chat-room-participants-modal";
+import { RealtimeStatus } from "./realtime-status";
 import { getChatRoomDisplayName } from "@/lib/chat-utils";
-import { VirtualizedMessageList, type VirtualizedMessageListRef } from "./virtualized";
+import { VirtualizedMessageList } from "./virtualized";
 import { deleteChatRooms } from "@/lib/chat-api";
 // Dynamic imports for performance optimization (lazy loading)
 const UserSearchModal = dynamic(() =>
@@ -48,7 +50,6 @@ export interface ChatLayoutRef {
 
 export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(({ initialRoomId }, ref) => {
   const { user } = useAuthStore();
-  const searchParams = useSearchParams();
   const {
     rooms,
     currentRoom,
@@ -65,112 +66,56 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(({ initialR
     reconnectRealtime,
     typingUsers,
     updateTyping,
-    startTyping,
     stopTyping
   } = useChatHook();
 
   // 알림 시스템
   const { getUnreadCount, markAsRead } = useNotifications();
 
-  // 통합된 UI 상태 관리
-  const [uiState, setUIState] = useState({
-    newMessage: "",
-    showRoomList: true,
-    showParticipantsModal: false,
-    isEditMode: false,
-    selectedRooms: new Set<string>(),
-    currentModalRoom: null as any,
-    showUserSearchModal: false,
-    showChatCreateModal: false,
-    showDeleteConfirmModal: false
+  // 반응형 화면 크기 감지
+  const { isMobile } = useResponsive();
+
+  // UI 상태 관리
+  const {
+    uiState,
+    updateUIState,
+    goToMainPage,
+    handleBackToRooms,
+    handleEditModeToggle,
+    exitEditMode,
+    handleRoomSelectEdit,
+    handleUserSearch,
+    handleChatCreate,
+    handleDeleteRooms,
+    openParticipantsModal
+  } = useChatUIState({ isMobile, currentRoom, clearCurrentRoom });
+
+  // 메시지 핸들링
+  const {
+    newMessage,
+    messagesContainerHeight,
+    textareaRef,
+    virtualizedListRef,
+    messagesContainerRef,
+    handleSendMessage,
+    handleTextareaChange,
+    handleKeyDown,
+    stopTyping: stopTypingHandler
+  } = useChatMessageHandler({
+    currentRoom,
+    sendMessage,
+    updateTyping,
+    stopTyping,
+    messages,
+    messagesLoading,
+    isRealtimeConnected
   });
-
-  // 메시지 컨테이너 높이 동적 계산
-  const [messagesContainerHeight, setMessagesContainerHeight] = useState(400);
-  const messagesContainerRef = useRef<HTMLDivElement>(null);
-
-  // UI 상태 업데이트 헬퍼 함수
-  const updateUIState = useCallback((updates: Partial<typeof uiState>) => {
-    setUIState(prev => ({ ...prev, ...updates }));
-  }, []);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const virtualizedListRef = useRef<VirtualizedMessageListRef>(null);
-
-  // 반응형 화면 크기 감지 훅
-  const [isMobile, setIsMobile] = useState(() => {
-    if (typeof window === 'undefined') return false;
-    return window.innerWidth < 768;
-  });
-
-  // 메시지 스크롤 최적화 - 가상화 전용
-  const scrollToBottom = useCallback((behavior: "smooth" | "instant" = "smooth") => {
-    if (virtualizedListRef.current) {
-      virtualizedListRef.current.scrollToBottom(behavior);
-    }
-  }, []);
 
   // 외부에서 호출할 수 있는 함수 노출
-  const goToMainPage = useCallback(() => {
-    clearCurrentRoom();
-    // 모바일에서만 리스트 표시 (데스크탑에서는 이미 표시됨)
-    if (isMobile) {
-      updateUIState({ showRoomList: true });
-    }
-  }, [clearCurrentRoom, updateUIState, isMobile]);
-
   useImperativeHandle(ref, () => ({
     goToMainPage
   }), [goToMainPage]);
 
-  useEffect(() => {
-    if (!messagesLoading && messages.length > 0) {
-      // 실시간 메시지인지 확인 (메시지가 추가된 경우)
-      const isNewMessage = messages.length > 0;
-
-      // 실시간 연결 상태에서는 부드러운 스크롤, 초기 로드 시에는 즉시 스크롤
-      if (isRealtimeConnected && isNewMessage) {
-        // 실시간 메시지: 부드러운 스크롤 (사용자가 하단에 있을 때만)
-        setTimeout(() => scrollToBottom("smooth"), 100);
-      } else {
-        // 초기 로드: 즉시 스크롤
-        scrollToBottom("instant");
-      }
-    }
-  }, [messages, messagesLoading, isRealtimeConnected, scrollToBottom]);
-
-  // 반응형 화면 크기 변경 감지 최적화
-  useEffect(() => {
-    const handleResize = () => {
-      const mobile = window.innerWidth < 768;
-      setIsMobile(mobile);
-      updateUIState({
-        showRoomList: mobile ? !currentRoom : true
-      });
-    };
-
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, [currentRoom, updateUIState]);
-
-  // URL 변경 감지 (NAV에서 채팅 아이콘 클릭 시 메인으로 돌아가기)
-  useEffect(() => {
-    const resetParam = searchParams?.get('reset');
-
-    // reset=1 파라미터가 있고, 현재 채팅방이 있으면 메인으로 돌아가기
-    if (resetParam === '1' && currentRoom) {
-      clearCurrentRoom();
-
-      // 모바일에서만 리스트 표시 (데스크탑에서는 이미 표시됨)
-      if (isMobile) {
-        updateUIState({ showRoomList: true });
-      }
-
-      // URL에서 reset 파라미터 제거 (뒤로가기 기록에 남지 않도록)
-      const url = new URL(window.location.href);
-      url.searchParams.delete('reset');
-      window.history.replaceState({}, '', url.toString());
-    }
-  }, [searchParams, currentRoom, clearCurrentRoom]);
 
   // 초기 방 선택
   useEffect(() => {
@@ -195,40 +140,6 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(({ initialR
     }
   }, [currentRoom, messages, messagesLoading, user?.id, markAsRead]);
 
-  const handleSendMessage = useCallback(async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!currentRoom || !uiState.newMessage.trim()) return;
-
-    const messageContent = uiState.newMessage;
-    updateUIState({ newMessage: "" });
-
-    // 메시지 전송
-    await sendMessage(messageContent, currentRoom.id);
-
-    // 실시간 연결 상태에 관계없이 메시지 전송 후 즉시 스크롤
-    setTimeout(() => scrollToBottom("smooth"), 100);
-
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-    }
-  }, [currentRoom, uiState.newMessage, sendMessage, updateUIState, scrollToBottom]);
-
-  const handleTextareaChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const value = e.target.value;
-    updateUIState({ newMessage: value });
-
-    // 텍스트 에리어 높이 자동 조절
-    const textarea = e.target;
-    textarea.style.height = 'auto';
-    textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
-
-    // 타이핑 상태 업데이트
-    if (value.trim()) {
-      updateTyping(); // 타이핑 시작 + 2초 후 자동 중지
-    } else {
-      stopTyping(); // 입력이 비어있으면 즉시 중지
-    }
-  }, [updateUIState, updateTyping, stopTyping]);
 
   const handleRoomSelect = useCallback(async (room: any) => {
     selectRoom(room);
@@ -242,42 +153,6 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(({ initialR
     }
   }, [selectRoom, updateUIState, isMobile, markAsRead]);
 
-  const handleBackToRooms = useCallback(() => {
-    if (uiState.isEditMode) {
-      updateUIState({
-        isEditMode: false,
-        selectedRooms: new Set()
-      });
-    } else {
-      // 모바일에서만 리스트 표시, 채팅방 선택 해제
-      if (isMobile) {
-        updateUIState({ showRoomList: true });
-        // currentRoom을 리셋하지 않고 유지 (뒤로가기이므로)
-      }
-    }
-  }, [uiState.isEditMode, updateUIState, isMobile]);
-
-  // 편집 모드 최적화
-  const handleEditModeToggle = useCallback(() => {
-    updateUIState({
-      isEditMode: !uiState.isEditMode,
-      selectedRooms: new Set()
-    });
-  }, [uiState.isEditMode, updateUIState]);
-
-  // 헤더 버튼 핸들러들
-  const handleUserSearch = useCallback(() => {
-    updateUIState({ showUserSearchModal: true });
-  }, [updateUIState]);
-
-  const handleChatCreate = useCallback(() => {
-    updateUIState({ showChatCreateModal: true });
-  }, [updateUIState]);
-
-  const handleDeleteRooms = useCallback(() => {
-    if (uiState.selectedRooms.size === 0) return;
-    updateUIState({ showDeleteConfirmModal: true });
-  }, [uiState.selectedRooms.size, updateUIState]);
 
   const handleConfirmDelete = useCallback(async () => {
     if (uiState.selectedRooms.size === 0) return;
@@ -321,113 +196,12 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(({ initialR
     }
   }, [uiState.selectedRooms, currentRoom, updateUIState, clearCurrentRoom, isMobile, loadRooms]);
 
-  const exitEditMode = useCallback(() => {
-    updateUIState({
-      isEditMode: false,
-      selectedRooms: new Set()
-    });
-  }, [updateUIState]);
-
-  // 메시지 컨테이너 높이 동적 업데이트
-  useEffect(() => {
-    if (!messagesContainerRef.current) return;
-
-    const updateContainerHeight = () => {
-      if (messagesContainerRef.current) {
-        const height = messagesContainerRef.current.offsetHeight;
-        if (height > 0) {
-          setMessagesContainerHeight(height);
-        }
-      }
-    };
-
-    // 초기 높이 설정
-    updateContainerHeight();
-
-    // ResizeObserver로 크기 변경 감지
-    const resizeObserver = new ResizeObserver(() => {
-      updateContainerHeight();
-    });
-
-    resizeObserver.observe(messagesContainerRef.current);
-
-    return () => {
-      resizeObserver.disconnect();
-    };
-  }, [currentRoom, uiState.showRoomList]);
-
-  const handleRoomSelect_Edit = useCallback((roomId: string) => {
-    const newSelected = new Set(uiState.selectedRooms);
-    if (newSelected.has(roomId)) {
-      newSelected.delete(roomId);
-    } else {
-      newSelected.add(roomId);
-    }
-    updateUIState({ selectedRooms: newSelected });
-  }, [uiState.selectedRooms, updateUIState]);
-
-
-  const openParticipantsModal = useCallback((room: any) => {
-    updateUIState({
-      currentModalRoom: room,
-      showParticipantsModal: true
-    });
-  }, [updateUIState]);
 
   // 현재 채팅방 표시명 메모이제이션
   const currentRoomDisplayName = useMemo(() => {
     return currentRoom ? getChatRoomDisplayName(currentRoom, user?.id) : '';
   }, [currentRoom, user?.id]);
 
-  // 실시간 연결 상태 표시 컴포넌트
-  const RealtimeStatus = useMemo(() => {
-    if (!currentRoom) return null;
-
-    const getStatusColor = () => {
-      switch (realtimeConnectionState) {
-        case 'connected': return 'text-green-500';
-        case 'connecting': return 'text-yellow-500';
-        case 'error': return 'text-red-500';
-        default: return 'text-gray-400';
-      }
-    };
-
-    const getStatusIcon = () => {
-      switch (realtimeConnectionState) {
-        case 'connected': return <Wifi className="h-3 w-3" />;
-        case 'connecting': return <div className="h-3 w-3 animate-spin border border-yellow-500 border-t-transparent rounded-full" />;
-        case 'error': return <WifiOff className="h-3 w-3" />;
-        default: return <WifiOff className="h-3 w-3" />;
-      }
-    };
-
-    const getStatusText = () => {
-      switch (realtimeConnectionState) {
-        case 'connected': return '실시간';
-        case 'connecting': return '연결 중...';
-        case 'error': return '연결 오류';
-        default: return '오프라인';
-      }
-    };
-
-    return (
-      <div className={`flex items-center space-x-1 text-xs ${getStatusColor()}`}>
-        {getStatusIcon()}
-        <span>{getStatusText()}</span>
-        {realtimeError && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-4 w-4 p-0 text-red-500 hover:text-red-600"
-            onClick={reconnectRealtime}
-            title={`재연결 시도 (에러: ${realtimeError})`}
-          >
-            <AlertCircle className="h-3 w-3" />
-          </Button>
-        )}
-      </div>
-    );
-  }, [currentRoom, realtimeConnectionState, realtimeError, reconnectRealtime]);
 
   if (loading) {
     return <div className="flex items-center justify-center h-96">로딩 중...</div>;
@@ -509,7 +283,7 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(({ initialR
                 {uiState.isEditMode && (
                   <Checkbox
                     checked={uiState.selectedRooms.has(room.id)}
-                    onCheckedChange={() => handleRoomSelect_Edit(room.id)}
+                    onCheckedChange={() => handleRoomSelectEdit(room.id)}
                     onClick={(e) => e.stopPropagation()}
                   />
                 )}
@@ -600,7 +374,12 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(({ initialR
                     <h3 className="font-semibold">
                       {currentRoomDisplayName}
                     </h3>
-                    {RealtimeStatus}
+                    <RealtimeStatus
+                      currentRoom={currentRoom}
+                      realtimeConnectionState={realtimeConnectionState}
+                      realtimeError={realtimeError}
+                      reconnectRealtime={reconnectRealtime}
+                    />
                   </div>
                   {(currentRoom.participants?.length || 0) > 2 && (
                     <p className="text-xs text-muted-foreground">
@@ -649,15 +428,10 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(({ initialR
               <form onSubmit={handleSendMessage} className="flex gap-2 items-end">
                 <Textarea
                   ref={textareaRef}
-                  value={uiState.newMessage}
+                  value={newMessage}
                   onChange={handleTextareaChange}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      handleSendMessage(e as any);
-                    }
-                  }}
-                  onBlur={stopTyping} // 포커스 아웃 시 타이핑 중지
+                  onKeyDown={handleKeyDown}
+                  onBlur={stopTypingHandler} // 포커스 아웃 시 타이핑 중지
                   placeholder="메시지를 입력하세요... (Shift+Enter: 줄바꿈, Enter: 전송)"
                   className="flex-1 min-h-[40px] max-h-[120px] resize-none overflow-y-auto"
                   rows={1}
@@ -705,18 +479,24 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(({ initialR
       <UserSearchModal
         open={uiState.showUserSearchModal}
         onClose={() => updateUIState({ showUserSearchModal: false })}
-        onChatCreated={(roomId) => {
+        onChatCreated={async (roomId) => {
           console.log("Direct chat room created:", roomId);
-          // 채팅방 목록 새로고침 후 생성된 채팅방으로 이동
-          loadRooms().then(() => {
-            const targetRoom = rooms.find(room => room.id === roomId);
-            if (targetRoom) {
-              selectRoom(targetRoom);
-              if (isMobile) {
-                updateUIState({ showRoomList: false });
-              }
+          // 먼저 모달 닫기
+          updateUIState({ showUserSearchModal: false });
+
+          // 채팅방 목록 새로고침하고 반환된 데이터에서 직접 찾기
+          const updatedRooms = await loadRooms();
+          const targetRoom = updatedRooms.find(room => room.id === roomId);
+
+          if (targetRoom) {
+            selectRoom(targetRoom);
+            await markAsRead(roomId);
+            if (isMobile) {
+              updateUIState({ showRoomList: false });
             }
-          });
+          } else {
+            console.warn(`채팅방 ${roomId}를 찾을 수 없습니다. 생성된 채팅방들:`, updatedRooms.map(r => r.id));
+          }
         }}
       />
 

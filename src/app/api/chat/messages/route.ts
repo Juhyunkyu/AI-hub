@@ -1,6 +1,6 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
-import { SendMessageData } from "@/types/chat";
+import { SendMessageData, MessageWithSender } from "@/types/chat";
 
 // 메시지 목록 조회
 export async function GET(request: NextRequest) {
@@ -59,10 +59,10 @@ export async function GET(request: NextRequest) {
     }
 
     // 메시지를 시간순으로 정렬하고 읽은 사용자 목록 처리
-    const processedMessages = messages
-      ?.map((message: any) => ({
+    const processedMessages = (messages as MessageWithSender[])
+      ?.map((message) => ({
         ...message,
-        read_by: message.reads?.map((read: any) => read.user_id) || []
+        read_by: message.reads?.map((read) => read.user_id) || []
       }))
       .reverse() || [];
 

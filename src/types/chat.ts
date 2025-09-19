@@ -41,13 +41,34 @@ export interface ChatMessage {
   read_by: string[];
 }
 
-// 향후 메시지 읽음 기능을 위한 타입 (현재 미사용)
-// export interface ChatMessageRead {
-//   id: string;
-//   message_id: string;
-//   user_id: string;
-//   read_at: string;
-// }
+export interface ChatMessageRead {
+  id: string;
+  message_id: string;
+  user_id: string;
+  read_at: string;
+}
+
+// Database query result types
+export interface MessageWithSender {
+  id: string;
+  room_id: string;
+  sender_id: string;
+  content: string;
+  message_type: 'text' | 'image' | 'file';
+  file_url?: string;
+  file_name?: string;
+  file_size?: number;
+  reply_to_id?: string;
+  created_at: string;
+  updated_at: string;
+  sender: {
+    id: string;
+    username: string;
+    avatar_url?: string;
+  } | null;
+  reply_to?: MessageWithSender | null;
+  reads: ChatMessageRead[];
+}
 
 // 향후 타이핑 상태 기능을 위한 타입 (현재 미사용)
 // export interface ChatTypingStatus {
@@ -90,13 +111,34 @@ export interface TypingStatusData {
   is_typing: boolean;
 }
 
-// 향후 실시간 이벤트 기능을 위한 타입 (현재 미사용)
-// export interface RealtimeMessage {
-//   type: 'INSERT' | 'UPDATE' | 'DELETE';
-//   table: string;
-//   record: any;
-//   old_record?: any;
-// }
+// User search and chat status types
+export interface ChatUserProfile {
+  id: string;
+  username: string;
+  avatar_url?: string;
+  bio?: string;
+}
+
+export interface ChatUserWithStatus extends ChatUserProfile {
+  has_chat: boolean;
+  chat_room_id: string | null;
+}
+
+export interface ChatRoomParticipantBase {
+  user_id: string;
+}
+
+export interface ChatRoomWithParticipantIds {
+  id: string;
+  participants: ChatRoomParticipantBase[];
+}
+
+export interface RealtimeMessage {
+  type: 'INSERT' | 'UPDATE' | 'DELETE';
+  table: string;
+  record: Record<string, unknown>;
+  old_record?: Record<string, unknown>;
+}
 
 // 향후 타이핑 표시 기능을 위한 타입 (현재 미사용)
 // export interface TypingIndicator {

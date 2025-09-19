@@ -26,3 +26,6 @@ export function createSupabaseBrowserClient() {
 
   return client
 }
+
+// Backward compatibility alias
+export const createClient = createSupabaseBrowserClient

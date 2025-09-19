@@ -9,8 +9,11 @@ import { useRealtimeChat, useTypingIndicator } from "./use-realtime-chat";
 // 채팅방 정렬 헬퍼 함수 (React 19에서는 함수 컴포넌트 외부로 이동하여 불필요한 재생성 방지)
 const sortRoomsByLastMessage = (rooms: ChatRoomWithParticipants[]) => {
   return [...rooms].sort((a, b) => {
-    const aTime = a.last_message?.created_at || a.created_at;
-    const bTime = b.last_message?.created_at || b.created_at;
+    // 마지막 메시지가 있으면 해당 시간, 없으면 채팅방 생성 시간 사용
+    const aTime = a.last_message?.created_at || a.updated_at || a.created_at;
+    const bTime = b.last_message?.created_at || b.updated_at || b.created_at;
+
+    // 최신 시간이 위로 오도록 정렬 (내림차순)
     return new Date(bTime).getTime() - new Date(aTime).getTime();
   });
 };
@@ -162,9 +165,9 @@ export function useChatHook() {
     roomId: currentRoom?.id || null
   });
 
-  // 채팅방 목록 로드
-  const loadRooms = useCallback(async () => {
-    if (!user) return;
+  // 채팅방 목록 로드 (정렬된 채팅방 배열을 반환)
+  const loadRooms = useCallback(async (): Promise<ChatRoomWithParticipants[]> => {
+    if (!user) return [];
 
     try {
       setLoading(true);
@@ -174,10 +177,13 @@ export function useChatHook() {
         // 최근 메시지 순으로 정렬
         const sortedRooms = sortRoomsByLastMessage(data.rooms || []);
         setRooms(sortedRooms);
+        return sortedRooms;
       }
+      return [];
     } catch {
       // 채팅방 로드 실패
       toast.error("채팅방을 불러오는데 실패했습니다");
+      return [];
     } finally {
       setLoading(false);
     }

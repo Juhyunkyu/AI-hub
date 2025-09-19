@@ -106,7 +106,7 @@ export async function GET(request: NextRequest) {
             timestamp: new Date().toISOString() 
           })}\n\n`);
           controller.enqueue(pingData);
-        } catch (error) {
+        } catch {
           clearInterval(pingInterval);
           supabase.removeChannel(channel);
         }

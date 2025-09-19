@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const commentData: any = {
+    const commentData: Record<string, unknown> = {
       post_id,
       author_id,
       body: commentBody,

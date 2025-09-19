@@ -34,6 +34,9 @@ export async function createSupabaseServerClient() {
   })
 }
 
+// Backward compatibility alias
+export const createClient = createSupabaseServerClient
+
 // 성능 최적화를 위한 읽기 전용 클라이언트
 export async function createSupabaseServerClientReadOnly() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL

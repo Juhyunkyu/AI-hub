@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { CreateChatRoomData } from "@/types/chat";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import {
+  CreateChatRoomSchema,
+  PostgreSQLFunctionResponseSchema,
+  validateDirectChatRoom,
+  type CreateChatRoom,
+  type PostgreSQLFunctionResponse
+} from "@/lib/schemas";
 
 // 타입 정의
 interface ChatRoomParticipant {
@@ -25,18 +32,7 @@ interface ChatRoom {
   participants: ChatRoomParticipant[];
 }
 
-interface ExistingRoomParticipant {
-  user_id: string;
-}
-
-interface ExistingRoom {
-  id: string;
-  name: string | null;
-  type: string;
-  created_at: string;
-  updated_at: string;
-  participants: ExistingRoomParticipant[];
-}
+// Removed unused interfaces - functionality moved to PostgreSQL functions
 
 // 채팅방 목록 조회
 export async function GET(request: NextRequest) {
@@ -57,10 +53,18 @@ export async function GET(request: NextRequest) {
     const offset = (page - 1) * limit;
 
     // 먼저 사용자가 참여한 채팅방 ID들을 가져옴
-    const { data: userRooms } = await supabase
+    const { data: userRooms, error: participantsError } = await supabase
       .from("chat_room_participants")
       .select("room_id")
       .eq("user_id", user.id);
+
+    if (participantsError) {
+      console.error("Error fetching user rooms:", participantsError);
+      return NextResponse.json(
+        { error: "Failed to fetch user rooms" },
+        { status: 500 }
+      );
+    }
 
     if (!userRooms || userRooms.length === 0) {
       return NextResponse.json({
@@ -177,73 +181,145 @@ export async function POST(request: NextRequest) {
       data: { user },
     } = await supabase.auth.getUser();
 
-    console.log("Chat room creation - Auth check:", {
-      user: user?.id,
-      email: user?.email,
-    });
-
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { name, type, participant_ids }: CreateChatRoomData =
-      await request.json();
-    console.log("Chat room creation - Request data:", {
-      name,
-      type,
-      participant_ids,
-    });
+    const requestBody = await request.json();
 
-    if (!type || !participant_ids || participant_ids.length === 0) {
+    // 스키마 검증을 통한 입력 검증 및 보안 강화
+    let validatedData: CreateChatRoom;
+    try {
+      validatedData = CreateChatRoomSchema.parse(requestBody);
+    } catch (validationError) {
+      console.error('Request validation failed:', validationError);
       return NextResponse.json(
-        { error: "Type and participant IDs are required" },
+        {
+          error: "Invalid request data",
+          details: validationError instanceof Error ? validationError.message : "Validation failed"
+        },
         { status: 400 }
       );
     }
 
-    // 참여자 목록 설정
-    let allParticipantIds;
-    if (type === "self") {
-      // 본인과의 채팅방인 경우 본인만 참여
-      allParticipantIds = [user.id];
-    } else {
-      // 일반 채팅방인 경우 현재 사용자 추가 (중복 제거)
-      allParticipantIds = Array.from(
-        new Set([user.id, ...participant_ids])
-      );
-    }
+    const { name, type, participant_ids } = validatedData;
 
-    console.log("Chat room creation - All participants:", {
-      allParticipantIds,
-      currentUser: user.id,
-    });
-
-    // 1:1 채팅인 경우 기존 채팅방이 있는지 확인
+    // 1:1 채팅방인 경우 PostgreSQL 함수 사용 (무한 재귀 방지)
     if (type === "direct" && participant_ids.length === 1) {
-      const { data: existingRooms } = await supabase
+      const targetUserId = participant_ids[0];
+
+      // 추가 검증 (스키마와 중복되지만 명시적 보안 강화)
+      try {
+        validateDirectChatRoom(user.id, targetUserId);
+      } catch (validationError) {
+        return NextResponse.json(
+          {
+            error: validationError instanceof Error
+              ? validationError.message
+              : "Invalid chat room creation request"
+          },
+          { status: 400 }
+        );
+      }
+
+      const { data: result, error: functionError } = await supabase
+        .rpc('create_or_get_direct_chat_room', {
+          p_current_user_id: user.id,
+          p_target_user_id: targetUserId
+        });
+
+      if (functionError) {
+        console.error('Error calling create_or_get_direct_chat_room:', functionError);
+        return NextResponse.json(
+          { error: "Failed to create direct chat room" },
+          { status: 500 }
+        );
+      }
+
+      // PostgreSQL 함수 응답 검증
+      // RPC 함수는 중첩된 객체를 반환하므로 함수명 키로 접근
+      const actualResult = result?.create_or_get_direct_chat_room || result;
+      let validatedResult: PostgreSQLFunctionResponse;
+      try {
+        validatedResult = PostgreSQLFunctionResponseSchema.parse(actualResult);
+      } catch (schemaError) {
+        console.error('PostgreSQL function response validation failed:', schemaError);
+        console.error('Received result:', result);
+        return NextResponse.json(
+          { error: "Invalid server response format" },
+          { status: 500 }
+        );
+      }
+
+      if (!validatedResult.success) {
+        return NextResponse.json(
+          { error: validatedResult.error || "Failed to create chat room" },
+          { status: 500 }
+        );
+      }
+
+      // 생성된 채팅방 정보 조회
+      const { data: createdRoom, error: fetchError } = await supabase
         .from("chat_rooms")
-        .select(
-          `
+        .select(`
+          *,
+          participants:chat_room_participants(
+            id,
+            user_id,
+            joined_at,
+            last_read_at,
+            is_admin,
+            user:profiles(id, username, avatar_url)
+          )
+        `)
+        .eq("id", validatedResult.room_id!)
+        .single();
+
+      if (fetchError) {
+        console.error("Error fetching created room:", fetchError);
+        return NextResponse.json(
+          { error: "Room created but failed to fetch details" },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json({
+        room: createdRoom,
+        is_new: validatedResult.is_new
+      });
+    }
+
+    // 그룹 채팅방 또는 기타 타입의 경우 배치 함수 사용
+    const allParticipantIds = type === "self"
+      ? [user.id]
+      : Array.from(new Set([user.id, ...participant_ids]));
+
+    // self 타입 채팅방 중복 체크
+    if (type === "self") {
+      const { data: existingSelfRoom } = await supabase
+        .from("chat_rooms")
+        .select(`
           id,
           name,
           type,
           created_at,
           updated_at,
-          participants:chat_room_participants(user_id)
-        `
-        )
-        .eq("type", "direct");
+          participants:chat_room_participants(
+            id,
+            user_id,
+            joined_at,
+            last_read_at,
+            is_admin,
+            user:profiles(id, username, avatar_url)
+          )
+        `)
+        .eq("type", "self")
+        .limit(1);
 
-      // 정확히 같은 참여자들로 구성된 1:1 채팅방이 있는지 확인
-      const existingRoom = existingRooms?.find((room: ExistingRoom) => {
-        const roomParticipants = room.participants.map(
-          (p: ExistingRoomParticipant) => p.user_id
-        );
-        return (
-          roomParticipants.length === 2 &&
-          roomParticipants.includes(user.id) &&
-          roomParticipants.includes(participant_ids[0])
-        );
+      // 기존 self 채팅방이 있는지 확인
+      const existingRoom = existingSelfRoom?.find((room: any) => {
+        const participants = room.participants || [];
+        return participants.length === 1 && participants[0]?.user_id === user.id;
       });
 
       if (existingRoom) {
@@ -251,90 +327,29 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 본인과의 채팅방인 경우 기존 채팅방이 있는지 확인
-    if (type === "self" && participant_ids.length === 1 && participant_ids[0] === user.id) {
-      const { data: existingRooms } = await supabase
-        .from("chat_rooms")
-        .select(
-          `
-          id,
-          name,
-          type,
-          created_at,
-          updated_at,
-          participants:chat_room_participants(user_id)
-        `
-        )
-        .eq("type", "self");
+    // 배치 함수를 사용한 채팅방 생성
+    const roomData = {
+      type,
+      name: name || null,
+      creator_id: user.id,
+      participant_ids: allParticipantIds
+    };
 
-      // 본인만 참여한 self 채팅방이 있는지 확인
-      const existingRoom = existingRooms?.find((room: ExistingRoom) => {
-        const roomParticipants = room.participants.map(
-          (p: ExistingRoomParticipant) => p.user_id
-        );
-        return (
-          roomParticipants.length === 1 &&
-          roomParticipants.includes(user.id)
-        );
-      });
+    const { data: batchResult, error: batchError } = await supabase
+      .rpc('create_chat_room_batch', { p_room_data: roomData });
 
-      if (existingRoom) {
-        return NextResponse.json({ room: existingRoom });
-      }
-    }
-
-    // 채팅방 생성
-    const { data: room, error: roomError } = await supabase
-      .from("chat_rooms")
-      .insert({
-        name: name || null,
-        type,
-      })
-      .select()
-      .single();
-
-    if (roomError) {
-      console.error("Error creating chat room:", roomError);
+    if (batchError || !batchResult?.success) {
+      console.error('Error calling create_chat_room_batch:', batchError);
       return NextResponse.json(
-        {
-          error: "Failed to create chat room",
-          details: roomError.message,
-          code: roomError.code,
-        },
+        { error: batchResult?.error || "Failed to create chat room" },
         { status: 500 }
       );
     }
 
-    console.log("Chat room created:", room);
-
-    // 참여자 추가
-    const participantsData = allParticipantIds.map((participantId) => ({
-      room_id: room.id,
-      user_id: participantId,
-      is_admin: participantId === user.id, // 생성자를 관리자로 설정
-    }));
-
-    const { error: participantInsertError } = await supabase
-      .from("chat_room_participants")
-      .insert(participantsData);
-
-    if (participantInsertError) {
-      console.error("Error adding participants:", participantInsertError);
-      // 채팅방 생성은 성공했지만 참여자 추가 실패 시 채팅방 삭제
-      await supabase.from("chat_rooms").delete().eq("id", room.id);
-      return NextResponse.json(
-        { error: "Failed to add participants" },
-        { status: 500 }
-      );
-    }
-
-    console.log("Participants added successfully");
-
-    // 생성된 채팅방 정보를 다시 조회해서 반환
+    // 생성된 채팅방 정보 조회
     const { data: createdRoom, error: fetchError } = await supabase
       .from("chat_rooms")
-      .select(
-        `
+      .select(`
         *,
         participants:chat_room_participants(
           id,
@@ -344,9 +359,8 @@ export async function POST(request: NextRequest) {
           is_admin,
           user:profiles(id, username, avatar_url)
         )
-      `
-      )
-      .eq("id", room.id)
+      `)
+      .eq("id", batchResult.room_id)
       .single();
 
     if (fetchError) {
@@ -357,9 +371,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log("Chat room creation completed:", createdRoom);
-
     return NextResponse.json({ room: createdRoom });
+
   } catch (error) {
     console.error("API error:", error);
     return NextResponse.json(
