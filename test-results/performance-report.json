@@ -1,0 +1,47 @@
+{
+  "summary": {
+    "totalTests": 3,
+    "passed": 2,
+    "failed": 1,
+    "averageDuration": 16661.666666666668,
+    "averageLoadTime": 0,
+    "generatedAt": "2025-09-22T14:06:56.165Z"
+  },
+  "metrics": [
+    {
+      "testName": "다양한 뷰포트에서 이모지 모달 문제 확인",
+      "projectName": "chromium-desktop",
+      "duration": 11789,
+      "status": "passed",
+      "browser": "Chrome",
+      "viewport": "1920x1080",
+      "timestamp": "2025-09-22T14:06:41.207Z"
+    },
+    {
+      "testName": "접근성 확인 - 키보드 네비게이션",
+      "projectName": "chromium-desktop",
+      "duration": 11770,
+      "status": "passed",
+      "browser": "Chrome",
+      "viewport": "1920x1080",
+      "timestamp": "2025-09-22T14:06:53.061Z"
+    },
+    {
+      "testName": "현재 이모지 모달 위치 문제 재현",
+      "projectName": "chromium-desktop",
+      "duration": 26426,
+      "status": "failed",
+      "browser": "Chrome",
+      "viewport": "1920x1080",
+      "timestamp": "2025-09-22T14:06:56.028Z"
+    }
+  ],
+  "browsers": {
+    "Chrome": 3
+  },
+  "performanceBudget": {
+    "loadTime": true,
+    "ttfb": true,
+    "lcp": true
+  }
+}

@@ -44,8 +44,8 @@ export default defineConfig({
     video: 'retain-on-failure',
     screenshot: 'only-on-failure',
 
-    /* Browser context options */
-    viewport: { width: 1280, height: 720 },
+    /* Browser context options - 더 큰 뷰포트로 실제 브라우저 환경에 가깝게 */
+    viewport: { width: 1920, height: 1080 },
     ignoreHTTPSErrors: true,
 
     /* Extended timeouts for real-time features */
@@ -127,7 +127,7 @@ export default defineConfig({
       use: {
         ...devices['Desktop Chrome'],
         channel: 'chrome',
-        viewport: { width: 1280, height: 720 },
+        viewport: { width: 1920, height: 1080 },
         colorScheme: 'dark',
         forcedColors: 'active'
       }

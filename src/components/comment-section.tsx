@@ -207,6 +207,8 @@ export function CommentSection({
               createdAt={c.created_at}
               isPostAuthor={isPostAuthor}
               postId={postId}
+              postAuthorId={postAuthorId}
+              postAnonymous={postAnonymous}
               isReply={isReply}
               images={c.images || []}
               isOptimistic={c.isOptimistic}

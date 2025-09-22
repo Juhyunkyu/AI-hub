@@ -1,0 +1,18 @@
+{
+  "thresholds": {
+    "loadTime": 3000,
+    "ttfb": 800,
+    "fcp": 1800,
+    "lcp": 2500,
+    "cls": 0.1,
+    "resourceCount": 100,
+    "memoryUsage": 52428800
+  },
+  "violations": [],
+  "summary": {
+    "totalViolations": 0,
+    "errors": 0,
+    "warnings": 0,
+    "budgetScore": 100
+  }
+}

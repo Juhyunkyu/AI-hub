@@ -1,0 +1,425 @@
+{
+  "config": {
+    "configFile": "/home/dandy02/possible/team_hub/playwright.config.ts",
+    "rootDir": "/home/dandy02/possible/team_hub/tests/e2e",
+    "forbidOnly": false,
+    "fullyParallel": true,
+    "globalSetup": "/home/dandy02/possible/team_hub/tests/utils/global-setup.ts",
+    "globalTeardown": "/home/dandy02/possible/team_hub/tests/utils/global-teardown.ts",
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "testType": "e2e",
+      "environment": "test",
+      "buildId": "local",
+      "browser": "multi-browser",
+      "actualWorkers": 2
+    },
+    "preserveOutput": "always",
+    "reporter": [
+      [
+        "html",
+        {
+          "open": "never",
+          "outputFolder": "test-results/html-report"
+        }
+      ],
+      [
+        "json",
+        {
+          "outputFile": "test-results/results.json"
+        }
+      ],
+      [
+        "junit",
+        {
+          "outputFile": "test-results/results.xml"
+        }
+      ],
+      [
+        "line",
+        null
+      ],
+      [
+        "/home/dandy02/possible/team_hub/tests/utils/performance-reporter.ts",
+        null
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "quiet": false,
+    "projects": [
+      {
+        "outputDir": "/home/dandy02/possible/team_hub/test-results/artifacts",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "testType": "e2e",
+          "environment": "test",
+          "buildId": "local",
+          "browser": "multi-browser",
+          "actualWorkers": 2
+        },
+        "id": "chromium-desktop",
+        "name": "chromium-desktop",
+        "testDir": "/home/dandy02/possible/team_hub/tests/e2e",
+        "testIgnore": [
+          "/.*\\.skip\\.spec\\.ts/"
+        ],
+        "testMatch": [
+          "/.*\\.(e2e|integration)\\.spec\\.ts/"
+        ],
+        "timeout": 60000
+      },
+      {
+        "outputDir": "/home/dandy02/possible/team_hub/test-results/artifacts",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "testType": "e2e",
+          "environment": "test",
+          "buildId": "local",
+          "browser": "multi-browser",
+          "actualWorkers": 2
+        },
+        "id": "firefox-desktop",
+        "name": "firefox-desktop",
+        "testDir": "/home/dandy02/possible/team_hub/tests/e2e",
+        "testIgnore": [
+          "/.*\\.skip\\.spec\\.ts/"
+        ],
+        "testMatch": [
+          "/.*\\.(e2e|integration)\\.spec\\.ts/"
+        ],
+        "timeout": 60000
+      },
+      {
+        "outputDir": "/home/dandy02/possible/team_hub/test-results/artifacts",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "testType": "e2e",
+          "environment": "test",
+          "buildId": "local",
+          "browser": "multi-browser",
+          "actualWorkers": 2
+        },
+        "id": "webkit-desktop",
+        "name": "webkit-desktop",
+        "testDir": "/home/dandy02/possible/team_hub/tests/e2e",
+        "testIgnore": [
+          "/.*\\.skip\\.spec\\.ts/"
+        ],
+        "testMatch": [
+          "/.*\\.(e2e|integration)\\.spec\\.ts/"
+        ],
+        "timeout": 60000
+      },
+      {
+        "outputDir": "/home/dandy02/possible/team_hub/test-results/artifacts",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "testType": "e2e",
+          "environment": "test",
+          "buildId": "local",
+          "browser": "multi-browser",
+          "actualWorkers": 2
+        },
+        "id": "tablet-chrome",
+        "name": "tablet-chrome",
+        "testDir": "/home/dandy02/possible/team_hub/tests/e2e",
+        "testIgnore": [
+          "/.*\\.skip\\.spec\\.ts/"
+        ],
+        "testMatch": [
+          "/.*\\.(e2e|integration)\\.spec\\.ts/"
+        ],
+        "timeout": 60000
+      },
+      {
+        "outputDir": "/home/dandy02/possible/team_hub/test-results/artifacts",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "testType": "e2e",
+          "environment": "test",
+          "buildId": "local",
+          "browser": "multi-browser",
+          "actualWorkers": 2
+        },
+        "id": "mobile-chrome",
+        "name": "mobile-chrome",
+        "testDir": "/home/dandy02/possible/team_hub/tests/e2e",
+        "testIgnore": [
+          "/.*\\.skip\\.spec\\.ts/"
+        ],
+        "testMatch": [
+          "/.*\\.(e2e|integration)\\.spec\\.ts/"
+        ],
+        "timeout": 60000
+      },
+      {
+        "outputDir": "/home/dandy02/possible/team_hub/test-results/artifacts",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "testType": "e2e",
+          "environment": "test",
+          "buildId": "local",
+          "browser": "multi-browser",
+          "actualWorkers": 2
+        },
+        "id": "mobile-safari",
+        "name": "mobile-safari",
+        "testDir": "/home/dandy02/possible/team_hub/tests/e2e",
+        "testIgnore": [
+          "/.*\\.skip\\.spec\\.ts/"
+        ],
+        "testMatch": [
+          "/.*\\.(e2e|integration)\\.spec\\.ts/"
+        ],
+        "timeout": 60000
+      },
+      {
+        "outputDir": "/home/dandy02/possible/team_hub/test-results/artifacts",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "testType": "e2e",
+          "environment": "test",
+          "buildId": "local",
+          "browser": "multi-browser",
+          "actualWorkers": 2
+        },
+        "id": "accessibility-desktop",
+        "name": "accessibility-desktop",
+        "testDir": "/home/dandy02/possible/team_hub/tests/e2e",
+        "testIgnore": [
+          "/.*\\.skip\\.spec\\.ts/"
+        ],
+        "testMatch": [
+          "/.*\\.(e2e|integration)\\.spec\\.ts/"
+        ],
+        "timeout": 60000
+      },
+      {
+        "outputDir": "/home/dandy02/possible/team_hub/test-results/artifacts",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "testType": "e2e",
+          "environment": "test",
+          "buildId": "local",
+          "browser": "multi-browser",
+          "actualWorkers": 2
+        },
+        "id": "performance-mobile",
+        "name": "performance-mobile",
+        "testDir": "/home/dandy02/possible/team_hub/tests/e2e",
+        "testIgnore": [
+          "/.*\\.skip\\.spec\\.ts/"
+        ],
+        "testMatch": [
+          "/.*\\.(e2e|integration)\\.spec\\.ts/"
+        ],
+        "timeout": 60000
+      }
+    ],
+    "shard": null,
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.55.0",
+    "workers": 2,
+    "webServer": {
+      "command": "npm run dev",
+      "url": "http://localhost:3000",
+      "reuseExistingServer": true,
+      "timeout": 120000,
+      "stdout": "ignore",
+      "stderr": "pipe",
+      "env": {
+        "NODE_ENV": "test",
+        "NEXT_TELEMETRY_DISABLED": "1"
+      }
+    }
+  },
+  "suites": [
+    {
+      "title": "emoji-modal-issue.e2e.spec.ts",
+      "file": "emoji-modal-issue.e2e.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "댓글 이모지 모달 UX 테스트",
+          "file": "emoji-modal-issue.e2e.spec.ts",
+          "line": 7,
+          "column": 6,
+          "specs": [
+            {
+              "title": "현재 이모지 모달 위치 문제 재현",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium-desktop",
+                  "projectName": "chromium-desktop",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 26426,
+                      "error": {
+                        "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m()\u001b[22m failed\n\nLocator:  locator('textarea[placeholder*=\"댓글\"]')\nExpected: visible\nReceived: <element(s) not found>\nTimeout:  10000ms\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" with timeout 10000ms\u001b[22m\n\u001b[2m  - waiting for locator('textarea[placeholder*=\"댓글\"]')\u001b[22m\n",
+                        "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m()\u001b[22m failed\n\nLocator:  locator('textarea[placeholder*=\"댓글\"]')\nExpected: visible\nReceived: <element(s) not found>\nTimeout:  10000ms\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" with timeout 10000ms\u001b[22m\n\u001b[2m  - waiting for locator('textarea[placeholder*=\"댓글\"]')\u001b[22m\n\n    at /home/dandy02/possible/team_hub/tests/e2e/emoji-modal-issue.e2e.spec.ts:31:35",
+                        "location": {
+                          "file": "/home/dandy02/possible/team_hub/tests/e2e/emoji-modal-issue.e2e.spec.ts",
+                          "column": 35,
+                          "line": 31
+                        },
+                        "snippet": "  29 |     // 댓글 작성 영역 찾기\n  30 |     const commentTextarea = page.locator('textarea[placeholder*=\"댓글\"]')\n> 31 |     await expect(commentTextarea).toBeVisible()\n     |                                   ^\n  32 |\n  33 |     // 댓글 작성 영역에 포커스\n  34 |     await commentTextarea.focus()"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "/home/dandy02/possible/team_hub/tests/e2e/emoji-modal-issue.e2e.spec.ts",
+                            "column": 35,
+                            "line": 31
+                          },
+                          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m()\u001b[22m failed\n\nLocator:  locator('textarea[placeholder*=\"댓글\"]')\nExpected: visible\nReceived: <element(s) not found>\nTimeout:  10000ms\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" with timeout 10000ms\u001b[22m\n\u001b[2m  - waiting for locator('textarea[placeholder*=\"댓글\"]')\u001b[22m\n\n\n  29 |     // 댓글 작성 영역 찾기\n  30 |     const commentTextarea = page.locator('textarea[placeholder*=\"댓글\"]')\n> 31 |     await expect(commentTextarea).toBeVisible()\n     |                                   ^\n  32 |\n  33 |     // 댓글 작성 영역에 포커스\n  34 |     await commentTextarea.focus()\n    at /home/dandy02/possible/team_hub/tests/e2e/emoji-modal-issue.e2e.spec.ts:31:35"
+                        }
+                      ],
+                      "stdout": [
+                        {
+                          "text": "게시물이 없어서 메인 페이지에서 테스트 진행\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-09-22T14:06:28.669Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/home/dandy02/possible/team_hub/test-results/artifacts/emoji-modal-issue.e2e-댓글-이모지-모달-UX-테스트-현재-이모지-모달-위치-문제-재현-chromium-desktop/test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "/home/dandy02/possible/team_hub/test-results/artifacts/emoji-modal-issue.e2e-댓글-이모지-모달-UX-테스트-현재-이모지-모달-위치-문제-재현-chromium-desktop/video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "/home/dandy02/possible/team_hub/test-results/artifacts/emoji-modal-issue.e2e-댓글-이모지-모달-UX-테스트-현재-이모지-모달-위치-문제-재현-chromium-desktop/error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "/home/dandy02/possible/team_hub/tests/e2e/emoji-modal-issue.e2e.spec.ts",
+                        "column": 35,
+                        "line": 31
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "37f4a25293047af5ac4f-71829a32ccf99a88b312",
+              "file": "emoji-modal-issue.e2e.spec.ts",
+              "line": 16,
+              "column": 7
+            },
+            {
+              "title": "다양한 뷰포트에서 이모지 모달 문제 확인",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium-desktop",
+                  "projectName": "chromium-desktop",
+                  "results": [
+                    {
+                      "workerIndex": 1,
+                      "parallelIndex": 1,
+                      "status": "passed",
+                      "duration": 11789,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-09-22T14:06:28.644Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "37f4a25293047af5ac4f-8b04144c0ef129ba5136",
+              "file": "emoji-modal-issue.e2e.spec.ts",
+              "line": 98,
+              "column": 7
+            },
+            {
+              "title": "접근성 확인 - 키보드 네비게이션",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium-desktop",
+                  "projectName": "chromium-desktop",
+                  "results": [
+                    {
+                      "workerIndex": 1,
+                      "parallelIndex": 1,
+                      "status": "passed",
+                      "duration": 11770,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-09-22T14:06:41.210Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "37f4a25293047af5ac4f-c5355ee1887467ac0762",
+              "file": "emoji-modal-issue.e2e.spec.ts",
+              "line": 122,
+              "column": 7
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2025-09-22T14:06:24.850Z",
+    "duration": 31235.742,
+    "expected": 2,
+    "skipped": 0,
+    "unexpected": 1,
+    "flaky": 0
+  }
+}

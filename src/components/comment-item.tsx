@@ -18,6 +18,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { formatDate } from "@/lib/utils/date-format";
+import { CommentForm } from "./comment-form";
 
 interface CommentItemProps {
   id: string;
@@ -28,6 +29,8 @@ interface CommentItemProps {
   createdAt: string;
   isPostAuthor: boolean;
   postId: string;
+  postAuthorId: string;
+  postAnonymous?: boolean;
   isReply?: boolean;
   images?: string[];
   isOptimistic?: boolean;
@@ -45,6 +48,9 @@ export function CommentItem({
   authorAvatarUrl,
   createdAt,
   isPostAuthor,
+  postId,
+  postAuthorId,
+  postAnonymous = false,
   images = [],
   isOptimistic = false,
   showActions = true,
@@ -60,6 +66,7 @@ export function CommentItem({
   const [loading, setLoading] = useState(false);
   const [liked, setLiked] = useState(false);
   const [likeCount, setLikeCount] = useState(0);
+  const [showReplyForm, setShowReplyForm] = useState(false);
 
   async function save() {
     if (!isOwner) return;
@@ -125,6 +132,14 @@ export function CommentItem({
   }
 
   const handleReply = () => {
+    if (!user) {
+      toast.error("로그인이 필요합니다");
+      return;
+    }
+    setShowReplyForm(true);
+  };
+
+  const handleReplyToBottom = () => {
     if (!user) {
       toast.error("로그인이 필요합니다");
       return;
@@ -246,7 +261,7 @@ export function CommentItem({
 
       {/* 날짜와 액션 버튼들 */}
       {!editing && (
-        <div className="flex items-center justify-between gap-2 text-[11px] sm:text-xs text-muted-foreground">
+        <div className="flex items-center gap-3 text-[11px] sm:text-xs text-muted-foreground">
           <span>
             {formatDate(createdAt)}
             {isOptimistic && (
@@ -262,6 +277,7 @@ export function CommentItem({
               className={`flex items-center gap-1 transition-colors ${
                 isOptimistic ? 'opacity-50 cursor-not-allowed' : 'hover:text-foreground'
               }`}
+              title="바로 아래에 답글 작성"
             >
               <Reply className="h-3 w-3" />
               답글
@@ -281,6 +297,26 @@ export function CommentItem({
               {likeCount > 0 && likeCount}
             </button>
           </div>
+        </div>
+      )}
+
+      {/* 인라인 답글 작성 폼 */}
+      {showReplyForm && (
+        <div className="mt-3 pl-4 sm:pl-8 border-l-2 border-muted/30">
+          <CommentForm
+            postId={postId}
+            postAuthorId={postAuthorId}
+            postAnonymous={postAnonymous}
+            replyTo={{
+              commentId: id,
+              authorUsername: authorUsername || "사용자"
+            }}
+            onCancelReply={() => setShowReplyForm(false)}
+            onSuccess={() => {
+              setShowReplyForm(false);
+              onUpdate?.();
+            }}
+          />
         </div>
       )}
     </div>

@@ -1,0 +1,255 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - banner [ref=e2]:
+    - generic [ref=e3]:
+      - generic [ref=e4]:
+        - link "AI Hub" [ref=e5] [cursor=pointer]:
+          - /url: /
+        - navigation [ref=e6]:
+          - link "자유게시판" [ref=e7] [cursor=pointer]:
+            - /url: /categories/free
+          - link "AI 물어보기" [ref=e8] [cursor=pointer]:
+            - /url: /categories/ai-qa
+          - link "AI 브리핑" [ref=e9] [cursor=pointer]:
+            - /url: /categories/ai-briefing
+          - link "바이브코딩" [ref=e10] [cursor=pointer]:
+            - /url: /categories/vibe-coding
+          - link "AI 스튜디오" [ref=e11] [cursor=pointer]:
+            - /url: /categories/ai-studio
+      - generic [ref=e12]:
+        - button "Toggle theme" [ref=e13]:
+          - img [ref=e14]
+          - generic [ref=e16]: Toggle theme
+        - link "로그인 / 회원가입" [ref=e17] [cursor=pointer]:
+          - /url: /login?redirect=%2Fposts
+          - img [ref=e18] [cursor=pointer]
+  - main [ref=e21]:
+    - generic [ref=e24]:
+      - heading "최근 게시물" [level=1] [ref=e26]
+      - list [ref=e27]:
+        - listitem [ref=e28]:
+          - generic [ref=e29]:
+            - link "너무 느린것같다 5" [ref=e30] [cursor=pointer]:
+              - /url: /posts/c4326a17-64f8-484f-b9c7-ec07d7cfa634
+              - generic [ref=e31] [cursor=pointer]: 너무 느린것같다
+              - generic [ref=e32] [cursor=pointer]: "5"
+            - generic [ref=e33]: 9/14/2025
+          - generic [ref=e34]:
+            - link "자유게시판" [ref=e35] [cursor=pointer]:
+              - /url: /categories/free
+            - generic [ref=e36]:
+              - generic [ref=e38]: 바
+              - generic [ref=e39]: · 바이브코더
+        - listitem [ref=e40]:
+          - generic [ref=e41]:
+            - link "안녕하세요 바이브 코더입니다" [ref=e42] [cursor=pointer]:
+              - /url: /posts/456f48d4-04c3-4a65-80af-9a38af0cafd3
+              - generic [ref=e43] [cursor=pointer]: 안녕하세요 바이브 코더입니다
+            - generic [ref=e44]: 9/14/2025
+          - generic [ref=e45]:
+            - link "자유게시판" [ref=e46] [cursor=pointer]:
+              - /url: /categories/free
+            - generic [ref=e47]:
+              - generic [ref=e49]: 바
+              - generic [ref=e50]: · 바이브코더
+        - listitem [ref=e51]:
+          - generic [ref=e52]:
+            - link "익명 게시글입니다 6" [ref=e53] [cursor=pointer]:
+              - /url: /posts/48f5a422-3836-4809-b6a9-fce2f56ac4ed
+              - generic [ref=e54] [cursor=pointer]: 익명 게시글입니다
+              - generic [ref=e55] [cursor=pointer]: "6"
+            - generic [ref=e56]: 9/13/2025
+          - generic [ref=e57]:
+            - link "자유게시판" [ref=e58] [cursor=pointer]:
+              - /url: /categories/free
+            - generic [ref=e59]:
+              - img [ref=e62]
+              - generic [ref=e65]: · 익명
+        - listitem [ref=e66]:
+          - generic [ref=e67]:
+            - link "일반 사용자 게시글 3" [ref=e68] [cursor=pointer]:
+              - /url: /posts/1fda769c-e69c-481f-9b5d-7054f6f48d01
+              - generic [ref=e69] [cursor=pointer]: 일반 사용자 게시글
+              - generic [ref=e70] [cursor=pointer]: "3"
+            - generic [ref=e71]: 8/28/2025
+          - generic [ref=e72]:
+            - link "자유게시판" [ref=e73] [cursor=pointer]:
+              - /url: /categories/free
+            - generic [ref=e74]:
+              - img "박할매" [ref=e76]
+              - generic [ref=e77]: · 박할매
+        - listitem [ref=e78]:
+          - generic [ref=e79]:
+            - link "ㄹㅇㄴㄹㄻㄴㅇㄻ 1" [ref=e80] [cursor=pointer]:
+              - /url: /posts/77d7f46e-5523-4da5-ab4e-71ff6e8e10f3
+              - generic [ref=e81] [cursor=pointer]: ㄹㅇㄴㄹㄻㄴㅇㄻ
+              - generic [ref=e82] [cursor=pointer]: "1"
+            - generic [ref=e83]: 8/24/2025
+          - generic [ref=e84]:
+            - link "자유게시판" [ref=e85] [cursor=pointer]:
+              - /url: /categories/free
+            - generic [ref=e86]:
+              - img "주현규" [ref=e88]
+              - generic [ref=e89]: · 주현규
+        - listitem [ref=e90]:
+          - generic [ref=e91]:
+            - link "ㄹㅇㄴㄹㄻㄴㅇㄹ" [ref=e92] [cursor=pointer]:
+              - /url: /posts/44077a7a-5dc3-4064-9418-78300604102f
+              - generic [ref=e93] [cursor=pointer]: ㄹㅇㄴㄹㄻㄴㅇㄹ
+            - generic [ref=e94]: 8/24/2025
+          - generic [ref=e95]:
+            - link "자유게시판" [ref=e96] [cursor=pointer]:
+              - /url: /categories/free
+            - generic [ref=e97]:
+              - img "주현규" [ref=e99]
+              - generic [ref=e100]: · 주현규
+        - listitem [ref=e101]:
+          - generic [ref=e102]:
+            - link "ㄹㅇㄴㅁㄹㅇㄴㄹ" [ref=e103] [cursor=pointer]:
+              - /url: /posts/5d1668a1-7f64-48c9-bcfa-80f67199afad
+              - generic [ref=e104] [cursor=pointer]: ㄹㅇㄴㅁㄹㅇㄴㄹ
+            - generic [ref=e105]: 8/24/2025
+          - generic [ref=e106]:
+            - link "자유게시판" [ref=e107] [cursor=pointer]:
+              - /url: /categories/free
+            - generic [ref=e108]:
+              - img "주현규" [ref=e110]
+              - generic [ref=e111]: · 주현규
+        - listitem [ref=e112]:
+          - generic [ref=e113]:
+            - link "ㄹㅇㄹㄹㄹㄹ" [ref=e114] [cursor=pointer]:
+              - /url: /posts/283d4d17-228a-4b41-8421-bfb008aba3cf
+              - generic [ref=e115] [cursor=pointer]: ㄹㅇㄹㄹㄹㄹ
+            - generic [ref=e116]: 8/24/2025
+          - generic [ref=e117]:
+            - link "자유게시판" [ref=e118] [cursor=pointer]:
+              - /url: /categories/free
+            - generic [ref=e119]:
+              - img "주현규" [ref=e121]
+              - generic [ref=e122]: · 주현규
+        - listitem [ref=e123]:
+          - generic [ref=e124]:
+            - link "ㅍㅊㅍㅊㅋㅍㅋㅌㅍ" [ref=e125] [cursor=pointer]:
+              - /url: /posts/bed26d35-d694-46d4-8f18-d9c7905f2047
+              - generic [ref=e126] [cursor=pointer]: ㅍㅊㅍㅊㅋㅍㅋㅌㅍ
+            - generic [ref=e127]: 8/24/2025
+          - generic [ref=e128]:
+            - link "자유게시판" [ref=e129] [cursor=pointer]:
+              - /url: /categories/free
+            - generic [ref=e130]:
+              - img "주현규" [ref=e132]
+              - generic [ref=e133]: · 주현규
+        - listitem [ref=e134]:
+          - generic [ref=e135]:
+            - link "ㅍㅊㅍㅍㅊ" [ref=e136] [cursor=pointer]:
+              - /url: /posts/c573ba3b-5b3a-4c92-ad53-1a6b4ffd7459
+              - generic [ref=e137] [cursor=pointer]: ㅍㅊㅍㅍㅊ
+            - generic [ref=e138]: 8/24/2025
+          - generic [ref=e139]:
+            - link "자유게시판" [ref=e140] [cursor=pointer]:
+              - /url: /categories/free
+            - generic [ref=e141]:
+              - img "주현규" [ref=e143]
+              - generic [ref=e144]: · 주현규
+        - listitem [ref=e145]:
+          - generic [ref=e146]:
+            - link "ㅍㅊㅌㅍ" [ref=e147] [cursor=pointer]:
+              - /url: /posts/e99b677a-689d-4778-98ec-06c053e56675
+              - generic [ref=e148] [cursor=pointer]: ㅍㅊㅌㅍ
+            - generic [ref=e149]: 8/24/2025
+          - generic [ref=e150]:
+            - link "자유게시판" [ref=e151] [cursor=pointer]:
+              - /url: /categories/free
+            - generic [ref=e152]:
+              - img "주현규" [ref=e154]
+              - generic [ref=e155]: · 주현규
+        - listitem [ref=e156]:
+          - generic [ref=e157]:
+            - link "ㅍㅊㅌㅍ" [ref=e158] [cursor=pointer]:
+              - /url: /posts/d54b4045-5a58-40d5-872c-a4e8442a5e4c
+              - generic [ref=e159] [cursor=pointer]: ㅍㅊㅌㅍ
+            - generic [ref=e160]: 8/24/2025
+          - generic [ref=e161]:
+            - link "자유게시판" [ref=e162] [cursor=pointer]:
+              - /url: /categories/free
+            - generic [ref=e163]:
+              - img "주현규" [ref=e165]
+              - generic [ref=e166]: · 주현규
+        - listitem [ref=e167]:
+          - generic [ref=e168]:
+            - link "ㅍㅊㅌㅋㅍㅍ" [ref=e169] [cursor=pointer]:
+              - /url: /posts/b4de6e8d-4078-43b3-b2a6-0bbcec85d196
+              - generic [ref=e170] [cursor=pointer]: ㅍㅊㅌㅋㅍㅍ
+            - generic [ref=e171]: 8/24/2025
+          - generic [ref=e172]:
+            - link "자유게시판" [ref=e173] [cursor=pointer]:
+              - /url: /categories/free
+            - generic [ref=e174]:
+              - img "주현규" [ref=e176]
+              - generic [ref=e177]: · 주현규
+        - listitem [ref=e178]:
+          - generic [ref=e179]:
+            - link "ㅍㅊㅌㅋㅍㅍ" [ref=e180] [cursor=pointer]:
+              - /url: /posts/18ef74fb-f210-41dc-a616-6194a7e8a625
+              - generic [ref=e181] [cursor=pointer]: ㅍㅊㅌㅋㅍㅍ
+            - generic [ref=e182]: 8/24/2025
+          - generic [ref=e183]:
+            - link "자유게시판" [ref=e184] [cursor=pointer]:
+              - /url: /categories/free
+            - generic [ref=e185]:
+              - img "주현규" [ref=e187]
+              - generic [ref=e188]: · 주현규
+        - listitem [ref=e189]:
+          - generic [ref=e190]:
+            - link "ㅍㅊㅌㅋㅍㅍㅊㅍㅊ" [ref=e191] [cursor=pointer]:
+              - /url: /posts/a6784d2b-3ccd-4d36-a723-c52abc4d576e
+              - generic [ref=e192] [cursor=pointer]: ㅍㅊㅌㅋㅍㅍㅊㅍㅊ
+            - generic [ref=e193]: 8/24/2025
+          - generic [ref=e194]:
+            - link "바이브코딩" [ref=e195] [cursor=pointer]:
+              - /url: /categories/vibe-coding
+            - generic [ref=e196]:
+              - img "주현규" [ref=e198]
+              - generic [ref=e199]: · 주현규
+      - navigation "pagination" [ref=e201]:
+        - list [ref=e202]:
+          - listitem [ref=e203]:
+            - link "1" [ref=e204] [cursor=pointer]:
+              - /url: /posts?page=1
+          - listitem [ref=e205]:
+            - link "2" [ref=e206] [cursor=pointer]:
+              - /url: /posts?page=2
+          - listitem [ref=e207]:
+            - link "3" [ref=e208] [cursor=pointer]:
+              - /url: /posts?page=3
+          - listitem [ref=e209]:
+            - link "Go to next page" [ref=e210] [cursor=pointer]:
+              - /url: /posts?page=2
+              - generic [ref=e211] [cursor=pointer]: 다음
+              - img [ref=e212] [cursor=pointer]
+  - contentinfo [ref=e214]:
+    - generic [ref=e215]:
+      - navigation [ref=e217]:
+        - link "공지사항" [ref=e218] [cursor=pointer]:
+          - /url: /notice
+        - link "이용약관" [ref=e219] [cursor=pointer]:
+          - /url: /terms
+        - link "개인정보 처리방침" [ref=e220] [cursor=pointer]:
+          - /url: /privacy
+      - generic [ref=e223]:
+        - generic [ref=e224]: ©
+        - generic [ref=e225]: possible
+        - generic [ref=e226]: "2025"
+        - generic [ref=e227]: ·
+        - generic [ref=e228]: Crafted with modern web standards.
+  - region "Notifications alt+T"
+  - generic [ref=e230]:
+    - img [ref=e232]
+    - button "Open Tanstack query devtools" [ref=e280] [cursor=pointer]:
+      - img [ref=e281] [cursor=pointer]
+  - button "Open Next.js Dev Tools" [ref=e334] [cursor=pointer]:
+    - img [ref=e335] [cursor=pointer]
+  - alert [ref=e338]
+```

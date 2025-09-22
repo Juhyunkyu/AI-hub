@@ -51,250 +51,23 @@ export function CommentForm({
   const [uploadingImages, setUploadingImages] = useState(false);
   const [emojiPage, setEmojiPage] = useState(0);
   const [isAnonymous, setIsAnonymous] = useState(postAnonymous);
+  const [emojiPopoverOpen, setEmojiPopoverOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const user = useAuthStore((s) => s.user);
   // const router = useRouter();
   const supabase = createSupabaseBrowserClient();
   const [isPending, startTransition] = useTransition();
 
-  // 이모지 데이터 (중복 제거)
+  // 인기 이모지 24개 (3줄 × 8열 최적화)
   const emojis = [
-    "😀",
-    "😃",
-    "😄",
-    "😁",
-    "😆",
-    "😅",
-    "😂",
-    "🤣",
-    "😊",
-    "😇",
-    "🙂",
-    "🙃",
-    "😉",
-    "😌",
-    "😍",
-    "🥰",
-    "😘",
-    "😗",
-    "😙",
-    "😚",
-    "😋",
-    "😛",
-    "😝",
-    "😜",
-    "🤪",
-    "🤨",
-    "🧐",
-    "🤓",
-    "😎",
-    "🤩",
-    "🥳",
-    "😏",
-    "😒",
-    "😞",
-    "😔",
-    "😟",
-    "😕",
-    "🙁",
-    "☹️",
-    "😣",
-    "😖",
-    "😫",
-    "😩",
-    "🥺",
-    "😢",
-    "😭",
-    "😤",
-    "😠",
-    "😡",
-    "🤬",
-    "🤯",
-    "😳",
-    "🥵",
-    "🥶",
-    "😱",
-    "😨",
-    "😰",
-    "😥",
-    "😓",
-    "🤗",
-    "🤔",
-    "🤭",
-    "🤫",
-    "🤥",
-    "😶",
-    "😐",
-    "😑",
-    "😯",
-    "😦",
-    "😧",
-    "😮",
-    "😲",
-    "🥱",
-    "😴",
-    "🤤",
-    "😪",
-    "😵",
-    "🤐",
-    "🥴",
-    "🤢",
-    "🤮",
-    "🤧",
-    "😷",
-    "🤒",
-    "🤕",
-    "🤑",
-    "🤠",
-    "💩",
-    "👻",
-    "💀",
-    "☠️",
-    "👽",
-    "👾",
-    "🤖",
-    "😺",
-    "😸",
-    "😹",
-    "😻",
-    "😼",
-    "😽",
-    "🙀",
-    "😿",
-    "😾",
-    "🙈",
-    "🙉",
-    "🙊",
-    "🐵",
-    "🐒",
-    "🦍",
-    "🦧",
-    "🐶",
-    "🐕",
-    "🦮",
-    "🐩",
-    "🐺",
-    "🦊",
-    "🦝",
-    "🐱",
-    "🐈",
-    "🐈‍⬛",
-    "🦁",
-    "🐯",
-    "🐅",
-    "🐆",
-    "🐴",
-    "🐎",
-    "🦄",
-    "🦓",
-    "🦌",
-    "🐮",
-    "🐂",
-    "🐃",
-    "🐄",
-    "🐷",
-    "🐖",
-    "🐗",
-    "🐽",
-    "🐏",
-    "🐑",
-    "🐐",
-    "🐪",
-    "🐫",
-    "🦙",
-    "🦒",
-    "🐘",
-    "🦏",
-    "🦛",
-    "🐭",
-    "🐁",
-    "🐀",
-    "🐹",
-    "🐰",
-    "🐇",
-    "🐿️",
-    "🦔",
-    "🦇",
-    "🐻",
-    "🐻‍❄️",
-    "🐨",
-    "🐼",
-    "🦥",
-    "🦦",
-    "🦨",
-    "🦘",
-    "🦡",
-    "🐾",
-    "🦃",
-    "🐔",
-    "🐓",
-    "🐣",
-    "🐤",
-    "🐥",
-    "🐦",
-    "🐧",
-    "🕊️",
-    "🦅",
-    "🦆",
-    "🦉",
-    "🐺",
-    "🦄",
-    "🐝",
-    "🐛",
-    "🦋",
-    "🐌",
-    "🐞",
-    "🐜",
-    "🦟",
-    "🦗",
-    "🕷️",
-    "🕸️",
-    "🦂",
-    "🐢",
-    "🐍",
-    "🦎",
-    "🦖",
-    "🦕",
-    "🐙",
-    "🦑",
-    "🦐",
-    "🦞",
-    "🦀",
-    "🐡",
-    "🐠",
-    "🐟",
-    "🐬",
-    "🐳",
-    "🐋",
-    "🦈",
-    "🐊",
-    "🐅",
-    "🐆",
-    "🦍",
-    "🐖",
-    "🐏",
-    "🐑",
-    "🐐",
-    "🦌",
-    "🐕",
-    "🐩",
-    "🦮",
-    "🐈‍⬛",
-    "🐈",
-    "😺",
-    "😸",
-    "😹",
-    "😻",
-    "😼",
-    "😽",
+    "😀", "😃", "😄", "😁", "😆", "😅", "😂", "🤣", // 1줄: 웃는 얼굴
+    "😊", "😍", "🥰", "😘", "😋", "😎", "🤔", "😢", // 2줄: 감정 표현
+    "😭", "😡", "👍", "👎", "👏", "🙏", "❤️", "🔥"  // 3줄: 인기 이모지
   ];
 
-  const emojisPerPage = 64;
-  const totalPages = Math.ceil(emojis.length / emojisPerPage);
-  const currentEmojis = emojis.slice(
-    emojiPage * emojisPerPage,
-    (emojiPage + 1) * emojisPerPage
-  );
+  // 24개 인기 이모지로 8열 × 3줄 레이아웃
+  const currentEmojis = emojis;
 
   // 답글 대상이 변경되면 텍스트 초기화
   useEffect(() => {
@@ -397,9 +170,17 @@ export function CommentForm({
     });
   };
 
-  // 이모지 추가 함수
+  // 이모지 추가 함수 (UX 개선: 자동 닫기 + 포커스 복원)
   const addEmoji = (emoji: string) => {
     setBody((prev) => prev + emoji);
+
+    // UX 개선: 이모지 선택 후 모달 자동 닫기
+    setEmojiPopoverOpen(false);
+
+    // 포커스를 텍스트 영역으로 복원 (약간의 지연을 두어 자연스럽게)
+    setTimeout(() => {
+      textareaRef.current?.focus();
+    }, 100);
   };
 
   async function submit() {
@@ -543,6 +324,7 @@ export function CommentForm({
         <div className="space-y-2">
           <div className="relative">
             <Textarea
+              ref={textareaRef}
               placeholder={
                 replyTo
                   ? `@${replyTo.authorUsername} 님에게 답글을 입력하세요...`
@@ -614,7 +396,7 @@ export function CommentForm({
                 이미지
               </Button>
 
-              <Popover>
+              <Popover open={emojiPopoverOpen} onOpenChange={setEmojiPopoverOpen}>
                 <PopoverTrigger asChild>
                   <Button
                     type="button"
@@ -627,52 +409,32 @@ export function CommentForm({
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent
-                  className="w-80 sm:w-80 w-72"
+                  className="w-80 sm:w-96"
                   side="bottom"
                   align="start"
+                  sideOffset={8}
+                  avoidCollisions={true}
+                  collisionPadding={20}
+                  sticky="always"
+                  onOpenAutoFocus={(e) => {
+                    // 첫 번째 이모지 버튼에 포커스 (접근성 개선)
+                    e.preventDefault();
+                    const firstEmojiButton = e.currentTarget.querySelector('button');
+                    firstEmojiButton?.focus();
+                  }}
                 >
-                  <div className="grid grid-cols-6 sm:grid-cols-8 gap-1 sm:gap-2">
+                  <div className="grid grid-cols-8 gap-1">
                     {currentEmojis.map((emoji) => (
                       <button
                         key={emoji}
                         onClick={() => addEmoji(emoji)}
-                        className="w-6 h-6 sm:w-8 sm:h-8 text-[15px] sm:text-lg hover:bg-muted rounded flex items-center justify-center"
+                        className="w-8 h-8 text-lg hover:bg-muted rounded-md flex items-center justify-center transition-colors"
                       >
                         {emoji}
                       </button>
                     ))}
                   </div>
-                  {totalPages > 1 && (
-                    <div className="flex justify-center mt-1 sm:mt-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() =>
-                          setEmojiPage((prev) => Math.max(0, prev - 1))
-                        }
-                        disabled={emojiPage === 0}
-                        className="text-xs px-2 sm:px-3"
-                      >
-                        이전
-                      </Button>
-                      <span className="mx-1 sm:mx-2 text-xs sm:text-sm">
-                        {emojiPage + 1} / {totalPages}
-                      </span>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() =>
-                          setEmojiPage((prev) =>
-                            Math.min(totalPages - 1, prev + 1)
-                          )
-                        }
-                        disabled={emojiPage === totalPages - 1}
-                        className="text-xs px-2 sm:px-3"
-                      >
-                        다음
-                      </Button>
-                    </div>
-                  )}
+                  {/* 페이지네이션 제거: 18개 이모지로 충분 */}
                 </PopoverContent>
               </Popover>
 
