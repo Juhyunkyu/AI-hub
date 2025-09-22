@@ -8,6 +8,7 @@ import { QueryProvider } from "@/providers/query-provider";
 import { Navbar } from "@/components/navbar";
 import { SiteFooter } from "@/components/site-footer";
 import { ServiceWorkerRegister } from "@/components/service-worker-register";
+import { WebVitalsMonitor } from "@/components/performance/WebVitalsMonitor";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -37,6 +38,7 @@ export default function RootLayout({
         <ThemeProvider>
           <QueryProvider>
             <AuthProvider>
+              <WebVitalsMonitor />
               <ServiceWorkerRegister />
               <Navbar />
               <main className="mx-auto w-full max-w-6xl px-3 sm:px-4 md:px-6 py-0 md:py-6">

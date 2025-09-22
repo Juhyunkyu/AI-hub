@@ -28,6 +28,17 @@ export default function LoginPage() {
     }
   }, [searchParams]);
 
+  // 이미 로그인된 사용자 체크 및 리다이렉트
+  useEffect(() => {
+    const checkAuth = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        router.push(redirectTo);
+      }
+    };
+    checkAuth();
+  }, [supabase, router, redirectTo]);
+
   // 에러 메시지를 한국어로 변환하는 함수
   function getErrorMessage(error: unknown): string {
     const message =
@@ -66,7 +77,8 @@ export default function LoginPage() {
     return "오류가 발생했습니다. 다시 시도해주세요";
   }
 
-  async function onSubmit() {
+  async function onSubmit(e?: React.FormEvent) {
+    e?.preventDefault();
     if (!email.trim() || !password) {
       toast.error("이메일과 비밀번호를 입력하세요");
       return;
@@ -96,6 +108,7 @@ export default function LoginPage() {
           data: {
             username: username.trim(),
           },
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
         },
       });
 
@@ -150,38 +163,50 @@ export default function LoginPage() {
       <h1 className="text-lg font-semibold">
         {mode === "login" ? "로그인" : "회원가입"}
       </h1>
-      <div className="space-y-2">
+      <form onSubmit={onSubmit} className="space-y-2">
         <Input
           type="email"
+          name="email"
           placeholder="이메일"
+          autoComplete="email"
+          required
           value={email}
           onChange={(e) => setEmail(e.target.value)}
         />
         {mode === "signup" && (
           <Input
             type="text"
+            name="username"
             placeholder="닉네임 (2자 이상)"
+            autoComplete="username"
+            required
             value={username}
             onChange={(e) => setUsername(e.target.value)}
           />
         )}
         <Input
           type="password"
+          name="password"
           placeholder="비밀번호"
+          autoComplete={mode === "login" ? "current-password" : "new-password"}
+          required
           value={password}
           onChange={(e) => setPassword(e.target.value)}
         />
         {mode === "signup" && (
           <Input
             type="password"
+            name="confirm-password"
             placeholder="비밀번호 확인"
+            autoComplete="new-password"
+            required
             value={confirm}
             onChange={(e) => setConfirm(e.target.value)}
           />
         )}
         <div className="flex gap-2">
           <Button
-            onClick={onSubmit}
+            type="submit"
             disabled={loading}
             className={
               mode === "login"
@@ -200,7 +225,7 @@ export default function LoginPage() {
             {mode === "login" ? "회원가입으로 전환" : "로그인으로 전환"}
           </Button>
         </div>
-      </div>
+      </form>
       <div className="pt-2">
         <SocialButtons />
       </div>

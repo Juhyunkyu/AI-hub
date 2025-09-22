@@ -10,6 +10,7 @@ import {
   MessageSquare,
   Settings,
   Home,
+  Activity,
 } from "lucide-react";
 
 const adminNavItems = [
@@ -32,6 +33,11 @@ const adminNavItems = [
     title: "댓글 관리",
     href: "/admin-panel/comments",
     icon: MessageSquare,
+  },
+  {
+    title: "성능 모니터링",
+    href: "/admin-panel/performance",
+    icon: Activity,
   },
   {
     title: "사이트 설정",

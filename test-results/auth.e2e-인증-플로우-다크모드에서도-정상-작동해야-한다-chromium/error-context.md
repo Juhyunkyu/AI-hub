@@ -23,7 +23,7 @@
           - img [ref=e14]
           - generic [ref=e16]: Toggle theme
         - link "로그인 / 회원가입" [ref=e17] [cursor=pointer]:
-          - /url: /login?redirect=%2Fsignup
+          - /url: /login?redirect=%2Fauth%2Flogin
           - img [ref=e18] [cursor=pointer]
   - main [ref=e21]:
     - generic [ref=e23]:
@@ -45,7 +45,11 @@
         - generic [ref=e40]: ·
         - generic [ref=e41]: Crafted with modern web standards.
   - region "Notifications alt+T"
-  - button "Open Next.js Dev Tools" [ref=e48] [cursor=pointer]:
-    - img [ref=e49] [cursor=pointer]
-  - alert [ref=e52]
+  - generic [ref=e43]:
+    - img [ref=e45]
+    - button "Open Tanstack query devtools" [ref=e93] [cursor=pointer]:
+      - img [ref=e94] [cursor=pointer]
+  - button "Open Next.js Dev Tools" [ref=e147] [cursor=pointer]:
+    - img [ref=e148] [cursor=pointer]
+  - alert [ref=e151]
 ```

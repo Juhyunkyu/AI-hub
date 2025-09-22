@@ -1,0 +1,55 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e1]:
+  - banner [ref=e2]:
+    - generic [ref=e3]:
+      - generic [ref=e4]:
+        - link "AI Hub" [active] [ref=e5] [cursor=pointer]:
+          - /url: /
+        - navigation [ref=e6]:
+          - link "자유게시판" [ref=e7] [cursor=pointer]:
+            - /url: /categories/free
+          - link "AI 물어보기" [ref=e8] [cursor=pointer]:
+            - /url: /categories/ai-qa
+          - link "AI 브리핑" [ref=e9] [cursor=pointer]:
+            - /url: /categories/ai-briefing
+          - link "바이브코딩" [ref=e10] [cursor=pointer]:
+            - /url: /categories/vibe-coding
+          - link "AI 스튜디오" [ref=e11] [cursor=pointer]:
+            - /url: /categories/ai-studio
+      - generic [ref=e12]:
+        - button "Toggle theme" [ref=e13]:
+          - img [ref=e14]
+          - generic [ref=e16]: Toggle theme
+        - link "로그인 / 회원가입" [ref=e17] [cursor=pointer]:
+          - /url: /login?redirect=%2Fauth%2Flogin
+          - img [ref=e18] [cursor=pointer]
+  - main [ref=e22]:
+    - generic [ref=e24]:
+      - heading "404" [level=1] [ref=e25]
+      - heading "This page could not be found." [level=2] [ref=e27]
+  - contentinfo [ref=e28]:
+    - generic [ref=e29]:
+      - navigation [ref=e31]:
+        - link "공지사항" [ref=e32] [cursor=pointer]:
+          - /url: /notice
+        - link "이용약관" [ref=e33] [cursor=pointer]:
+          - /url: /terms
+        - link "개인정보 처리방침" [ref=e34] [cursor=pointer]:
+          - /url: /privacy
+      - generic [ref=e37]:
+        - generic [ref=e38]: ©
+        - generic [ref=e39]: possible
+        - generic [ref=e40]: "2025"
+        - generic [ref=e41]: ·
+        - generic [ref=e42]: Crafted with modern web standards.
+  - region "Notifications alt+T"
+  - generic [ref=e44]:
+    - img [ref=e46]
+    - button "Open Tanstack query devtools" [ref=e95] [cursor=pointer]:
+      - img [ref=e96] [cursor=pointer]
+  - button "Open Next.js Dev Tools" [ref=e150] [cursor=pointer]:
+    - img [ref=e151] [cursor=pointer]
+  - alert [ref=e155]
+```
