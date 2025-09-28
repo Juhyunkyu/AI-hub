@@ -13,11 +13,15 @@ import { WebVitalsMonitor } from "@/components/performance/WebVitalsMonitor";
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
+  display: "swap",
+  preload: true,
 });
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
+  display: "swap",
+  preload: false, // Mono 폰트는 즉시 사용되지 않을 수 있으므로
 });
 
 export const metadata: Metadata = {

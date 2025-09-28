@@ -94,6 +94,13 @@ const nextConfig: NextConfig = {
   
   // Next.js 15 Performance Optimizations
   experimental: {
+    // 폰트 최적화 추가
+    fontLoaders: [
+      { loader: '@next/font/google', options: { display: 'swap' } },
+    ],
+    // Fast Refresh 안정성 개선
+    fastRefresh: true,
+    esmExternals: true,
     // Optimize package imports for better tree shaking and reduced bundle size
     optimizePackageImports: [
       // UI 라이브러리 최적화
