@@ -275,6 +275,18 @@ export const VirtualizedMessageList = forwardRef<
   }, [handleScroll]);
 
   /**
+   * 컴포넌트 마운트 시 맨 아래로 스크롤 (간단한 시작 로직)
+   */
+  useEffect(() => {
+    if (messages.length > 0 && virtualizer) {
+      // 초기 렌더링 완료 후 맨 아래로 스크롤
+      requestAnimationFrame(() => {
+        scrollToBottomImpl("instant");
+      });
+    }
+  }, [virtualizer]); // virtualizer가 준비되면 실행
+
+  /**
    * 새 메시지나 타이핑 상태 변경 시 자동 스크롤 처리
    */
   useEffect(() => {
