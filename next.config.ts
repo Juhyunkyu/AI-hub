@@ -94,13 +94,6 @@ const nextConfig: NextConfig = {
   
   // Next.js 15 Performance Optimizations
   experimental: {
-    // 폰트 최적화 추가
-    fontLoaders: [
-      { loader: '@next/font/google', options: { display: 'swap' } },
-    ],
-    // Fast Refresh 안정성 개선
-    fastRefresh: true,
-    esmExternals: true,
     // Optimize package imports for better tree shaking and reduced bundle size
     optimizePackageImports: [
       // UI 라이브러리 최적화
@@ -139,15 +132,6 @@ const nextConfig: NextConfig = {
     reactCompiler: {
       compilationMode: 'annotation', // opt-in mode for selective optimization
     },
-    // CSS 청킹 최적화 (더 적은 CSS 파일 요청)
-    cssChunking: true,
-    // 라우터 스크롤 최적화
-    optimizeRouterScrolling: true,
-    // 정적 생성 최적화
-    staticGenerationRetryCount: 1,
-    staticGenerationMaxConcurrency: 8,
-    staticGenerationMinPagesPerWorker: 25,
-
     // 추가 성능 최적화 옵션
     serverComponentsHmrCache: true, // 서버 컴포넌트 HMR 캐시
     ppr: false, // Partial Pre Rendering (아직 실험적)

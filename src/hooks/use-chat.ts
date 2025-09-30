@@ -236,8 +236,8 @@ export function useChatHook() {
 
   // 메시지 전송 (Optimistic Update + 실시간 백업)
   const sendMessage = useCallback(
-    async (content: string, roomId: string) => {
-      if (!user || !content.trim()) return;
+    async (content: string, roomId: string, file?: File) => {
+      if (!user || (!content.trim() && !file)) return;
 
       // Optimistic update - 즉시 UI에 메시지 표시
       const optimisticMessage = {
@@ -245,7 +245,7 @@ export function useChatHook() {
         room_id: roomId,
         sender_id: user.id,
         content: content.trim(),
-        message_type: "text" as const,
+        message_type: (file ? "file" : "text") as const,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
         sender: {
@@ -253,9 +253,9 @@ export function useChatHook() {
           username: user.username || "Unknown",
           avatar_url: user.avatar_url || null,
         },
-        file_url: null,
-        file_name: null,
-        file_size: null,
+        file_url: file ? URL.createObjectURL(file) : null,
+        file_name: file?.name || null,
+        file_size: file?.size || null,
         reply_to_id: null,
         reply_to: null,
         reads: [],
@@ -274,15 +274,32 @@ export function useChatHook() {
       });
 
       try {
-        const response = await fetch("/api/chat/messages", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            room_id: roomId,
-            content: content.trim(),
-            message_type: "text",
-          }),
-        });
+        let response: Response;
+
+        if (file) {
+          // 파일이 있는 경우 FormData 사용
+          const formData = new FormData();
+          formData.append('room_id', roomId);
+          formData.append('content', content.trim());
+          formData.append('message_type', 'file');
+          formData.append('file', file);
+
+          response = await fetch("/api/chat/messages", {
+            method: "POST",
+            body: formData,
+          });
+        } else {
+          // 파일이 없는 경우 기존 JSON 사용
+          response = await fetch("/api/chat/messages", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              room_id: roomId,
+              content: content.trim(),
+              message_type: "text",
+            }),
+          });
+        }
 
         if (response.ok) {
           const { message } = await response.json();

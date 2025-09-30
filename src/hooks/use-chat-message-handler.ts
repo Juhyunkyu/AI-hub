@@ -3,12 +3,14 @@ import { VirtualizedMessageListRef } from '@/components/chat/virtualized';
 
 interface UseChatMessageHandlerProps {
   currentRoom: any;
-  sendMessage: (content: string, roomId: string) => Promise<void>;
+  sendMessage: (content: string, roomId: string, file?: File) => Promise<void>;
   updateTyping: () => void;
   stopTyping: () => void;
   messages: any[];
   messagesLoading: boolean;
   isRealtimeConnected: boolean;
+  selectedFile?: File | null;
+  onFileRemove?: () => void;
 }
 
 export function useChatMessageHandler({
@@ -18,7 +20,9 @@ export function useChatMessageHandler({
   stopTyping,
   messages,
   messagesLoading,
-  isRealtimeConnected
+  isRealtimeConnected,
+  selectedFile,
+  onFileRemove
 }: UseChatMessageHandlerProps) {
   const [newMessage, setNewMessage] = useState("");
   const [messagesContainerHeight, setMessagesContainerHeight] = useState(400);
@@ -37,31 +41,44 @@ export function useChatMessageHandler({
   // 메시지 전송 핸들러
   const handleSendMessage = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!currentRoom || !newMessage.trim()) return;
+    if (!currentRoom) return;
+
+    // 메시지나 파일 중 하나라도 있어야 전송 가능
+    const hasMessage = newMessage.trim().length > 0;
+    const hasFile = selectedFile !== null;
+    if (!hasMessage && !hasFile) return;
 
     const messageContent = newMessage;
     setNewMessage("");
 
-    // 메시지 전송
-    await sendMessage(messageContent, currentRoom.id);
+    // 메시지 전송 (파일 포함)
+    await sendMessage(messageContent, currentRoom.id, selectedFile || undefined);
+
+    // 파일 제거
+    if (selectedFile && onFileRemove) {
+      onFileRemove();
+    }
 
     // 실시간 연결 상태에 관계없이 메시지 전송 후 즉시 스크롤
     setTimeout(() => scrollToBottom("smooth"), 100);
 
+    // React 19 호환성: null 체크 강화
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
-  }, [currentRoom, newMessage, sendMessage, scrollToBottom]);
+  }, [currentRoom, newMessage, selectedFile, sendMessage, onFileRemove, scrollToBottom]);
 
-  // 텍스트 입력 핸들러
+  // 텍스트 입력 핸들러 - React 19 최적화
   const handleTextareaChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const value = e.target.value;
     setNewMessage(value);
 
-    // 텍스트 에리어 높이 자동 조절
+    // 텍스트 에리어 높이 자동 조절 (null 체크 추가)
     const textarea = e.target;
-    textarea.style.height = 'auto';
-    textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
+    if (textarea) {
+      textarea.style.height = 'auto';
+      textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
+    }
 
     // 타이핑 상태 업데이트
     if (value.trim()) {
@@ -96,13 +113,14 @@ export function useChatMessageHandler({
     }
   }, [messages, messagesLoading, isRealtimeConnected, scrollToBottom]);
 
-  // 메시지 컨테이너 높이 동적 업데이트
+  // 메시지 컨테이너 높이 동적 업데이트 - React 19 최적화
   useEffect(() => {
     if (!messagesContainerRef.current) return;
 
     const updateContainerHeight = () => {
-      if (messagesContainerRef.current) {
-        const height = messagesContainerRef.current.offsetHeight;
+      const container = messagesContainerRef.current;
+      if (container) {
+        const height = container.offsetHeight;
         if (height > 0) {
           setMessagesContainerHeight(height);
         }

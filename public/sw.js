@@ -3,12 +3,10 @@
 const CACHE_NAME = 'chat-cache-v1';
 const CHAT_API_CACHE = 'chat-api-cache-v1';
 
-// 캐시할 리소스들
+// 캐시할 정적 리소스들 (API는 제외)
 const urlsToCache = [
   '/',
-  '/chat',
-  '/api/chat/rooms',
-  '/api/chat/messages'
+  '/chat'
 ];
 
 // 설치 이벤트

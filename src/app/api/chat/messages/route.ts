@@ -98,10 +98,47 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { room_id, content, message_type = "text", file_url, file_name, file_size, reply_to_id }: SendMessageData = await request.json();
+    let room_id: string;
+    let content: string;
+    let message_type: string = "text";
+    let file_url: string | null = null;
+    let file_name: string | null = null;
+    let file_size: number | null = null;
+    let reply_to_id: string | null = null;
 
-    if (!room_id || !content) {
-      return NextResponse.json({ error: "Room ID and content are required" }, { status: 400 });
+    // Content-Type 확인하여 FormData 또는 JSON 처리
+    const contentType = request.headers.get('content-type') || '';
+
+    if (contentType.includes('multipart/form-data')) {
+      // FormData 처리 (파일 업로드)
+      const formData = await request.formData();
+      room_id = formData.get('room_id') as string;
+      content = formData.get('content') as string || '';
+      message_type = formData.get('message_type') as string || 'file';
+      reply_to_id = formData.get('reply_to_id') as string || null;
+
+      const file = formData.get('file') as File | null;
+      if (file) {
+        // 파일 업로드 처리 (간단한 예시 - 실제로는 Supabase Storage 사용)
+        file_name = file.name;
+        file_size = file.size;
+        // TODO: 실제 파일 업로드 및 URL 생성 로직 구현
+        file_url = `temp://file/${file.name}`;
+      }
+    } else {
+      // JSON 처리 (일반 메시지)
+      const data: SendMessageData = await request.json();
+      room_id = data.room_id;
+      content = data.content;
+      message_type = data.message_type || "text";
+      file_url = data.file_url || null;
+      file_name = data.file_name || null;
+      file_size = data.file_size || null;
+      reply_to_id = data.reply_to_id || null;
+    }
+
+    if (!room_id || (!content && !file_url)) {
+      return NextResponse.json({ error: "Room ID and content/file are required" }, { status: 400 });
     }
 
     // 사용자가 해당 채팅방의 참여자인지 확인

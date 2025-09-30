@@ -1,8 +1,9 @@
 "use client";
 "use memo";
 
-import { useEffect, useCallback, useMemo, forwardRef, useImperativeHandle } from "react";
+import { useEffect, useCallback, useMemo, forwardRef, useImperativeHandle, useState } from "react";
 import dynamic from "next/dynamic";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useChatHook } from "@/hooks/use-chat";
 import { useNotifications } from "@/hooks/use-notifications";
 import { useChatUIState } from "@/hooks/use-chat-ui-state";
@@ -12,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Send, MoreHorizontal, Edit, Search, Plus, X, Trash2 } from "lucide-react";
+import { ArrowLeft, Send, MoreHorizontal, Edit, Search, Plus, X, Trash2, Paperclip } from "lucide-react";
 import { useAuthStore } from "@/stores/auth";
 import { formatLastMessageTime } from "@/lib/date-utils";
 import { ChatRoomAvatar } from "./chat-room-avatar";
@@ -21,6 +22,10 @@ import { RealtimeStatus } from "./realtime-status";
 import { getChatRoomDisplayName } from "@/lib/chat-utils";
 import { VirtualizedMessageList } from "./virtualized";
 import { deleteChatRooms } from "@/lib/chat-api";
+import { EmojiPicker } from "@/components/ui/emoji-picker";
+import { FilePreview } from "./file-upload-button";
+import { ChatAttachmentMenu, LocationData } from "@/components/upload";
+import { toast } from "sonner";
 // Dynamic imports for performance optimization (lazy loading)
 const UserSearchModal = dynamic(() =>
   import("./modals/user-search-modal").then(mod => ({ default: mod.UserSearchModal })), {
@@ -50,6 +55,15 @@ export interface ChatLayoutRef {
 
 export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(({ initialRoomId }, ref) => {
   const { user } = useAuthStore();
+
+  // Next.js 15 Router 훅들 - React 19 호환
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  // 초기 로드 제어 플래그
+  const [hasInitiallyLoaded, setHasInitiallyLoaded] = useState(false);
+
   const {
     rooms,
     currentRoom,
@@ -75,11 +89,56 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(({ initialR
   // 반응형 화면 크기 감지
   const { isMobile } = useResponsive();
 
+  // 파일 선택 상태 - React 19 최적화
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+
+  // 파일 선택 핸들러
+  const handleFileSelect = useCallback((files: File[]) => {
+    // 다중 파일을 지원하지만 현재는 첫 번째 파일만 사용
+    if (files.length > 0) {
+      setSelectedFile(files[0]);
+    }
+  }, []);
+
+  // 파일 제거 핸들러
+  const handleFileRemove = useCallback(() => {
+    setSelectedFile(null);
+  }, []);
+
+  // 위치 선택 핸들러
+  const handleLocationSelect = useCallback((location: LocationData) => {
+    // 위치 정보를 메시지로 전송
+    if (currentRoom) {
+      const locationMessage = `📍 위치: ${location.placeName || '현재 위치'}\n${location.address}\n${location.mapUrl || ''}`;
+      sendMessage(locationMessage, currentRoom.id);
+    }
+  }, [currentRoom, sendMessage]);
+
+  // Next.js 15 공식 패턴: URL 파라미터 안전 업데이트 - React 19 최적화
+  const createQueryString = useCallback(
+    (name: string, value: string) => {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set(name, value);
+      return params.toString();
+    },
+    [searchParams]
+  );
+
+  // URL 파라미터 제거 함수
+  const removeQueryParam = useCallback(
+    (name: string) => {
+      const params = new URLSearchParams(searchParams.toString());
+      params.delete(name);
+      return params.toString();
+    },
+    [searchParams]
+  );
+
   // UI 상태 관리
   const {
     uiState,
     updateUIState,
-    goToMainPage,
+    goToMainPage: originalGoToMainPage,
     handleBackToRooms,
     handleEditModeToggle,
     exitEditMode,
@@ -90,9 +149,24 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(({ initialR
     openParticipantsModal
   } = useChatUIState({ isMobile, currentRoom, clearCurrentRoom });
 
+  // URL 파라미터 동기화된 goToMainPage - React 19 최적화
+  const goToMainPage = useCallback(() => {
+    // 원래 UI 상태 초기화
+    originalGoToMainPage();
+
+    // URL에서 room 파라미터 제거
+    const queryString = removeQueryParam('room');
+    const newUrl = queryString ? `${pathname}?${queryString}` : pathname;
+    router.push(newUrl);
+
+    // 초기 로드 플래그 리셋
+    setHasInitiallyLoaded(false);
+  }, [originalGoToMainPage, removeQueryParam, pathname, router]);
+
   // 메시지 핸들링
   const {
     newMessage,
+    setNewMessage,
     messagesContainerHeight,
     textareaRef,
     virtualizedListRef,
@@ -108,7 +182,9 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(({ initialR
     stopTyping,
     messages,
     messagesLoading,
-    isRealtimeConnected
+    isRealtimeConnected,
+    selectedFile,
+    onFileRemove: handleFileRemove
   });
 
   // 외부에서 호출할 수 있는 함수 노출
@@ -116,18 +192,32 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(({ initialR
     goToMainPage
   }), [goToMainPage]);
 
+  // 텍스트 영역 높이 조절 헬퍼 함수
+  const adjustTextareaHeight = useCallback(() => {
+    if (textareaRef.current) {
+      const textarea = textareaRef.current;
+      textarea.style.height = 'auto';
+      textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
+    }
+  }, []);
 
-  // 초기 방 선택
+
+  // 초기 방 선택 - React 19 최적화 및 중복 방지
   useEffect(() => {
-    if (initialRoomId && rooms.length > 0) {
+    if (!hasInitiallyLoaded && initialRoomId && rooms.length > 0) {
       const targetRoom = rooms.find(room => room.id === initialRoomId);
       if (targetRoom) {
         selectRoom(targetRoom);
         markAsRead(targetRoom.id); // 초기 방 선택 시에도 읽음 처리
-        // 데스크탑에서는 리스트를 절대 숨기지 않음
+        setHasInitiallyLoaded(true); // 한 번만 실행되도록 플래그 설정
+
+        // 모바일에서 DM으로 들어온 경우 바로 채팅방으로 이동 (리스트 숨김)
+        if (isMobile) {
+          updateUIState({ showRoomList: false });
+        }
       }
     }
-  }, [initialRoomId, rooms, selectRoom, markAsRead]);
+  }, [hasInitiallyLoaded, initialRoomId, rooms, selectRoom, markAsRead, isMobile, updateUIState]);
 
   // 현재 방에서 새 메시지를 받으면 자동으로 읽음 처리
   useEffect(() => {
@@ -147,11 +237,16 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(({ initialR
     // 채팅방을 선택하면 읽음 상태로 표시
     await markAsRead(room.id);
 
+    // URL 파라미터 동기화 - Next.js 15 공식 패턴 사용
+    const newQueryString = createQueryString('room', room.id);
+    const newUrl = `${pathname}?${newQueryString}`;
+    router.push(newUrl);
+
     // 모바일에서만 리스트 숨김 (데스크탑에서는 항상 표시)
     if (isMobile) {
       updateUIState({ showRoomList: false });
     }
-  }, [selectRoom, updateUIState, isMobile, markAsRead]);
+  }, [selectRoom, markAsRead, createQueryString, pathname, router, isMobile, updateUIState]);
 
 
   const handleConfirmDelete = useCallback(async () => {
@@ -169,9 +264,12 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(({ initialR
           showDeleteConfirmModal: false
         });
 
-        // 삭제된 채팅방이 현재 선택된 채팅방이면 선택 해제
-        if (currentRoom && uiState.selectedRooms.has(currentRoom.id)) {
-          clearCurrentRoom();
+        // 삭제된 채팅방이 현재 선택된 채팅방이면 선택 해제 및 URL 동기화
+        if (currentRoom && roomIds.includes(currentRoom.id)) {
+          // 현재 방이 삭제된 경우 메인 페이지로 이동하고 URL 파라미터 제거
+          selectRoom(null);
+          const newUrl = pathname; // 쿼리 파라미터 없이 기본 경로로
+          router.push(newUrl);
           if (isMobile) {
             updateUIState({ showRoomList: true });
           }
@@ -377,7 +475,7 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(({ initialR
                     <RealtimeStatus
                       currentRoom={currentRoom}
                       realtimeConnectionState={realtimeConnectionState}
-                      realtimeError={realtimeError}
+                      realtimeError={realtimeError || undefined}
                       reconnectRealtime={reconnectRealtime}
                     />
                   </div>
@@ -425,18 +523,69 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(({ initialR
 
             {/* 메시지 입력 */}
             <div className="p-4 border-t">
+              {/* 선택된 파일 미리보기 */}
+              {selectedFile && (
+                <div className="mb-3">
+                  <FilePreview
+                    file={selectedFile}
+                    onRemove={handleFileRemove}
+                  />
+                </div>
+              )}
+
               <form onSubmit={handleSendMessage} className="flex gap-2 items-end">
+                {/* 새로운 첨부 메뉴 */}
+                <ChatAttachmentMenu
+                  onFileSelect={handleFileSelect}
+                  onLocationSelect={handleLocationSelect}
+                  onError={(error) => {
+                    console.error('첨부 파일 오류:', error);
+                    toast.error(error);
+                  }}
+                  className="mb-1"
+                />
+
+                {/* 메시지 입력창 */}
                 <Textarea
                   ref={textareaRef}
                   value={newMessage}
                   onChange={handleTextareaChange}
                   onKeyDown={handleKeyDown}
                   onBlur={stopTypingHandler} // 포커스 아웃 시 타이핑 중지
-                  placeholder="메시지를 입력하세요... (Shift+Enter: 줄바꿈, Enter: 전송)"
+                  placeholder={isMobile ? "메시지 입력..." : "메시지를 입력하세요... (Shift+Enter: 줄바꿈, Enter: 전송)"}
                   className="flex-1 min-h-[40px] max-h-[120px] resize-none overflow-y-auto"
                   rows={1}
                 />
-                <Button type="submit" size="sm" className="mb-1">
+
+                {/* 이모지 버튼 */}
+                <EmojiPicker
+                  onEmojiSelect={(emoji) => {
+                    const currentValue = newMessage;
+                    const newValue = currentValue + emoji;
+                    // React 19 최적화: 직접 상태 업데이트
+                    setNewMessage(newValue);
+
+                    // 텍스트 영역 높이 조절
+                    setTimeout(() => {
+                      adjustTextareaHeight();
+                      textareaRef.current?.focus();
+                    }, 100);
+                  }}
+                  triggerComponent={
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="mb-1 h-9 w-9 p-0 shrink-0"
+                      title="이모지 추가"
+                    >
+                      <span className="text-sm">😊</span>
+                    </Button>
+                  }
+                />
+
+                {/* 전송 버튼 */}
+                <Button type="submit" size="sm" className="mb-1 h-9 w-9 p-0 shrink-0">
                   <Send className="h-4 w-4" />
                 </Button>
               </form>

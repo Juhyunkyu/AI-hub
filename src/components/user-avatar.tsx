@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { User, MessageSquare, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AvatarUpload } from "@/components/profile/avatar-upload";
@@ -50,14 +50,14 @@ export function UserAvatar({
   const [isFollowing, setIsFollowing] = useState(false);
   const [followLoading, setFollowLoading] = useState(false);
 
-  const handleAvatarClick = () => {
+  const handleAvatarClick = useCallback(() => {
     if (isOwner) {
       setShowAvatarUpload(true);
     }
     // 비소유자는 이미지 클릭 시 아무 동작 없음 (이름에서 메뉴 사용)
-  };
+  }, [isOwner]);
 
-  const handleNameClick = () => {
+  const handleNameClick = useCallback(() => {
     if (!username) return;
 
     // 비로그인 사용자는 메뉴를 표시하지 않고 로그인 페이지로 이동
@@ -68,9 +68,9 @@ export function UserAvatar({
     }
 
     if (showActions) setShowActionsMenu((v) => !v);
-  };
+  }, [username, user, router, showActions]);
 
-  const handleMessageClick = async () => {
+  const handleMessageClick = useCallback(async () => {
     if (!user) {
       const next = `/chat`;
       router.push(`/login?next=${encodeURIComponent(next)}`);
@@ -93,6 +93,11 @@ export function UserAvatar({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             type: 'self',
+            name: null,
+            description: null,
+            avatar_url: null,
+            is_private: false,
+            max_participants: 2,
             participant_ids: [userId]
           })
         });
@@ -149,6 +154,11 @@ export function UserAvatar({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           type: 'direct',
+          name: null,
+          description: null,
+          avatar_url: null,
+          is_private: false,
+          max_participants: 2,
           participant_ids: [userId]
         })
       });
@@ -182,9 +192,9 @@ export function UserAvatar({
       const errorMessage = error instanceof Error ? error.message : '알 수 없는 오류';
       toast.error(`채팅을 시작할 수 없습니다: ${errorMessage}`);
     }
-  };
+  }, [user, userId, username, router]);
 
-  const handleProfileClick = () => {
+  const handleProfileClick = useCallback(() => {
     if (!username) {
       toast.error("이 사용자의 프로필을 볼 수 없습니다");
       setShowActionsMenu(false);
@@ -197,9 +207,9 @@ export function UserAvatar({
       router.push(`/profile/${encodeURIComponent(username)}`);
     }
     setShowActionsMenu(false);
-  };
+  }, [username, user, router]);
 
-  const handleFollowClick = async () => {
+  const handleFollowClick = useCallback(async () => {
     if (isOwner) return;
 
     setFollowLoading(true);
@@ -212,7 +222,7 @@ export function UserAvatar({
     } finally {
       setFollowLoading(false);
     }
-  };
+  }, [isOwner, isFollowing]);
 
   const AvatarComponent = (
     <div

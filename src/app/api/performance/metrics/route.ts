@@ -101,9 +101,12 @@ export async function POST(request: NextRequest) {
 
     const supabase = await createClient();
 
+    // Get current user (if logged in)
+    const { data: { user } } = await supabase.auth.getUser();
+
     // Prepare data for batch insert
     const metricsToInsert = payload.metrics.map(metric => ({
-      user_id: payload.userId || null,
+      user_id: user?.id || null, // Use actual logged in user ID or null
       session_id: payload.sessionId,
       page_url: metric.pageUrl,
       metric_type: metric.type,
