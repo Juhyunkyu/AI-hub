@@ -53,6 +53,7 @@
     "highlight.js": "^11.11.1",
     "isomorphic-dompurify": "^2.26.0",
     "konva": "^10.0.2",
+    "lodash": "^4.17.21",
     "lowlight": "^3.3.0",
     "lucide-react": "^0.539.0",
     "marked": "^16.1.2",

@@ -1,4 +1,5 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import { debounce } from 'lodash';
 import { VirtualizedMessageListRef } from '@/components/chat/virtualized';
 
 interface UseChatMessageHandlerProps {
@@ -30,6 +31,15 @@ export function useChatMessageHandler({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const virtualizedListRef = useRef<VirtualizedMessageListRef>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+
+  // Context7 Pattern: Debounce typing indicator (500ms delay, trailing edge)
+  const debouncedUpdateTyping = useMemo(() =>
+    debounce(() => {
+      updateTyping();
+    }, 500, {
+      trailing: true  // Invoke on trailing edge (after typing stops)
+    }),
+  [updateTyping]);
 
   // 메시지 스크롤 최적화 - 가상화 전용
   const scrollToBottom = useCallback((behavior: "smooth" | "instant" = "smooth") => {
@@ -80,13 +90,23 @@ export function useChatMessageHandler({
       textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
     }
 
-    // 타이핑 상태 업데이트
+    // 타이핑 상태 업데이트 - Debounced for performance
     if (value.trim()) {
-      updateTyping(); // 타이핑 시작 + 2초 후 자동 중지
+      debouncedUpdateTyping(); // Debounced: only calls after 500ms of no typing
     } else {
+      debouncedUpdateTyping.cancel(); // Cancel pending invocation
       stopTyping(); // 입력이 비어있으면 즉시 중지
     }
-  }, [updateTyping, stopTyping]);
+  }, [debouncedUpdateTyping, stopTyping]);
+
+  // Cleanup: Cancel debounced function on unmount (prevent memory leaks)
+  useEffect(() => {
+    return () => {
+      if (debouncedUpdateTyping) {
+        debouncedUpdateTyping.cancel();
+      }
+    };
+  }, [debouncedUpdateTyping]);
 
   // 키보드 이벤트 핸들러
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
