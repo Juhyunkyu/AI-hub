@@ -1,7 +1,7 @@
 "use client";
 "use memo";
 
-import { useEffect, useCallback, useMemo, forwardRef, useImperativeHandle, useState } from "react";
+import { useEffect, useCallback, useMemo, forwardRef, useImperativeHandle, useState, useRef } from "react";
 import dynamic from "next/dynamic";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useChatHook } from "@/hooks/use-chat";
@@ -24,7 +24,7 @@ import { VirtualizedMessageList } from "./virtualized";
 import { deleteChatRooms } from "@/lib/chat-api";
 import { EmojiPicker } from "@/components/ui/emoji-picker";
 import { FilePreview } from "./file-upload-button";
-import { ChatAttachmentMenu, LocationData } from "@/components/upload";
+import { ChatAttachmentMenu } from "@/components/upload";
 import { toast } from "sonner";
 // Dynamic imports for performance optimization (lazy loading)
 const UserSearchModal = dynamic(() =>
@@ -104,15 +104,6 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(({ initialR
   const handleFileRemove = useCallback(() => {
     setSelectedFile(null);
   }, []);
-
-  // 위치 선택 핸들러
-  const handleLocationSelect = useCallback((location: LocationData) => {
-    // 위치 정보를 메시지로 전송
-    if (currentRoom) {
-      const locationMessage = `📍 위치: ${location.placeName || '현재 위치'}\n${location.address}\n${location.mapUrl || ''}`;
-      sendMessage(locationMessage, currentRoom.id);
-    }
-  }, [currentRoom, sendMessage]);
 
   // Next.js 15 공식 패턴: URL 파라미터 안전 업데이트 - React 19 최적화
   const createQueryString = useCallback(
@@ -537,7 +528,6 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(({ initialR
                 {/* 새로운 첨부 메뉴 */}
                 <ChatAttachmentMenu
                   onFileSelect={handleFileSelect}
-                  onLocationSelect={handleLocationSelect}
                   onError={(error) => {
                     console.error('첨부 파일 오류:', error);
                     toast.error(error);
@@ -551,7 +541,7 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(({ initialR
                   value={newMessage}
                   onChange={handleTextareaChange}
                   onKeyDown={handleKeyDown}
-                  onBlur={stopTypingHandler} // 포커스 아웃 시 타이핑 중지
+                  onBlur={stopTypingHandler}
                   placeholder={isMobile ? "메시지 입력..." : "메시지를 입력하세요... (Shift+Enter: 줄바꿈, Enter: 전송)"}
                   className="flex-1 min-h-[40px] max-h-[120px] resize-none overflow-y-auto"
                   rows={1}
@@ -562,7 +552,6 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(({ initialR
                   onEmojiSelect={(emoji) => {
                     const currentValue = newMessage;
                     const newValue = currentValue + emoji;
-                    // React 19 최적화: 직접 상태 업데이트
                     setNewMessage(newValue);
 
                     // 텍스트 영역 높이 조절
@@ -665,6 +654,7 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(({ initialR
         onConfirm={handleConfirmDelete}
         roomCount={uiState.selectedRooms.size}
       />
+
     </div>
   );
 });

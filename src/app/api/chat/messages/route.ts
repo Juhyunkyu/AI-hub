@@ -2,6 +2,61 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
 import { SendMessageData, MessageWithSender } from "@/types/chat";
 
+// 이미지 파일인지 판단하는 헬퍼 함수
+const isImageFile = (file: File): boolean => {
+  // MIME 타입으로 판단
+  if (file.type.startsWith('image/')) {
+    return true;
+  }
+
+  // 확장자로도 판단 (fallback)
+  const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.bmp'];
+  const fileName = file.name.toLowerCase();
+  return imageExtensions.some(ext => fileName.endsWith(ext));
+};
+
+// MIME 타입으로 이미지 파일인지 판단하는 함수
+const isImageMimeType = (mimeType: string): boolean => {
+  return mimeType.startsWith('image/') ||
+         ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.bmp'].some(ext =>
+           mimeType.includes(ext.substring(1))
+         );
+};
+
+// 파일 타입 결정 함수
+const getMessageType = (file?: File, fileName?: string, mimeType?: string): "text" | "file" | "image" | "location" => {
+  if (!file && !fileName) return "text";
+
+  // 위치 공유 파일 판단 (location-*.json)
+  if (fileName && fileName.startsWith('location-') && fileName.endsWith('.json')) {
+    return "location";
+  }
+
+  // File 객체가 있는 경우
+  if (file) {
+    // 파일명으로 위치 공유 확인
+    if (file.name.startsWith('location-') && file.name.endsWith('.json')) {
+      return "location";
+    }
+    return isImageFile(file) ? "image" : "file";
+  }
+
+  // MIME 타입이나 파일명으로 판단
+  if (mimeType && isImageMimeType(mimeType)) {
+    return "image";
+  }
+
+  if (fileName) {
+    const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.bmp'];
+    const lowerFileName = fileName.toLowerCase();
+    if (imageExtensions.some(ext => lowerFileName.endsWith(ext))) {
+      return "image";
+    }
+  }
+
+  return "file";
+};
+
 // 메시지 목록 조회
 export async function GET(request: NextRequest) {
   try {
@@ -114,27 +169,47 @@ export async function POST(request: NextRequest) {
       const formData = await request.formData();
       room_id = formData.get('room_id') as string;
       content = formData.get('content') as string || '';
-      message_type = formData.get('message_type') as string || 'file';
       reply_to_id = formData.get('reply_to_id') as string || null;
 
       const file = formData.get('file') as File | null;
       if (file) {
-        // 파일 업로드 처리 (간단한 예시 - 실제로는 Supabase Storage 사용)
+        // 파일 타입을 자동으로 판단
+        message_type = getMessageType(file);
         file_name = file.name;
         file_size = file.size;
+
+        // location 타입의 경우 파일 내용을 content로 읽어서 저장
+        if (message_type === 'location') {
+          try {
+            const fileText = await file.text();
+            content = fileText; // JSON 문자열을 content에 저장
+          } catch (error) {
+            console.error('Failed to read location file:', error);
+          }
+        }
+
         // TODO: 실제 파일 업로드 및 URL 생성 로직 구현
         file_url = `temp://file/${file.name}`;
+      } else {
+        // FormData로 전송된 message_type 사용 (fallback)
+        message_type = formData.get('message_type') as string || 'text';
       }
     } else {
       // JSON 처리 (일반 메시지)
       const data: SendMessageData = await request.json();
       room_id = data.room_id;
       content = data.content;
-      message_type = data.message_type || "text";
       file_url = data.file_url || null;
       file_name = data.file_name || null;
       file_size = data.file_size || null;
       reply_to_id = data.reply_to_id || null;
+
+      // 파일 정보가 있으면 타입을 자동으로 판단
+      if (file_url || file_name) {
+        message_type = getMessageType(undefined, file_name || undefined);
+      } else {
+        message_type = data.message_type || "text";
+      }
     }
 
     if (!room_id || (!content && !file_url)) {

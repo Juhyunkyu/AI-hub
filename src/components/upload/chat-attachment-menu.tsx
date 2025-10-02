@@ -14,11 +14,10 @@ import { GalleryOption } from "./gallery-option";
 import { CameraOption } from "./camera-option";
 import { FileOption } from "./file-option";
 import { LocationOption } from "./location-option";
-import { ChatAttachmentMenuProps, LocationData } from "./types";
+import { ChatAttachmentMenuProps } from "./types";
 
 export function ChatAttachmentMenu({
   onFileSelect,
-  onLocationSelect,
   onError,
   disabled = false,
   className,
@@ -42,12 +41,6 @@ export function ChatAttachmentMenu({
     }
   }, [onFileSelect]);
 
-  // 위치 선택 처리
-  const handleLocationSelect = useCallback((location: LocationData) => {
-    onLocationSelect?.(location);
-    setIsOpen(false);
-    toast.success("위치가 선택되었습니다.");
-  }, [onLocationSelect]);
 
   // 메뉴 토글
   const toggleMenu = useCallback(() => {
@@ -80,13 +73,30 @@ export function ChatAttachmentMenu({
       />
 
       {/* 위치 공유 옵션 */}
-      {onLocationSelect && (
-        <LocationOption
-          onLocationSelect={handleLocationSelect}
-          onError={handleError}
-          disabled={disabled}
-        />
-      )}
+      <LocationOption
+        onLocationSelect={(location) => {
+          // 위치 데이터를 파일로 변환하여 전달
+          const locationData = JSON.stringify({
+            type: 'location',
+            name: location.name,
+            address: location.address,
+            coordinates: { x: location.x, y: location.y },
+            phone: location.phone,
+            url: location.url
+          });
+
+          const locationFile = new File(
+            [locationData],
+            `location-${location.name}.json`,
+            { type: 'application/json' }
+          );
+
+          handleFileSelect([locationFile]);
+        }}
+        onError={handleError}
+        disabled={disabled}
+      />
+
     </div>
   );
 

@@ -28,6 +28,25 @@ const findTempMessage = (messages: ChatMessage[], targetMessage: ChatMessage) =>
   );
 };
 
+// 이미지 파일인지 판단하는 헬퍼 함수
+const isImageFile = (file: File): boolean => {
+  // MIME 타입으로 판단
+  if (file.type.startsWith('image/')) {
+    return true;
+  }
+
+  // 확장자로도 판단 (fallback)
+  const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.bmp'];
+  const fileName = file.name.toLowerCase();
+  return imageExtensions.some(ext => fileName.endsWith(ext));
+};
+
+// 파일 타입 결정 함수
+const getMessageType = (file?: File): "text" | "file" | "image" => {
+  if (!file) return "text";
+  return isImageFile(file) ? "image" : "file";
+};
+
 export function useChatHook() {
   const { user } = useAuthStore();
   const [rooms, setRooms] = useState<ChatRoomWithParticipants[]>([]);
@@ -245,7 +264,7 @@ export function useChatHook() {
         room_id: roomId,
         sender_id: user.id,
         content: content.trim(),
-        message_type: (file ? "file" : "text") as const,
+        message_type: getMessageType(file),
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
         sender: {
@@ -281,7 +300,7 @@ export function useChatHook() {
           const formData = new FormData();
           formData.append('room_id', roomId);
           formData.append('content', content.trim());
-          formData.append('message_type', 'file');
+          formData.append('message_type', getMessageType(file));
           formData.append('file', file);
 
           response = await fetch("/api/chat/messages", {

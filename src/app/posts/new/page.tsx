@@ -20,11 +20,9 @@ import {
   List,
   Image as ImageIcon,
   Video as VideoIcon,
-  MapPin,
   Link2,
   Code2,
   Loader2,
-  Search,
   Home,
   ChevronRight,
   ChevronLeft,
@@ -41,39 +39,8 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 // 임시: 에디터 제거 상태. 후속 PRD 에디터 반영 예정.
 
-// Kakao Maps 타입(로컬 인터페이스)
-type KakaoMapsNS = {
-  LatLng: new (lat: number, lng: number) => unknown;
-  Map: new (
-    el: HTMLElement,
-    opts: { center: unknown; level: number }
-  ) => unknown;
-  Marker: new (opts: { position: unknown }) => {
-    setMap(map: unknown): void;
-  };
-  InfoWindow: new (opts: { content: string }) => {
-    open(map: unknown, marker: unknown): void;
-  };
-  load(cb: () => void): void;
-};
-
-function getKakaoMaps(): KakaoMapsNS | undefined {
-  return (
-    typeof window !== "undefined"
-      ? (window as unknown as { kakao?: { maps?: KakaoMapsNS } }).kakao?.maps
-      : undefined
-  ) as KakaoMapsNS | undefined;
-}
 
 type Category = { id: string; name: string; slug: string };
 type Topic = { id: string; name: string; category_id: string };
@@ -105,20 +72,6 @@ export default function NewPostPage() {
   const [videoUploadProgress, setVideoUploadProgress] = useState<number>(0);
   const videoXhrRef = useRef<XMLHttpRequest | null>(null);
 
-  // 장소 모달
-  const [placeOpen, setPlaceOpen] = useState(false);
-  const [placeQuery, setPlaceQuery] = useState("");
-  const [placeResults, setPlaceResults] = useState<
-    Array<{ display_name: string; lat: string; lon: string }>
-  >([]);
-  const [searchingPlace, setSearchingPlace] = useState(false);
-  const [selectedPlace, setSelectedPlace] = useState<{
-    display_name: string;
-    lat: string;
-    lon: string;
-  } | null>(null);
-  const placeMapElRef = useRef<HTMLDivElement | null>(null);
-  const placeMapObjRef = useRef<{ map: unknown; marker: unknown } | null>(null);
 
   const [categories, setCategories] = useState<Category[]>([]);
   // 주제 목록(향후 수동 선택 UI 추가 예정). 현재는 기본 주제 자동 매핑만 사용
@@ -234,102 +187,9 @@ export default function NewPostPage() {
     if (expiryView.getMonth() === 0) void ensureHolidaysForYear(year - 1);
   }, [expiryOpen, expiryView, ensureHolidaysForYear]);
 
-  async function ensureKakaoLoaded(): Promise<void> {
-    if (typeof window === "undefined") return;
-    const maps = getKakaoMaps();
-    if (maps) {
-      return new Promise<void>((resolve) => maps.load(resolve));
-    }
-    const key = process.env.NEXT_PUBLIC_KAKAO_JAVASCRIPT_KEY;
-    if (!key) return;
-    const existed = document.querySelector(
-      "script[src^='https://dapi.kakao.com/v2/maps/sdk.js']"
-    );
-    if (existed) {
-      await new Promise<void>((resolve) => getKakaoMaps()?.load(resolve));
-      return;
-    }
-    await new Promise<void>((resolve) => {
-      const s = document.createElement("script");
-      s.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${key}&autoload=false`;
-      s.async = true;
-      s.onload = () => getKakaoMaps()?.load(() => resolve());
-      document.head.appendChild(s);
-    });
-  }
 
-  function renderEditorKakaoMaps() {
-    const maps = getKakaoMaps();
-    if (!maps) return;
-    const root = editorRef.current;
-    if (!root) return;
-    const nodes = root.querySelectorAll<HTMLElement>(
-      ".kakao-map[data-provider='kakao']"
-    );
-    nodes.forEach((el) => {
-      const elWithFlag = el as HTMLElement & { _kakaoRendered?: boolean };
-      if (elWithFlag._kakaoRendered) return;
-      const lat = parseFloat(el.dataset.lat || "0");
-      const lng = parseFloat(el.dataset.lng || "0");
-      const name = el.dataset.name || "장소";
-      const zoom = parseInt(el.dataset.zoom || "3", 10);
-      if (!isFinite(lat) || !isFinite(lng)) return;
-      if (!el.style.height) el.style.height = "240px";
-      if (!el.style.borderRadius) el.style.borderRadius = "8px";
-      const center = new maps.LatLng(lat, lng);
-      const map = new maps.Map(el, { center, level: zoom });
-      const marker = new maps.Marker({ position: center });
-      marker.setMap(map);
-      const iw = new maps.InfoWindow({
-        content: `<div style='padding:6px 8px'>${name}</div>`,
-      });
-      iw.open(map, marker);
-      elWithFlag._kakaoRendered = true;
-    });
-  }
 
-  function renderPlaceModalMap() {
-    const maps = getKakaoMaps();
-    if (!maps) return;
-    const el = placeMapElRef.current;
-    if (!el) return;
-    if (!el.style.height) el.style.height = "260px";
-    if (!el.style.borderRadius) el.style.borderRadius = "8px";
-    const center = new maps.LatLng(37.5665, 126.978);
-    const map = new maps.Map(el, { center, level: 3 });
-    const marker = new maps.Marker({ position: center });
-    marker.setMap(map);
-    placeMapObjRef.current = { map, marker };
-  }
 
-  function previewPlaceOnMap(r: {
-    display_name: string;
-    lat: string;
-    lon: string;
-  }) {
-    const maps = getKakaoMaps();
-    if (!maps) return;
-    const objs = placeMapObjRef.current;
-    if (!objs) return;
-    const center = new maps.LatLng(parseFloat(r.lat), parseFloat(r.lon));
-    // kakao types minimal: use index access to avoid any
-    (
-      objs as {
-        map: { setCenter: (c: unknown) => void };
-        marker: { setMap: (m: unknown) => void };
-      }
-    ).map.setCenter(center);
-    // remove old marker
-    (
-      objs as { map: unknown; marker: { setMap: (m: unknown) => void } }
-    ).marker.setMap(null as unknown);
-    const marker = new maps.Marker({ position: center });
-    (marker as unknown as { setMap: (m: unknown) => void }).setMap(
-      (objs as { map: unknown }).map
-    );
-    placeMapObjRef.current = { map: (objs as { map: unknown }).map, marker };
-    setSelectedPlace(r);
-  }
 
   useEffect(() => {
     if (isLoading) return;
@@ -338,34 +198,20 @@ export default function NewPostPage() {
     }
   }, [isLoading, user, router]);
 
-  // 에디터 마운트 시 SDK 로드 후 기존 placeholder 렌더
+  // 에디터 마운트 시 초기 선택 저장 (본문 시작)
   useEffect(() => {
-    (async () => {
-      await ensureKakaoLoaded();
-      renderEditorKakaoMaps();
-      // 초기 선택 저장 (본문 시작)
-      const root = editorRef.current;
-      if (root) {
-        const r = document.createRange();
-        r.selectNodeContents(root);
-        r.collapse(false);
-        const s = window.getSelection();
-        s?.removeAllRanges();
-        s?.addRange(r);
-        savedRangeRef.current = r.cloneRange();
-      }
-    })();
+    const root = editorRef.current;
+    if (root) {
+      const r = document.createRange();
+      r.selectNodeContents(root);
+      r.collapse(false);
+      const s = window.getSelection();
+      s?.removeAllRanges();
+      s?.addRange(r);
+      savedRangeRef.current = r.cloneRange();
+    }
   }, []);
 
-  // 장소 모달 열릴 때 기본 지도 표시 및 선택 초기화
-  useEffect(() => {
-    if (!placeOpen) return;
-    setSelectedPlace(null);
-    (async () => {
-      await ensureKakaoLoaded();
-      setTimeout(() => renderPlaceModalMap(), 0);
-    })();
-  }, [placeOpen]);
 
   useEffect(() => {
     async function load() {
@@ -692,11 +538,6 @@ export default function NewPostPage() {
       VIDEO: new Set(["src", "controls"]),
       DIV: new Set([
         "data-placeholder",
-        "data-lat",
-        "data-lng",
-        "data-name",
-        "data-zoom",
-        "data-provider",
         "class",
         "style",
       ]),
@@ -1089,40 +930,6 @@ export default function NewPostPage() {
     }
   }
 
-  async function searchPlaces() {
-    const q = placeQuery.trim();
-    if (!q) return;
-    setSearchingPlace(true);
-    try {
-      const res = await fetch(`/api/kakao/search?q=${encodeURIComponent(q)}`);
-      if (!res.ok) throw new Error("검색 실패");
-      const j = (await res.json()) as {
-        items?: Array<{ display_name: string; lat: string; lon: string }>;
-      };
-      setPlaceResults(j.items || []);
-    } catch {
-      toast.error("장소 검색 실패");
-    } finally {
-      setSearchingPlace(false);
-    }
-  }
-
-  function insertPlace(r: { display_name: string; lat: string; lon: string }) {
-    const gmap = `https://maps.google.com/?q=${r.lat},${r.lon}`;
-    // 카카오 지도 플래이스홀더 + 캡션(링크 포함)
-    insertHtmlAtCursor(
-      `<figure class="my-2"><div class="kakao-map" style="width:100%;height:240px;border-radius:8px" data-provider="kakao" data-lat="${r.lat}" data-lng="${r.lon}" data-name="${r.display_name}" data-action="remove-figure"></div><figcaption class="text-xs text-muted-foreground"><div class="flex items-center justify-between"><span>📍 ${r.display_name} · <a href="${gmap}" target="_blank" rel="noopener noreferrer">지도로 열기</a></span><button type="button" data-action="remove-figure" contenteditable="false" class="px-2 py-1 rounded border border-border">삭제</button></div></figcaption></figure>`
-    );
-    // SDK 보장 후 즉시 미리보기 렌더
-    ensureKakaoLoaded().then(() => {
-      // 렌더는 비동기로 약간 지연하여 DOM 삽입 완료 후 실행
-      setTimeout(() => renderEditorKakaoMaps(), 0);
-    });
-    setPlaceOpen(false);
-    setPlaceQuery("");
-    setPlaceResults([]);
-    toast.success("장소가 본문에 삽입되었습니다");
-  }
 
   return (
     <div className="mx-auto max-w-4xl px-3 sm:px-4 py-4 sm:py-6 space-y-3 sm:space-y-4">
@@ -1748,23 +1555,6 @@ export default function NewPostPage() {
                 </div>
               )}
 
-              {/* 장소 */}
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    aria-label="장소"
-                    onClick={() => setPlaceOpen(true)}
-                  >
-                    <MapPin className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>장소 첨부</TooltipContent>
-              </Tooltip>
-
-              <div className="w-px h-6 bg-border mx-1" />
 
               {/* 링크 */}
               <Tooltip>
@@ -1861,95 +1651,6 @@ export default function NewPostPage() {
         </Button>
       </div>
 
-      {/* 장소 검색 모달 */}
-      <Dialog open={placeOpen} onOpenChange={setPlaceOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>장소 첨부</DialogTitle>
-            <DialogDescription>
-              지도에서 미리보고 확인 후 본문에 삽입하세요.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex gap-2">
-            <div className="relative flex-1">
-              <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                className="pl-8"
-                placeholder="장소를 입력하세요 (예: 서울시청)"
-                value={placeQuery}
-                onChange={(e) => setPlaceQuery(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    searchPlaces();
-                  }
-                }}
-              />
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={searchPlaces}
-              disabled={searchingPlace}
-            >
-              {searchingPlace ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                "검색"
-              )}
-            </Button>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div className="border rounded">
-              <div ref={placeMapElRef} />
-              <div className="p-2 text-xs text-muted-foreground">
-                {selectedPlace
-                  ? `📍 ${selectedPlace.display_name}`
-                  : "지도를 이동하거나 검색 결과를 선택하세요"}
-              </div>
-            </div>
-            <div className="max-h-64 overflow-auto border rounded">
-              {placeResults.length === 0 ? (
-                <div className="p-3 text-xs text-muted-foreground">
-                  검색 결과가 없습니다
-                </div>
-              ) : (
-                <ul className="divide-y">
-                  {placeResults.map((r, idx) => (
-                    <li key={`${r.lat}-${r.lon}-${idx}`} className={""}>
-                      <button
-                        type="button"
-                        className="w-full text-left p-3 hover:bg-muted text-sm"
-                        onClick={() => previewPlaceOnMap(r)}
-                      >
-                        {r.display_name}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </div>
-          <DialogFooter className="justify-between">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setPlaceOpen(false)}
-            >
-              닫기
-            </Button>
-            <Button
-              type="button"
-              onClick={() => {
-                if (!selectedPlace) return toast.error("장소를 선택하세요");
-                insertPlace(selectedPlace);
-              }}
-            >
-              본문에 삽입
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

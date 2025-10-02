@@ -18,20 +18,12 @@ export interface AttachmentMenuItem {
 
 export interface ChatAttachmentMenuProps {
   onFileSelect: (files: File[]) => void;
-  onLocationSelect?: (location: LocationData) => void;
   onError?: (error: string) => void;
   disabled?: boolean;
   className?: string;
   children?: React.ReactNode;
 }
 
-export interface LocationData {
-  latitude: number;
-  longitude: number;
-  address?: string;
-  placeName?: string;
-  mapUrl?: string;
-}
 
 export interface GalleryOptionProps extends FileUploadOptions {
   accept?: string;
@@ -53,11 +45,12 @@ export interface FileOptionProps extends FileUploadOptions {
 }
 
 export interface LocationOptionProps {
-  onLocationSelect: (location: LocationData) => void;
+  onLocationSelect?: (location: any) => void;
   onError?: (error: string) => void;
   disabled?: boolean;
   className?: string;
 }
+
 
 // 파일 타입 유틸리티
 export const FileTypes = {

@@ -5,14 +5,13 @@ export { ChatAttachmentMenu, CustomAttachmentMenu } from "./chat-attachment-menu
 export { GalleryOption, SimpleGalleryButton } from "./gallery-option";
 export { CameraOption, SelfieCamera, BackCamera } from "./camera-option";
 export { FileOption, DocumentFileOption, AttachmentButton } from "./file-option";
-export { LocationOption, QuickLocationButton } from "./location-option";
+export { LocationOption, SimpleLocationButton } from "./location-option";
 
 // 타입 정의
 export type {
   FileUploadOptions,
   AttachmentMenuItem,
   ChatAttachmentMenuProps,
-  LocationData,
   GalleryOptionProps,
   CameraOptionProps,
   FileOptionProps,

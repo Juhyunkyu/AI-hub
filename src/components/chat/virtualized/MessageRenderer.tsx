@@ -1,11 +1,14 @@
 "use client";
 
-import { memo, useMemo, CSSProperties } from "react";
+import { memo, useMemo, useEffect, type CSSProperties } from "react";
 import Image from "next/image";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
 import { formatMessageTime } from "@/lib/date-utils";
 import type { ChatMessage } from "@/types/chat";
-import { FileIcon, ImageIcon, ReplyIcon } from "lucide-react";
+import { FileIcon, ImageIcon, ReplyIcon, Download, MapPin } from "lucide-react";
+import { ClickableImage } from "@/components/shared/image-lightbox";
+import { loadKakaoMaps } from "@/lib/kakao-maps-loader";
 
 interface MessageData {
   messages: ChatMessage[];
@@ -115,12 +118,13 @@ const MessageContent = memo(({
         <div className="space-y-2">
           {message.file_url ? (
             <div className="relative max-w-sm">
-              <Image
+              <ClickableImage
                 src={message.file_url}
                 alt={message.file_name || "이미지"}
                 width={300}
                 height={200}
-                className="rounded-lg max-h-64 w-auto object-cover"
+                className="rounded-lg"
+                fileName={message.file_name}
                 priority={false}
                 unoptimized={true}
                 onLoad={() => {
@@ -143,9 +147,30 @@ const MessageContent = memo(({
       );
 
     case 'file':
+      const handleFileDownload = async () => {
+        if (!message.file_url) return;
+
+        try {
+          const response = await fetch(message.file_url);
+          const blob = await response.blob();
+          const url = window.URL.createObjectURL(blob);
+
+          const link = document.createElement("a");
+          link.href = url;
+          link.download = message.file_name || `file-${Date.now()}`;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+
+          window.URL.revokeObjectURL(url);
+        } catch (error) {
+          console.error("파일 다운로드 실패:", error);
+        }
+      };
+
       return (
         <div className="space-y-2">
-          <div className="flex items-center gap-3 p-3 border rounded-lg bg-muted/50 max-w-xs">
+          <div className="flex items-center gap-3 p-3 border rounded-lg bg-muted/50 max-w-xs group">
             <FileIcon className="h-5 w-5 text-muted-foreground flex-shrink-0" />
             <div className="min-w-0 flex-1">
               <div className="text-sm font-medium truncate">
@@ -157,12 +182,49 @@ const MessageContent = memo(({
                 </div>
               )}
             </div>
+            {message.file_url && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleFileDownload}
+                className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 p-0"
+                aria-label="다운로드"
+              >
+                <Download className="h-4 w-4" />
+              </Button>
+            )}
           </div>
           {message.content && (
             <div className="text-sm">
               {highlightText(message.content, searchQuery)}
             </div>
           )}
+        </div>
+      );
+
+    case 'location':
+      // 위치 데이터 JSON 파싱
+      let locationData = null;
+      try {
+        // file_name에서 location data 추출하거나 content에서 파싱
+        const jsonStr = message.content || message.file_name || '';
+        if (jsonStr.includes('"type":"location"')) {
+          locationData = JSON.parse(jsonStr);
+        }
+      } catch (error) {
+        console.warn('Failed to parse location data:', error);
+      }
+
+      if (locationData && locationData.type === 'location') {
+        // LocationMessage 컴포넌트 사용 (카카오맵 통합)
+        return <LocationMessage message={message} locationData={locationData} />;
+      }
+
+      // 위치 데이터가 아닌 경우 일반 파일로 표시
+      return (
+        <div className="flex items-center gap-3 p-3 border rounded-lg bg-muted/50 max-w-xs">
+          <MapPin className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+          <div className="text-sm">위치 정보</div>
         </div>
       );
 
@@ -177,6 +239,119 @@ const MessageContent = memo(({
 });
 
 MessageContent.displayName = 'MessageContent';
+
+/**
+ * 위치 메시지 컴포넌트 (카카오맵 통합)
+ */
+interface LocationMessageProps {
+  message: ChatMessage;
+  locationData: {
+    type: string;
+    name: string;
+    address: string;
+    coordinates: { x: string; y: string };
+    phone?: string;
+    url?: string;
+  };
+}
+
+const LocationMessage = memo(({ message, locationData }: LocationMessageProps) => {
+  // 카카오맵 초기화
+  useEffect(() => {
+    let isCancelled = false;
+
+    const initializeMap = async () => {
+      try {
+        // Kakao Maps SDK 로드
+        const kakaoAPI = await loadKakaoMaps();
+
+        if (isCancelled) return;
+
+        const container = document.getElementById(`map-${message.id}`);
+        if (!container) return;
+
+        // 지도 옵션 (Context7 문서 기반)
+        const options = {
+          center: new kakaoAPI.maps.LatLng(
+            parseFloat(locationData.coordinates.y), // latitude
+            parseFloat(locationData.coordinates.x)  // longitude
+          ),
+          level: 3, // 확대 레벨
+          draggable: false, // 드래그 비활성화 (성능)
+          scrollwheel: false, // 스크롤 줌 비활성화
+          disableDoubleClickZoom: true, // 더블클릭 줌 비활성화
+        };
+
+        // 지도 생성
+        const map = new kakaoAPI.maps.Map(container, options);
+
+        // 마커 생성 및 표시
+        const marker = new kakaoAPI.maps.Marker({
+          position: options.center,
+          map: map,
+        });
+
+        console.log(`✅ 카카오맵 초기화 완료: ${locationData.name}`);
+      } catch (error) {
+        if (!isCancelled) {
+          console.error('카카오맵 초기화 실패:', error);
+        }
+      }
+    };
+
+    initializeMap();
+
+    // Cleanup 함수
+    return () => {
+      isCancelled = true;
+    };
+  }, [message.id, locationData]);
+
+  return (
+    <div className="space-y-2 w-full">
+      {/* 위치 정보 카드 - 한 줄로 표시 */}
+      <div className="flex items-center gap-2 px-3 py-2 border rounded-lg bg-background/80 backdrop-blur-sm w-full">
+        <MapPin className="h-4 w-4 text-blue-500 flex-shrink-0" />
+        <div className="min-w-0 flex-1 flex items-center gap-2 text-xs">
+          <span className="font-semibold text-foreground truncate">{locationData.name}</span>
+          <span className="text-foreground/60">·</span>
+          <span className="text-foreground/70 truncate">{locationData.address}</span>
+          {locationData.phone && (
+            <>
+              <span className="text-foreground/60">·</span>
+              <span className="text-foreground/70 flex-shrink-0">📞 {locationData.phone}</span>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* 카카오맵 표시 영역 - 더 큰 높이 */}
+      <div className="w-full h-48 bg-muted rounded-lg overflow-hidden border">
+        <div
+          id={`map-${message.id}`}
+          className="w-full h-full"
+          style={{ minHeight: '192px' }}
+        />
+      </div>
+
+      {/* 카카오맵으로 보기 버튼 - 가독성 개선 */}
+      {locationData.url && (
+        <div className="flex justify-end">
+          <Button
+            variant="default"
+            size="sm"
+            onClick={() => window.open(locationData.url, '_blank')}
+            className="text-sm font-medium"
+          >
+            카카오맵에서 보기
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+});
+
+LocationMessage.displayName = 'LocationMessage';
 
 /**
  * 답글 프리뷰 컴포넌트
@@ -294,7 +469,9 @@ const MessageRendererBase = ({
       style={containerStyle}
       className={`${isHighlighted ? 'bg-yellow-50 dark:bg-yellow-950/20' : ''}`}
     >
-      <div className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'} gap-2 w-full`}>
+      <div className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'} gap-2 ${
+        message.message_type === 'location' ? 'w-full' : 'w-full'
+      }`}>
         {/* 아바타 (내 메시지가 아니고 그룹핑 조건을 만족하는 경우만) */}
         {!isOwnMessage && showAvatar ? (
           <Avatar className="h-8 w-8 flex-shrink-0 mt-1">
@@ -306,10 +483,14 @@ const MessageRendererBase = ({
           </Avatar>
         ) : !isOwnMessage ? (
           /* 아바타 자리 플레이스홀더 (메시지 정렬을 위해) */
-          <div className="w-8 h-8 flex-shrink-0" />
+          <div className={`flex-shrink-0 ${message.message_type === 'location' ? 'w-0' : 'w-8 h-8'}`} />
         ) : null}
 
-        <div className={`flex flex-col ${isOwnMessage ? 'items-end' : 'items-start'} max-w-[70%] min-w-0 flex-shrink-0`}>
+        <div className={`flex flex-col ${isOwnMessage ? 'items-end' : 'items-start'} ${
+          message.message_type === 'location'
+            ? 'flex-1 max-w-[83%]'
+            : 'max-w-[75%] sm:max-w-[80%]'
+        } min-w-0 ${message.message_type === 'location' ? '' : 'flex-shrink-0'}`}>
           {/* 사용자명 (내 메시지가 아니고 그룹핑 조건을 만족하는 경우만) */}
           {!isOwnMessage && showUsername && (
             <div className="text-xs text-muted-foreground mb-2">
@@ -318,9 +499,11 @@ const MessageRendererBase = ({
           )}
 
           {/* 메시지 컨테이너 - 시간 분리된 깔끔한 구조 */}
-          <div className="relative">
+          <div className={`relative ${message.message_type === 'location' ? 'w-full' : ''}`}>
             {/* 메시지 버블 */}
-            <div className={`px-3 py-2 rounded-lg inline-block ${
+            <div className={`rounded-lg ${
+              message.message_type === 'location' ? 'block w-full p-0 min-w-full' : 'inline-block px-3 py-2'
+            } ${
               isOwnMessage
                 ? 'bg-primary text-primary-foreground'
                 : 'bg-muted text-foreground'
