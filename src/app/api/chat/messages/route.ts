@@ -188,8 +188,42 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        // TODO: 실제 파일 업로드 및 URL 생성 로직 구현
-        file_url = `temp://file/${file.name}`;
+        // 실제 파일 업로드 (이미지/파일)
+        if (message_type === 'image' || message_type === 'file') {
+          try {
+            // 파일을 Blob으로 변환
+            const arrayBuffer = await file.arrayBuffer();
+            const blob = new Blob([arrayBuffer], { type: file.type });
+
+            // 파일 경로 생성
+            const ext = (file.name.split(".").pop() || "file").toLowerCase();
+            const path = `chat/${user.id}/${Date.now()}.${ext}`;
+
+            // Supabase Storage에 업로드
+            const { error: uploadError } = await supabase.storage
+              .from("posts")
+              .upload(path, blob, {
+                upsert: true,
+                contentType: file.type,
+                cacheControl: "3600",
+              });
+
+            if (uploadError) {
+              console.error('File upload error:', uploadError);
+              throw uploadError;
+            }
+
+            // 공개 URL 가져오기
+            const { data: urlData } = supabase.storage
+              .from("posts")
+              .getPublicUrl(path);
+
+            file_url = urlData.publicUrl;
+          } catch (error) {
+            console.error('Failed to upload file:', error);
+            return NextResponse.json({ error: "파일 업로드 실패" }, { status: 500 });
+          }
+        }
       } else {
         // FormData로 전송된 message_type 사용 (fallback)
         message_type = formData.get('message_type') as string || 'text';

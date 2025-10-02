@@ -507,6 +507,8 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(({ initialR
                   className="h-full"
                   typingUsers={typingUsers}
                   participants={currentRoom?.participants}
+                  sendMessage={sendMessage}
+                  currentRoomId={currentRoom?.id}
                 />
               )}
             </div>

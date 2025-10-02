@@ -1,0 +1,44 @@
+
+> web@0.1.0 build
+> next build
+
+   ▲ Next.js 15.4.6
+   - Environments: .env.local
+   - Experiments (use with caution):
+     · reactCompiler
+     · optimizePackageImports
+
+   Creating an optimized production build ...
+ ⚠ Compiled with warnings in 39.0s
+
+./node_modules/@supabase/realtime-js/dist/module/lib/websocket-factory.js
+Critical dependency: the request of a dependency is an expression
+
+Import trace for requested module:
+./node_modules/@supabase/realtime-js/dist/module/lib/websocket-factory.js
+./node_modules/@supabase/realtime-js/dist/module/index.js
+./node_modules/@supabase/supabase-js/dist/module/index.js
+./node_modules/@supabase/ssr/dist/module/createBrowserClient.js
+./node_modules/@supabase/ssr/dist/module/index.js
+./src/app/api/chat/read/route.ts
+
+   Skipping validation of types
+   Skipping linting
+   Collecting page data ...
+   Generating static pages (0/49) ...
+   Generating static pages (12/49) 
+   Generating static pages (24/49) 
+ ⨯ useSearchParams() should be wrapped in a suspense boundary at page "/chat". Read more: https://nextjs.org/docs/messages/missing-suspense-with-csr-bailout
+    at g (/home/dandy02/possible/team_hub/.next/server/chunks/vendors-4a7382ad.js:1:3191)
+    at l (/home/dandy02/possible/team_hub/.next/server/chunks/vendors-4c7823de.js:1:4496)
+    at hA (/home/dandy02/possible/team_hub/.next/server/app/chat/page.js:24:6620)
+    at n4 (/home/dandy02/possible/team_hub/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:2:81697)
+    at n8 (/home/dandy02/possible/team_hub/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:2:83467)
+    at n9 (/home/dandy02/possible/team_hub/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:2:103676)
+    at n5 (/home/dandy02/possible/team_hub/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:2:101094)
+    at n3 (/home/dandy02/possible/team_hub/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:2:82049)
+    at n8 (/home/dandy02/possible/team_hub/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:2:83513)
+    at n8 (/home/dandy02/possible/team_hub/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:2:100435)
+Error occurred prerendering page "/chat". Read more: https://nextjs.org/docs/messages/prerender-error
+Export encountered an error on /chat/page: /chat, exiting the build.
+ ⨯ Next.js build worker exited with code: 1 and signal: null

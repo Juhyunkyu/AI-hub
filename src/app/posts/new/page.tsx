@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback, Suspense } from "react";
 // dynamic import 제거됨
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -45,7 +45,7 @@ import {
 type Category = { id: string; name: string; slug: string };
 type Topic = { id: string; name: string; category_id: string };
 
-export default function NewPostPage() {
+function NewPostForm() {
   const router = useRouter();
   const params = useSearchParams();
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
@@ -1652,5 +1652,23 @@ export default function NewPostPage() {
       </div>
 
     </div>
+  );
+}
+
+export default function NewPostPage() {
+  return (
+    <Suspense fallback={
+      <div className="container mx-auto py-4 px-4 max-w-4xl">
+        <div className="flex items-center gap-2 mb-4">
+          <div className="h-6 bg-muted rounded animate-pulse w-32" />
+        </div>
+        <div className="space-y-4">
+          <div className="h-10 bg-muted rounded animate-pulse" />
+          <div className="h-64 bg-muted rounded animate-pulse" />
+        </div>
+      </div>
+    }>
+      <NewPostForm />
+    </Suspense>
   );
 }

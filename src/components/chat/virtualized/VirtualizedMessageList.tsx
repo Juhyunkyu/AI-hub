@@ -37,6 +37,9 @@ interface VirtualizedMessageListProps {
       avatar_url?: string | null;
     };
   }[];
+  // 이미지 편집 전송용 props 추가
+  sendMessage?: (content: string, roomId: string, file?: File) => Promise<void>;
+  currentRoomId?: string;
 }
 
 export interface VirtualizedMessageListRef {
@@ -71,7 +74,9 @@ export const VirtualizedMessageList = forwardRef<
   highlightIndices = [],
   className = "",
   typingUsers = [],
-  participants = []
+  participants = [],
+  sendMessage,
+  currentRoomId
 }, ref) => {
   // Refs
   const parentRef = useRef<HTMLDivElement>(null);
@@ -156,8 +161,10 @@ export const VirtualizedMessageList = forwardRef<
     messages,
     currentUserId,
     searchQuery,
-    highlightIndices
-  }), [messages, currentUserId, searchQuery, highlightIndices]);
+    highlightIndices,
+    sendMessage,
+    currentRoomId
+  }), [messages, currentUserId, searchQuery, highlightIndices, sendMessage, currentRoomId]);
 
   /**
    * 스크롤을 맨 아래로 이동

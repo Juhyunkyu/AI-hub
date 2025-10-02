@@ -16,6 +16,8 @@ interface MessageData {
   searchQuery?: string;
   highlightIndices?: number[];
   onLoadImage?: (messageId: string) => void;
+  sendMessage?: (content: string, roomId: string, file?: File) => Promise<void>;
+  currentRoomId?: string;
 }
 
 /**
@@ -89,10 +91,14 @@ interface MessageRendererProps {
  */
 const MessageContent = memo(({
   message,
-  searchQuery
+  searchQuery,
+  sendMessage,
+  currentRoomId
 }: {
   message: ChatMessage;
   searchQuery?: string;
+  sendMessage?: (content: string, roomId: string, file?: File) => Promise<void>;
+  currentRoomId?: string;
 }) => {
   // 검색어 하이라이트 함수
   const highlightText = (text: string, query?: string) => {
@@ -129,6 +135,29 @@ const MessageContent = memo(({
                 unoptimized={true}
                 onLoad={() => {
                   // TanStack Virtual이 자동으로 높이를 재측정합니다
+                }}
+                enableDrawing={true}
+                onSend={async (imageDataUrl: string, fileName: string) => {
+                  if (!sendMessage || !currentRoomId) {
+                    console.warn('⚠️ sendMessage or currentRoomId not available');
+                    return;
+                  }
+
+                  try {
+                    // Data URL을 Blob으로 변환
+                    const response = await fetch(imageDataUrl);
+                    const blob = await response.blob();
+
+                    // Blob을 File 객체로 변환 (편집된 이미지는 PNG로 저장)
+                    const editedFile = new File([blob], fileName, { type: 'image/png' });
+
+                    // 채팅 메시지로 전송
+                    await sendMessage('', currentRoomId, editedFile);
+
+                    console.log('✅ Edited image sent successfully:', fileName);
+                  } catch (error) {
+                    console.error('❌ Failed to send edited image:', error);
+                  }
                 }}
               />
               {message.content && (
@@ -393,7 +422,9 @@ const MessageRendererBase = ({
     messages,
     currentUserId,
     searchQuery,
-    highlightIndices = []
+    highlightIndices = [],
+    sendMessage,
+    currentRoomId
   } = data;
 
   const message = messages[index];
@@ -525,7 +556,12 @@ const MessageRendererBase = ({
               <ReplyPreview replyToMessage={replyToMessage} />
 
               {/* 메시지 컨텐츠 */}
-              <MessageContent message={message} searchQuery={searchQuery} />
+              <MessageContent
+                message={message}
+                searchQuery={searchQuery}
+                sendMessage={sendMessage}
+                currentRoomId={currentRoomId}
+              />
             </div>
 
             {/* 시간 표시 - absolute 포지셔닝으로 버블 외부에 배치 */}

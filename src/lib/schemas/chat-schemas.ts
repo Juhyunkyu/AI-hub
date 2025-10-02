@@ -9,7 +9,7 @@
  */
 
 import { z } from 'zod';
-import { UUIDSchema, TimestampSchema, URLSchema } from './index';
+import { UUIDSchema, TimestampSchema, URLSchema } from './base';
 
 // ============================================================================
 // Chat Enum Schemas

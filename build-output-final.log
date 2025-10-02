@@ -1,0 +1,39 @@
+
+> web@0.1.0 build
+> next build
+
+   ▲ Next.js 15.4.6
+   - Environments: .env.local
+   - Experiments (use with caution):
+     · reactCompiler
+     · optimizePackageImports
+
+   Creating an optimized production build ...
+ ⚠ Compiled with warnings in 52s
+
+./node_modules/@supabase/realtime-js/dist/module/lib/websocket-factory.js
+Critical dependency: the request of a dependency is an expression
+
+Import trace for requested module:
+./node_modules/@supabase/realtime-js/dist/module/lib/websocket-factory.js
+./node_modules/@supabase/realtime-js/dist/module/index.js
+./node_modules/@supabase/supabase-js/dist/module/index.js
+./node_modules/@supabase/ssr/dist/module/createBrowserClient.js
+./node_modules/@supabase/ssr/dist/module/index.js
+./src/app/api/chat/read/route.ts
+
+   Skipping validation of types
+   Skipping linting
+   Collecting page data ...
+ReferenceError: Cannot access 'J' before initialization
+    at 42452 (.next/server/app/api/chat/rooms/route.js:1:2111)
+    at c (.next/server/webpack-runtime.js:1:128)
+    at <unknown> (.next/server/app/api/chat/rooms/route.js:48:6771)
+    at c.X (.next/server/webpack-runtime.js:1:1876)
+    at <unknown> (.next/server/app/api/chat/rooms/route.js:48:6626)
+    at Object.<anonymous> (.next/server/app/api/chat/rooms/route.js:48:6803)
+
+> Build error occurred
+[Error: Failed to collect page data for /api/chat/rooms] {
+  type: 'Error'
+}
