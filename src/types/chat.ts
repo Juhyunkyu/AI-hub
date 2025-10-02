@@ -25,7 +25,7 @@ export interface ChatMessage {
   room_id: string;
   sender_id: string;
   content: string;
-  message_type: 'text' | 'image' | 'file';
+  message_type: 'text' | 'image' | 'file' | 'location';
   file_url?: string;
   file_name?: string;
   file_size?: number;
@@ -54,7 +54,7 @@ export interface MessageWithSender {
   room_id: string;
   sender_id: string;
   content: string;
-  message_type: 'text' | 'image' | 'file';
+  message_type: 'text' | 'image' | 'file' | 'location';
   file_url?: string;
   file_name?: string;
   file_size?: number;
@@ -99,7 +99,7 @@ export interface CreateChatRoomData {
 export interface SendMessageData {
   room_id: string;
   content: string;
-  message_type?: 'text' | 'image' | 'file';
+  message_type?: 'text' | 'image' | 'file' | 'location';
   file_url?: string;
   file_name?: string;
   file_size?: number;

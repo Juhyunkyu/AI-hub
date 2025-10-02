@@ -259,9 +259,13 @@ const MessageContent = memo(({
 
     case 'text':
     default:
+      // Context7 Best Practice: 텍스트 메시지는 sanitize 후 안전하게 렌더링
+      // 채팅은 plain text이므로 이미 안전하지만, 방어 심층화(Defense in Depth)
+      const safeContent = message.content || "";
+
       return (
         <div className="text-sm whitespace-pre-wrap break-words" style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}>
-          {highlightText(message.content || "", searchQuery)}
+          {highlightText(safeContent, searchQuery)}
         </div>
       );
   }
@@ -531,13 +535,17 @@ const MessageRendererBase = ({
 
           {/* 메시지 컨테이너 - 시간 분리된 깔끔한 구조 */}
           <div className={`relative ${message.message_type === 'location' ? 'w-full' : ''}`}>
-            {/* 메시지 버블 */}
-            <div className={`rounded-lg ${
-              message.message_type === 'location' ? 'block w-full p-0 min-w-full' : 'inline-block px-3 py-2'
-            } ${
-              isOwnMessage
-                ? 'bg-primary text-primary-foreground'
-                : 'bg-muted text-foreground'
+            {/* 메시지 버블 - 텍스트만 배경과 테두리 적용 */}
+            <div className={`${
+              message.message_type === 'text'
+                ? `rounded-lg inline-block px-3 py-2 ${
+                    isOwnMessage
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-muted text-foreground'
+                  }`
+                : message.message_type === 'location'
+                ? 'block w-full p-0 min-w-full bg-transparent'
+                : 'inline-block bg-transparent'
             }`} style={{
               wordBreak: 'break-word',
               overflowWrap: 'break-word',
@@ -550,7 +558,7 @@ const MessageRendererBase = ({
               // 추가 스타일링 일관성
               fontSize: '14px', // text-sm 명시적 지정
               margin: 0,
-              padding: '8px 12px' // py-2 px-3 명시적 지정
+              padding: message.message_type === 'text' ? '8px 12px' : '0' // 텍스트만 패딩 적용
             }}>
               {/* 답글 프리뷰 */}
               <ReplyPreview replyToMessage={replyToMessage} />

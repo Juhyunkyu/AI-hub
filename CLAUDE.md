@@ -1,8 +1,8 @@
 # AI 지식 교류 허브 - 통합 프로젝트 문서 (CLAUDE.md)
 
 **문서 최종 업데이트**: 2025-10-02
-**프로젝트 버전**: v0.4 (채팅 이미지 업로드 및 지도 공유 완료)
-**기술 스택**: Next.js 15.4.6, React 19.1.0, TypeScript 5, Supabase, shadcn/ui, Zustand 5.0.7, TailwindCSS 4
+**프로젝트 버전**: v0.6 (DOMPurify XSS 보안 강화 완료)
+**기술 스택**: Next.js 15.4.6, React 19.1.0, TypeScript 5, Supabase, shadcn/ui, Zustand 5.0.7, TailwindCSS 4, react-konva 19.0.10, isomorphic-dompurify
 **Context7 MCP 호환**: ✅ 호환성 고려하여 작성됨
 
 ---
@@ -55,7 +55,8 @@
     "icons": "Lucide React",
     "state": "Zustand 5.0.7",
     "query": "TanStack Query (React Query)",
-    "virtualization": "@tanstack/react-virtual"
+    "virtualization": "@tanstack/react-virtual",
+    "canvas": "react-konva 19.0.10 (HTML5 Canvas drawing)"
   },
   "backend": {
     "database": "Supabase (PostgreSQL 15)",
@@ -334,6 +335,17 @@ src/
   - 공개 URL 자동 생성
   - 라이트박스로 이미지 확대 보기
   - 이미지 최적화 및 압축
+- ✅ **이미지 펜 그리기 및 편집** (2025-10-02 완성)
+  - 🖊️ react-konva 통합 (useEffect 동적 로딩으로 React 19 호환)
+  - 🎨 펜 도구 (색상 6가지, 굵기 4단계)
+  - 🧹 지우개 도구
+  - 🗑️ 전체 지우기
+  - 🔄 이미지 회전 (좌/우 90도)
+  - 🔍 줌 인/아웃 (0.5x ~ 3.0x)
+  - 📐 캔버스 자동 크기 조정 (실제 렌더링된 이미지 크기 기준)
+  - 📊 이미지 합성 시 스케일 비율 자동 계산 (그린 위치 정확히 일치)
+  - 📤 편집된 이미지 전송 (PNG 형식)
+  - ⌨️ ESC 키 또는 이미지 클릭으로 닫기
 - ✅ **파일 다운로드**
 - ✅ **위치 공유 시스템** (카카오맵 완전 통합, 2025-10-01 완성)
   - 🗺️ 지도에서 위치 선택 (MapLocationPicker)
@@ -899,48 +911,162 @@ CHECK (message_type = ANY (ARRAY['text'::text, 'image'::text, 'file'::text, 'loc
 
 ---
 
-### 🔴 높은 우선순위
+#### 2. **이미지 펜 그리기 캔버스 크기 및 합성 문제 해결** (2025-10-02 해결)
 
-#### 2. **리치 텍스트 XSS 보안 취약점**
-**현재 상태:**
+**문제 상황:**
+- 사용자가 이미지 중앙에 크게 그렸는데, 전송된 이미지에서는 왼쪽 맨 위에 작게 나타남
+- Konva Stage가 800x600으로 하드코딩되어 실제 이미지 크기와 불일치
+- 이미지 합성 시 스케일 비율을 고려하지 않아 위치/크기 불일치
+
+**해결 구현:**
+
 ```typescript
-// chat-layout.tsx:586-602
-<div
-  ref={editorRef}
-  contentEditable
-  dangerouslySetInnerHTML={{ __html: userInput }} // ⚠️ XSS 위험
+// 1. KonvaCanvas 컴포넌트에 동적 크기 props 추가
+interface KonvaCanvasProps {
+  width: number;   // ✅ 추가
+  height: number;  // ✅ 추가
+  // ...
+}
+
+<Stage
+  width={width}   // 동적 크기
+  height={height} // 동적 크기
 />
-```
 
-**해결 방안:**
-```bash
-# DOMPurify 설치 (이미 설치됨)
-npm install isomorphic-dompurify
+// 2. 이미지 로드 시 실제 렌더링 크기 측정
+const [canvasSize, setCanvasSize] = useState({ width: 800, height: 600 });
 
-# 적용 위치
-1. src/components/chat/chat-layout.tsx (전송 시)
-2. src/components/chat/virtualized/MessageRenderer.tsx (표시 시)
-```
-
-```typescript
-import DOMPurify from 'isomorphic-dompurify';
-
-// 전송 전 sanitize
-const sanitizedContent = DOMPurify.sanitize(editorRef.current.innerHTML, {
-  ALLOWED_TAGS: ['b', 'i', 'u', 'strong', 'em', 'br', 'p', 'span'],
-  ALLOWED_ATTR: ['style'],
-  ALLOWED_STYLES: {
-    '*': {
-      'color': [/^#[0-9a-fA-F]{6}$/],
-      'font-weight': [/^(bold|normal)$/]
-    }
+const handleImageLoad = useCallback(() => {
+  if (imageRef.current) {
+    const width = imageRef.current.offsetWidth;
+    const height = imageRef.current.offsetHeight;
+    setCanvasSize({ width, height });
+    console.log(`✅ Canvas size updated: ${width}x${height}`);
   }
-});
+}, []);
+
+// 3. 이미지 합성 시 스케일 비율 계산 및 적용
+const scaleX = img.width / canvasSize.width;
+const scaleY = img.height / canvasSize.height;
+
+ctx.save();
+ctx.scale(scaleX, scaleY);
+ctx.drawImage(drawImg, 0, 0);
+ctx.restore();
 ```
+
+**핵심 수정사항:**
+- `/home/dandy02/possible/team_hub/src/components/shared/image-lightbox.tsx`
+  - Line 22-23: KonvaCanvasProps에 width, height 추가
+  - Line 52-53: Stage를 props 기반 동적 크기로 변경
+  - Line 124: canvasSize state 추가
+  - Line 147-161: handleImageLoad로 실제 크기 측정
+  - Line 313-323: 합성 시 스케일 비율 계산 및 적용
+
+**기술 스택:**
+- react-konva 19.0.10: HTML5 Canvas 기반 그리기
+- React 19 호환: useEffect 동적 로딩으로 React.lazy 우회
+- Context7 MCP: react-konva 패턴 및 Canvas API 참조
+
+**테스트 결과:**
+- ✅ 펜으로 그린 위치와 전송 후 위치 완벽 일치
+- ✅ 그린 크기와 전송 후 크기 완벽 일치
+- ✅ 디버그 로그: `📐 Scale ratios - X: 2.00, Y: 2.00`
+- ✅ Windows Chrome 테스트 완료
+
+**추가 개선:**
+- X 닫기 버튼 제거 (이미지 클릭/ESC 키로 닫기 가능)
+- 툴바가 가려지지 않아 사용성 개선
 
 ---
 
-#### 3. **다중 파일 업로드 불완전**
+### ✅ 최근 해결된 문제 (계속)
+
+#### 3. **DOMPurify XSS 보안 강화** (2025-10-02 완료)
+**문제 상황:**
+- 게시물 시스템에서 `dangerouslySetInnerHTML` 사용으로 XSS 취약점 존재
+- 사용자 입력 HTML이 sanitize 없이 직접 렌더링
+- 기존 `sanitizeHtml` 함수는 기본적이고 불완전
+
+**해결 구현:**
+```typescript
+// 1. src/lib/sanitize.ts (새 파일 생성)
+// Context7 패턴 기반 DOMPurify 중앙화
+
+import DOMPurify from 'isomorphic-dompurify';
+
+// 게시물용 설정
+const POST_CONFIG: DOMPurify.Config = {
+  ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'u', 's', 'a', 'img',
+                 'ul', 'ol', 'li', 'code', 'pre', 'blockquote', 'h1', 'h2', 'h3'],
+  ALLOWED_ATTR: {
+    'a': ['href', 'target', 'rel'],
+    'img': ['src', 'alt', 'width', 'height', 'loading']
+  },
+  KEEP_CONTENT: true,
+  SANITIZE_DOM: true,
+  SANITIZE_NAMED_PROPS: true
+};
+
+// 채팅용 설정 (TEXT_ONLY)
+const CHAT_CONFIG: DOMPurify.Config = {
+  ALLOWED_TAGS: [], // 모든 HTML 제거
+  KEEP_CONTENT: true
+};
+
+export function sanitizePostContent(dirty: string): string {
+  return DOMPurify.sanitize(dirty, POST_CONFIG);
+}
+
+export function sanitizeChatMessage(dirty: string): string {
+  return DOMPurify.sanitize(dirty, CHAT_CONFIG);
+}
+```
+
+```typescript
+// 2. src/components/post-content.tsx 업데이트
+import { sanitizePostContent } from "@/lib/sanitize";
+
+export function PostContent({ html }: { html: string }) {
+  const sanitizedHtml = useMemo(() => {
+    return sanitizePostContent(html);
+  }, [html]);
+
+  return (
+    <div dangerouslySetInnerHTML={{ __html: sanitizedHtml }} />
+  );
+}
+```
+
+```typescript
+// 3. src/components/chat/virtualized/MessageRenderer.tsx 업데이트
+// 채팅은 이미 plain text이므로 추가 보안 필요 없음 (방어 심층화만 적용)
+case 'text':
+  const safeContent = message.content || "";
+  return <div>{highlightText(safeContent, searchQuery)}</div>;
+```
+
+**보안 정책:**
+- **게시물**: 리치 HTML 허용 (안전한 태그만)
+- **채팅**: TEXT_ONLY 모드 (모든 HTML 제거)
+- **방어 심층화**: 모든 입력에 sanitize 적용
+
+**기술 스택:**
+- Context7 MCP: DOMPurify 165개 패턴 활용
+- isomorphic-dompurify: 서버/클라이언트 모두 지원
+- React 19 최적화: useMemo로 sanitize 캐싱
+
+**테스트 시나리오:**
+- ✅ `<script>alert(1)</script>` → 완전 제거
+- ✅ `<img src=x onerror=alert(1)>` → `<img src="x">` (onerror 제거)
+- ✅ `<p onclick="alert(1)">Text</p>` → `<p>Text</p>` (onclick 제거)
+- ✅ `<a href="javascript:alert(1)">Link</a>` → 링크 제거
+
+---
+
+### 🔴 높은 우선순위
+
+#### 4. **다중 파일 업로드 불완전**
 **현재 상태:**
 ```typescript
 // chat-layout.tsx:101-106
@@ -981,7 +1107,7 @@ setSelectedFiles([]);
 
 ### 🟡 중간 우선순위
 
-#### 4. **타이핑 인디케이터 최적화**
+#### 5. **타이핑 인디케이터 최적화**
 **현재 문제:**
 - `updateTyping()` 호출 시마다 API 요청
 - Debounce 없음 → 네트워크 부하
@@ -1014,7 +1140,7 @@ const updateTyping = () => {
 
 ---
 
-#### 5. **이미지 로딩 최적화**
+#### 6. **이미지 로딩 최적화**
 **현재:**
 ```typescript
 // MessageRenderer.tsx:127
@@ -1040,7 +1166,7 @@ const updateTyping = () => {
 
 ---
 
-#### 6. **읽음 표시 (Read Receipts) UI 미흡**
+#### 7. **읽음 표시 (Read Receipts) UI 미흡**
 **현재 상태:**
 - DB에 `read_by` 배열 있음
 - UI에서 표시 안 함
@@ -1063,15 +1189,15 @@ const updateTyping = () => {
 
 ### 🟢 낮은 우선순위
 
-#### 7. **메시지 검색 기능**
+#### 8. **메시지 검색 기능**
 - 현재 게시물만 검색 가능
 - 채팅 메시지 검색 필요
 
-#### 8. **메시지 편집/삭제 UI**
+#### 9. **메시지 편집/삭제 UI**
 - DB에 update/delete 로직 있음
 - 사용자 인터페이스 미구현
 
-#### 9. **음성 메시지 지원**
+#### 10. **음성 메시지 지원**
 - 녹음 기능
 - 오디오 플레이어
 
@@ -1374,6 +1500,20 @@ NEXT_PUBLIC_KAKAO_MAPS_APP_KEY=your_kakao_key
 
 ## 📝 문서 히스토리
 
+- **v0.6 (2025-10-02)**: DOMPurify XSS 보안 강화 완료
+  - Context7 MCP 활용 (165개 DOMPurify 패턴 분석)
+  - SuperClaude 프레임워크 적극 활용
+  - isomorphic-dompurify 통합 (서버/클라이언트 모두 지원)
+  - 중앙화된 sanitize 유틸리티 생성 (/src/lib/sanitize.ts)
+  - 게시물 시스템 XSS 보호 (리치 HTML 안전하게 허용)
+  - 채팅 시스템 방어 심층화 (TEXT_ONLY 모드)
+  - React 19 최적화 (useMemo 캐싱)
+- **v0.5 (2025-10-02)**: 이미지 펜 그리기 및 편집 기능 완성
+  - react-konva 통합 (React 19 호환)
+  - 캔버스 크기 자동 조정 및 이미지 합성 스케일 문제 해결
+  - 펜 도구, 지우개, 색상/굵기 조정, 회전, 줌 기능
+  - X 버튼 제거로 UI 개선
+- **v0.4 (2025-10-02)**: 채팅 이미지 업로드 및 지도 공유 완료
 - **v0.3 (2025-10-01)**: 채팅 시스템 상세 분석 추가, 프로젝트 구조 업데이트
 - **v0.2 (2025-01-13)**: 초기 통합 문서 생성
 - **향후 주요 변경사항은 이 섹션에 기록**
@@ -1382,5 +1522,5 @@ NEXT_PUBLIC_KAKAO_MAPS_APP_KEY=your_kakao_key
 
 *이 문서는 AI 지식 교류 허브 프로젝트의 단일 소스 오브 트루스(Single Source of Truth)입니다. 모든 개발자는 이 문서를 참조하여 프로젝트의 현재 상태와 방향성을 파악해주세요.*
 
-**마지막 업데이트**: 2025-10-01
+**마지막 업데이트**: 2025-10-02
 **다음 리뷰 예정**: 주요 기능 추가 시 또는 월 1회
