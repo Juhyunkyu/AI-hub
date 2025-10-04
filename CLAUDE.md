@@ -1,7 +1,7 @@
 # AI 지식 교류 허브 - 통합 프로젝트 문서 (CLAUDE.md)
 
-**문서 최종 업데이트**: 2025-10-02
-**프로젝트 버전**: v0.6 (DOMPurify XSS 보안 강화 완료)
+**문서 최종 업데이트**: 2025-10-03
+**프로젝트 버전**: v0.7 (이미지 편집 툴바 버그 수정 및 중복 코드 제거 완료)
 **기술 스택**: Next.js 15.4.6, React 19.1.0, TypeScript 5, Supabase, shadcn/ui, Zustand 5.0.7, TailwindCSS 4, react-konva 19.0.10, isomorphic-dompurify
 **Context7 MCP 호환**: ✅ 호환성 고려하여 작성됨
 
@@ -189,8 +189,14 @@ src/
 │   │   ├── search-results.tsx    # 장소 검색
 │   │   └── map-location-picker.tsx
 │   ├── shared/                   # 공유 컴포넌트
-│   │   ├── image-lightbox.tsx    # 이미지 라이트박스
-│   │   └── rich-editor-toolbar.tsx  # 리치 에디터
+│   │   ├── image-lightbox.tsx    # 이미지 라이트박스 (편집 기능 포함)
+│   │   ├── lightbox-header.tsx   # 라이트박스 헤더
+│   │   ├── lightbox-toolbar.tsx  # 라이트박스 툴바 컨트롤러
+│   │   ├── rich-editor-toolbar.tsx  # 리치 에디터
+│   │   └── toolbar-items/        # 이미지 편집 툴바 (3단계 시스템)
+│   │       ├── base-toolbar.tsx      # 1단계: 저장/공유/삭제/편집
+│   │       ├── edit-toolbar.tsx      # 2단계: 필터/자르기/텍스트/이모지/펜
+│   │       └── pen-toolbar.tsx       # 3단계: 펜/지우개/색상/전체삭제
 │   ├── post/                     # 게시물 컴포넌트
 │   │   ├── post-card.tsx
 │   │   ├── post-type-selector.tsx
@@ -980,8 +986,6 @@ ctx.restore();
 
 ---
 
-### ✅ 최근 해결된 문제 (계속)
-
 #### 3. **DOMPurify XSS 보안 강화** (2025-10-02 완료)
 **문제 상황:**
 - 게시물 시스템에서 `dangerouslySetInnerHTML` 사용으로 XSS 취약점 존재
@@ -1064,9 +1068,69 @@ case 'text':
 
 ---
 
+#### 4. **이미지 편집 툴바 Event Propagation 버그 수정** (2025-10-03 해결)
+
+**문제 상황:**
+- 이미지 라이트박스에서 [편집] 버튼 클릭 시 툴바가 완전히 사라짐
+- 3단계 툴바 시스템이 정상 작동하지 않음:
+  - Step 1 (기본): [저장][공유][삭제][편집]
+  - Step 2 (편집 선택): [필터][자르기][텍스트][이모지][펜]
+  - Step 3 (펜 모드): [펜][지우개][색상 8개][전체삭제]
+
+**근본 원인 분석 (SuperClaude Context7 MCP 활용):**
+```typescript
+// 문제: Event Propagation + React State Batching
+1. [편집] 버튼 클릭 → onEdit() 실행 → setViewMode('editSelect')
+2. 클릭 이벤트가 부모 <div onClick={handleImageClick}>로 전파
+3. handleImageClick이 기존 viewMode='view'를 보고 'imageOnly'로 변경
+4. React가 상태 업데이트를 batch 처리 → 'imageOnly'가 최종 승리
+5. 결과: showUI = viewMode !== 'imageOnly' → false → 툴바 사라짐
+```
+
+**해결 구현:**
+```typescript
+// 모든 툴바 버튼에 e.stopPropagation() 추가
+
+// 1. src/components/shared/toolbar-items/base-toolbar.tsx
+onClick={(e) => {
+  e.stopPropagation();  // ✅ 추가
+  onClick?.();
+}}
+
+// 2. src/components/shared/toolbar-items/edit-toolbar.tsx
+onClick={(e) => {
+  e.stopPropagation();  // ✅ 추가
+  onModeChange(mode);
+}}
+
+// 3. src/components/shared/toolbar-items/pen-toolbar.tsx
+onClick={(e) => {
+  e.stopPropagation();  // ✅ 추가
+  onToolChange('pen');
+}}
+// 색상 버튼 및 전체 삭제 버튼에도 동일 적용
+```
+
+**기술 스택:**
+- React 19 event handling patterns from Context7 MCP
+- SuperClaude troubleshoot persona with sequential thinking (8 steps)
+- Playwright MCP로 실제 브라우저 테스트 및 검증
+
+**테스트 검증 (Playwright MCP):**
+- ✅ Step 1 → Step 2 전환 정상 작동
+- ✅ Step 2 → Step 3 (펜 모드) 전환 정상 작동
+- ✅ 모든 툴바 버튼 클릭 시 의도한 동작 수행
+
+**추가 정리 작업:**
+- 중복 폴더 제거: `/src/components/image-editor/` 삭제 (미사용)
+- 현재 구조: `/src/components/shared/` 사용 중
+- MessageRenderer가 shared 버전 import 확인
+
+---
+
 ### 🔴 높은 우선순위
 
-#### 4. **다중 파일 업로드 불완전**
+#### 5. **다중 파일 업로드 불완전**
 **현재 상태:**
 ```typescript
 // chat-layout.tsx:101-106
@@ -1107,7 +1171,7 @@ setSelectedFiles([]);
 
 ### 🟡 중간 우선순위
 
-#### 5. **타이핑 인디케이터 최적화**
+#### 6. **타이핑 인디케이터 최적화**
 **현재 문제:**
 - `updateTyping()` 호출 시마다 API 요청
 - Debounce 없음 → 네트워크 부하
@@ -1140,7 +1204,7 @@ const updateTyping = () => {
 
 ---
 
-#### 6. **이미지 로딩 최적화**
+#### 7. **이미지 로딩 최적화**
 **현재:**
 ```typescript
 // MessageRenderer.tsx:127
@@ -1166,7 +1230,7 @@ const updateTyping = () => {
 
 ---
 
-#### 7. **읽음 표시 (Read Receipts) UI 미흡**
+#### 8. **읽음 표시 (Read Receipts) UI 미흡**
 **현재 상태:**
 - DB에 `read_by` 배열 있음
 - UI에서 표시 안 함
@@ -1189,15 +1253,15 @@ const updateTyping = () => {
 
 ### 🟢 낮은 우선순위
 
-#### 8. **메시지 검색 기능**
+#### 9. **메시지 검색 기능**
 - 현재 게시물만 검색 가능
 - 채팅 메시지 검색 필요
 
-#### 9. **메시지 편집/삭제 UI**
+#### 10. **메시지 편집/삭제 UI**
 - DB에 update/delete 로직 있음
 - 사용자 인터페이스 미구현
 
-#### 10. **음성 메시지 지원**
+#### 11. **음성 메시지 지원**
 - 녹음 기능
 - 오디오 플레이어
 
@@ -1501,6 +1565,13 @@ NEXT_PUBLIC_KAKAO_MAPS_APP_KEY=your_kakao_key
 
 ## 📝 문서 히스토리
 
+- **v0.7 (2025-10-03)**: 이미지 편집 툴바 버그 수정 및 중복 코드 제거
+  - Event Propagation 버그 수정 (e.stopPropagation 추가)
+  - 3단계 툴바 시스템 정상화 (기본 → 편집 선택 → 펜 모드)
+  - SuperClaude Context7 MCP 활용한 체계적 디버깅
+  - Playwright MCP로 브라우저 테스트 및 검증
+  - 중복 폴더 제거 (/src/components/image-editor/ 삭제)
+  - 프로젝트 구조 문서화 (toolbar-items 추가)
 - **v0.6 (2025-10-02)**: DOMPurify XSS 보안 강화 완료
   - Context7 MCP 활용 (165개 DOMPurify 패턴 분석)
   - SuperClaude 프레임워크 적극 활용
@@ -1523,5 +1594,5 @@ NEXT_PUBLIC_KAKAO_MAPS_APP_KEY=your_kakao_key
 
 *이 문서는 AI 지식 교류 허브 프로젝트의 단일 소스 오브 트루스(Single Source of Truth)입니다. 모든 개발자는 이 문서를 참조하여 프로젝트의 현재 상태와 방향성을 파악해주세요.*
 
-**마지막 업데이트**: 2025-10-02
+**마지막 업데이트**: 2025-10-03
 **다음 리뷰 예정**: 주요 기능 추가 시 또는 월 1회

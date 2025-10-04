@@ -1,11 +1,9 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import Image from "next/image";
-import {
-  Download, RotateCcw, RotateCw, ZoomIn, ZoomOut,
-  Pen, Eraser, Trash2, Send
-} from "lucide-react";
+import { useResponsive } from "@/hooks/use-responsive";
+import NextImage from "next/image";
+import { Send, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -14,69 +12,17 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { LightboxHeader } from './lightbox-header';
+import { LightboxToolbar } from './lightbox-toolbar';
+import { DrawingCanvas, type DrawLine } from './drawing-canvas';
+import type { EditMode } from './toolbar-items/edit-toolbar';
+import type { Stage } from 'konva/lib/Stage';
 
-// Konva Canvas 컴포넌트 - useEffect로 동적 로딩
-interface KonvaCanvasProps {
-  stageRef: any;
-  lines: DrawLine[];
-  width: number;
-  height: number;
-  onMouseDown: (e: any) => void;
-  onMouseMove: (e: any) => void;
-  onMouseUp: () => void;
-}
-
-function KonvaCanvas({ stageRef, lines, width, height, onMouseDown, onMouseMove, onMouseUp }: KonvaCanvasProps) {
-  const [Konva, setKonva] = useState<any>(null);
-
-  useEffect(() => {
-    // 동적으로 react-konva 로드
-    import('react-konva').then((module) => {
-      setKonva(module);
-    });
-  }, []);
-
-  if (!Konva) {
-    return (
-      <div className="w-full h-full flex items-center justify-center">
-        <div className="text-white text-sm">캔버스 로딩 중...</div>
-      </div>
-    );
-  }
-
-  const { Stage, Layer, Line } = Konva;
-
-  return (
-    <Stage
-      ref={stageRef}
-      width={width}
-      height={height}
-      onMouseDown={onMouseDown}
-      onMouseMove={onMouseMove}
-      onMouseUp={onMouseUp}
-      onTouchStart={onMouseDown}
-      onTouchMove={onMouseMove}
-      onTouchEnd={onMouseUp}
-    >
-      <Layer>
-        {lines.map((line, i) => (
-          <Line
-            key={i}
-            points={line.points}
-            stroke={line.tool === 'eraser' ? 'white' : line.color}
-            strokeWidth={line.width}
-            tension={0.5}
-            lineCap="round"
-            lineJoin="round"
-            globalCompositeOperation={
-              line.tool === 'eraser' ? 'destination-out' : 'source-over'
-            }
-          />
-        ))}
-      </Layer>
-    </Stage>
-  );
-}
+type ViewMode =
+  | 'view'        // 기본: 작성자 정보 + 하단 기본 툴바
+  | 'imageOnly'   // 이미지만 (UI 숨김)
+  | 'editSelect'  // 편집 선택
+  | 'editPen';    // 펜 편집 (다른 편집 모드는 추후 추가)
 
 export interface ImageLightboxProps {
   src: string;
@@ -86,14 +32,9 @@ export interface ImageLightboxProps {
   fileName?: string;
   className?: string;
   onSend?: (imageDataUrl: string, fileName: string) => void;
-  enableDrawing?: boolean;
-}
-
-interface DrawLine {
-  tool: 'pen' | 'eraser';
-  points: number[];
-  color: string;
-  width: number;
+  senderName?: string;
+  senderAvatar?: string | null;
+  sentAt?: string | Date;
 }
 
 export function ImageLightbox({
@@ -101,450 +42,323 @@ export function ImageLightbox({
   alt,
   isOpen,
   onClose,
-  fileName,
-  className,
+  fileName = "image.png",
   onSend,
-  enableDrawing = true,
+  senderName,
+  senderAvatar,
+  sentAt,
 }: ImageLightboxProps) {
+  // ==================== 상태 관리 ====================
+  const { isMobile } = useResponsive();
+  const [viewMode, setViewMode] = useState<ViewMode>('view');
   const [isLoading, setIsLoading] = useState(true);
   const [imageError, setImageError] = useState(false);
-  const [rotation, setRotation] = useState(0);
-  const [zoom, setZoom] = useState(1);
-  const [showControls, setShowControls] = useState(true);
-
-  // 펜 그리기 상태
-  const [isDrawingMode, setIsDrawingMode] = useState(false);
-  const [lines, setLines] = useState<DrawLine[]>([]);
-  const [isDrawing, setIsDrawing] = useState(false);
-  const [brushColor, setBrushColor] = useState('#FF0000');
-  const [brushSize, setBrushSize] = useState(3);
-  const [tool, setTool] = useState<'pen' | 'eraser'>('pen');
-
-  // 캔버스 크기 (실제 렌더링된 이미지 크기에 맞춤)
   const [canvasSize, setCanvasSize] = useState({ width: 800, height: 600 });
 
-  // 이미지 ref
-  const imageRef = useRef<HTMLImageElement>(null);
-  const stageRef = useRef<any>(null);
+  // 펜 그리기 상태
+  const [lines, setLines] = useState<DrawLine[]>([]);
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [tool, setTool] = useState<'pen' | 'eraser'>('pen');
+  const [color, setColor] = useState('#000000');
+  const [activeEditMode, setActiveEditMode] = useState<EditMode | null>(null);
 
-  // 라이트박스가 열릴 때 초기화
+  const imageRef = useRef<HTMLImageElement>(null);
+  const stageRef = useRef<Stage | null>(null);
+
+  // ==================== 초기화 ====================
   useEffect(() => {
     if (isOpen) {
-      setIsLoading(true);
-      setImageError(false);
-      setRotation(0);
-      setZoom(1);
-      setShowControls(true);
-      setIsDrawingMode(false);
+      setViewMode('view');
       setLines([]);
       setIsDrawing(false);
       setTool('pen');
-      setCanvasSize({ width: 800, height: 600 }); // 캔버스 크기 초기화
+      setActiveEditMode(null);
     }
-  }, [isOpen, src]);
+  }, [isOpen]);
 
-  // 이미지 로드 완료 시 실제 렌더링된 크기 측정
+  // 펜 모드 진입 시 캔버스 크기 재계산 (제거 - handleImageLoad에서 이미 설정됨)
+
+  // 이미지 로드 시 캔버스 크기 설정 (실제 렌더링 크기 기준)
   const handleImageLoad = useCallback(() => {
     setIsLoading(false);
-
-    // 이미지가 로드된 후 실제 렌더링된 크기 측정
     if (imageRef.current) {
       const width = imageRef.current.offsetWidth;
       const height = imageRef.current.offsetHeight;
-
-      // 유효한 크기인 경우에만 업데이트
-      if (width > 0 && height > 0) {
-        setCanvasSize({ width, height });
-        console.log(`✅ Canvas size updated: ${width}x${height}`);
-      }
+      setCanvasSize({ width, height });
+      console.log(`✅ Canvas size set to: ${width}x${height}`);
     }
   }, []);
 
-  // ESC 키로 닫기
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && isOpen) {
-        onClose();
-      }
-    };
-
-    if (isOpen) {
-      document.addEventListener("keydown", handleKeyDown);
-      document.body.style.overflow = "hidden";
-    }
-
-    return () => {
-      document.removeEventListener("keydown", handleKeyDown);
-      document.body.style.overflow = "unset";
-    };
-  }, [isOpen, onClose]);
-
-  // 이미지 클릭 시 툴바 토글 (그리기 모드가 아닐 때만)
+  // ==================== 이미지 클릭 (UI 토글) ====================
   const handleImageClick = useCallback(() => {
-    if (!isDrawingMode) {
-      setShowControls(!showControls);
+    // 편집 모드에서는 클릭해도 아무 일도 안 일어남
+    if (viewMode === 'editSelect' || viewMode === 'editPen') {
+      return;
     }
-  }, [isDrawingMode, showControls]);
 
-  // 이미지 다운로드
+    if (viewMode === 'view') {
+      setViewMode('imageOnly');
+    } else if (viewMode === 'imageOnly') {
+      setViewMode('view');
+    }
+  }, [viewMode]);
+
+  // ==================== 툴바 핸들러 ====================
   const handleDownload = useCallback(async () => {
-    try {
-      const response = await fetch(src);
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = fileName || `image-${Date.now()}.jpg`;
-      document.body.appendChild(link);
+    if (!stageRef.current || lines.length === 0) {
+      // 그림이 없는 경우: 원본 다운로드
+      const link = document.createElement('a');
+      link.href = src;
+      link.download = fileName;
       link.click();
-      document.body.removeChild(link);
-
-      window.URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error("이미지 다운로드 실패:", error);
+      return;
     }
-  }, [src, fileName]);
 
-  // 회전
-  const handleRotateLeft = () => {
-    setRotation((prev) => prev - 90);
-  };
+    // 그림이 있는 경우: 원본 이미지 + 그림 합성
+    if (!imageRef.current) return;
 
-  const handleRotateRight = () => {
-    setRotation((prev) => prev + 90);
-  };
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
 
-  // 줌
-  const handleZoomIn = () => {
-    setZoom((prev) => Math.min(prev + 0.25, 3));
-  };
+    // 원본 이미지 로드
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.src = src;
 
-  const handleZoomOut = () => {
-    setZoom((prev) => Math.max(prev - 0.25, 0.5));
-  };
+    await new Promise((resolve) => {
+      img.onload = resolve;
+    });
 
-  const handleZoomReset = () => {
-    setZoom(1);
-    setRotation(0);
-  };
+    // 캔버스 크기를 원본 이미지 크기로 설정
+    canvas.width = img.width;
+    canvas.height = img.height;
 
-  // 펜 모드 토글
-  const handleToggleDrawing = () => {
-    setIsDrawingMode(!isDrawingMode);
-    if (!isDrawingMode) {
-      setShowControls(true); // 펜 모드 진입 시 툴바 표시
+    // 1. 원본 이미지 그리기
+    ctx.drawImage(img, 0, 0);
+
+    // 2. Konva 캔버스에서 그림 추출
+    const drawImg = new Image();
+    drawImg.src = stageRef.current.toDataURL({ pixelRatio: 1 });
+
+    await new Promise((resolve) => {
+      drawImg.onload = resolve;
+    });
+
+    // 3. 스케일 비율 계산 (렌더링된 크기 vs 원본 크기)
+    const scaleX = img.width / canvasSize.width;
+    const scaleY = img.height / canvasSize.height;
+
+    // 4. 그림을 원본 이미지 위에 합성
+    ctx.save();
+    ctx.scale(scaleX, scaleY);
+    ctx.drawImage(drawImg, 0, 0);
+    ctx.restore();
+
+    // 5. 다운로드
+    const link = document.createElement('a');
+    link.href = canvas.toDataURL('image/png');
+    link.download = fileName;
+    link.click();
+  }, [src, fileName, lines, canvasSize]);
+
+  const handleShare = useCallback(() => {
+    // TODO: 공유 기능 구현
+    console.log('공유 기능 (추후 구현)');
+  }, []);
+
+  const handleDelete = useCallback(() => {
+    // TODO: 삭제 기능 구현
+    console.log('삭제 기능 (추후 구현)');
+  }, []);
+
+  const handleEdit = useCallback(() => {
+    setViewMode('editSelect');
+  }, []);
+
+  const handleEditModeChange = useCallback((mode: EditMode) => {
+    setActiveEditMode(mode);
+    if (mode === 'pen') {
+      setViewMode('editPen');
     }
-  };
+    // 다른 모드들은 추후 구현
+  }, []);
 
-  // Canvas 그리기 시작
-  const handleMouseDown = (e: any) => {
-    if (!isDrawingMode) return;
+  const handleBack = useCallback(() => {
+    if (viewMode === 'editPen') {
+      setViewMode('editSelect');
+      setActiveEditMode(null);
+    } else if (viewMode === 'editSelect') {
+      setViewMode('view');
+      setActiveEditMode(null);
+    }
+  }, [viewMode]);
 
-    setIsDrawing(true);
-    const pos = e.target.getStage().getPointerPosition();
-    setLines([...lines, {
-      tool,
-      points: [pos.x, pos.y],
-      color: brushColor,
-      width: brushSize
-    }]);
-  };
-
-  // Canvas 그리기
-  const handleMouseMove = (e: any) => {
-    if (!isDrawing || !isDrawingMode) return;
-
-    const stage = e.target.getStage();
-    const point = stage.getPointerPosition();
-
-    const lastLine = lines[lines.length - 1];
-    lastLine.points = lastLine.points.concat([point.x, point.y]);
-
-    setLines([...lines.slice(0, -1), lastLine]);
-  };
-
-  // Canvas 그리기 종료
-  const handleMouseUp = () => {
-    setIsDrawing(false);
-  };
-
-  // 전체 지우기
-  const handleClearDrawing = () => {
+  const handleClearAllDrawing = useCallback(() => {
     setLines([]);
-  };
 
-  // 전송 기능
+    // Konva 캔버스에서 실제로 그려진 모든 도형 및 픽셀 제거
+    if (stageRef.current) {
+      const layers = stageRef.current.getLayers();
+      layers.forEach((layer) => {
+        layer.destroyChildren();  // 모든 도형 노드 제거
+        layer.clear();             // 캔버스 픽셀 완전 클리어
+        layer.draw();              // 레이어 다시 그리기
+      });
+      console.log(`✅ ${layers.length} Canvas layers cleared`);
+    }
+  }, []);
+
   const handleSend = useCallback(async () => {
     if (!onSend) return;
 
-    try {
-      // Canvas 생성
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
-
-      // 이미지 로드
-      const img = new window.Image();
-      img.crossOrigin = 'anonymous';
-      img.src = src;
-
-      img.onload = () => {
-        // Canvas 크기 설정 (원본 이미지 크기)
-        canvas.width = img.width;
-        canvas.height = img.height;
-
-        // 회전 변환
-        ctx.save();
-        ctx.translate(canvas.width / 2, canvas.height / 2);
-        ctx.rotate((rotation * Math.PI) / 180);
-        ctx.drawImage(img, -img.width / 2, -img.height / 2);
-        ctx.restore();
-
-        // 그림 추가
-        if (lines.length > 0 && stageRef.current) {
-          const stage = stageRef.current;
-          const dataURL = stage.toDataURL();
-          const drawImg = new window.Image();
-          drawImg.src = dataURL;
-
-          drawImg.onload = () => {
-            // 스케일 비율 계산: 원본 이미지 크기 / Konva Stage 크기
-            const scaleX = img.width / canvasSize.width;
-            const scaleY = img.height / canvasSize.height;
-
-            console.log(`📐 Scale ratios - X: ${scaleX.toFixed(2)}, Y: ${scaleY.toFixed(2)}`);
-            console.log(`📏 Canvas: ${canvasSize.width}x${canvasSize.height}, Original: ${img.width}x${img.height}`);
-
-            // 스케일 적용하여 그림 합성
-            ctx.save();
-            ctx.scale(scaleX, scaleY);
-            ctx.drawImage(drawImg, 0, 0);
-            ctx.restore();
-
-            // 최종 이미지 전송
-            const finalDataURL = canvas.toDataURL('image/png');
-            const finalFileName = fileName || `edited-${Date.now()}.png`;
-            onSend(finalDataURL, finalFileName);
-            onClose();
-          };
-        } else {
-          // 그림이 없으면 회전만 적용된 이미지 전송
-          const finalDataURL = canvas.toDataURL('image/png');
-          const finalFileName = fileName || `rotated-${Date.now()}.png`;
-          onSend(finalDataURL, finalFileName);
-          onClose();
-        }
-      };
-    } catch (error) {
-      console.error('이미지 전송 실패:', error);
+    // 그림이 없는 경우: 원본 이미지 전송
+    if (!stageRef.current || lines.length === 0) {
+      onSend(src, fileName);
+      onClose();
+      return;
     }
-  }, [src, rotation, lines, fileName, onSend, onClose, canvasSize]);
 
-  if (!isOpen) return null;
+    // 그림이 있는 경우: 원본 이미지 + 그림 합성
+    if (!imageRef.current) return;
 
-  const colors = ['#000000', '#FF0000', '#00FF00', '#0000FF', '#FFFF00', '#FF00FF'];
-  const brushSizes = [2, 4, 6, 8];
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // 원본 이미지 로드
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.src = src;
+
+    await new Promise((resolve) => {
+      img.onload = resolve;
+    });
+
+    // 캔버스 크기를 원본 이미지 크기로 설정
+    canvas.width = img.width;
+    canvas.height = img.height;
+
+    // 1. 원본 이미지 그리기
+    ctx.drawImage(img, 0, 0);
+
+    // 2. Konva 캔버스에서 그림 추출
+    const drawImg = new Image();
+    drawImg.src = stageRef.current.toDataURL({ pixelRatio: 1 });
+
+    await new Promise((resolve) => {
+      drawImg.onload = resolve;
+    });
+
+    // 3. 스케일 비율 계산 (렌더링된 크기 vs 원본 크기)
+    const scaleX = img.width / canvasSize.width;
+    const scaleY = img.height / canvasSize.height;
+
+    // 4. 그림을 원본 이미지 위에 합성
+    ctx.save();
+    ctx.scale(scaleX, scaleY);
+    ctx.drawImage(drawImg, 0, 0);
+    ctx.restore();
+
+    // 5. 전송
+    const uri = canvas.toDataURL('image/png');
+    onSend(uri, fileName);
+    onClose();
+  }, [onSend, fileName, onClose, src, lines, canvasSize]);
+
+  // ==================== 그리기 핸들러 ====================
+  const handleMouseDown = useCallback((e: any) => {
+    if (viewMode !== 'editPen') return;
+
+    setIsDrawing(true);
+    const pos = e.target.getStage().getPointerPosition();
+    setLines([...lines, { tool, points: [pos.x, pos.y], color, width: 3 }]);
+  }, [viewMode, lines, tool, color]);
+
+  const handleMouseMove = useCallback((e: any) => {
+    if (!isDrawing || viewMode !== 'editPen') return;
+
+    const stage = e.target.getStage();
+    const point = stage.getPointerPosition();
+    const lastLine = lines[lines.length - 1];
+
+    lastLine.points = lastLine.points.concat([point.x, point.y]);
+    setLines(lines.slice(0, lines.length - 1).concat(lastLine));
+  }, [isDrawing, viewMode, lines]);
+
+  const handleMouseUp = useCallback(() => {
+    setIsDrawing(false);
+  }, []);
+
+  // ==================== 렌더링 ====================
+  const isDrawingMode = viewMode === 'editPen';
+  const showUI = viewMode !== 'imageOnly';
+  const showSendButton = viewMode === 'editPen' || viewMode === 'editSelect';
+  const showHeader = viewMode === 'view' && senderName;
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogOverlay className="bg-black/90 backdrop-blur-sm z-[9999]" />
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogOverlay className="bg-black/95" />
       <DialogContent
-        className={cn(
-          "max-w-[95vw] max-h-[95vh] w-fit h-fit p-0 border-0 bg-transparent overflow-visible z-[9999]",
-          className
-        )}
-        showCloseButton={false}
+        className="max-w-none max-h-none w-screen h-screen p-0 bg-transparent border-none overflow-hidden"
+        aria-describedby="image-dialog-description"
       >
-        <DialogTitle className="sr-only">{fileName || alt}</DialogTitle>
-        <div className="relative w-full h-full flex flex-col items-center justify-center">
-          {/* 상단 툴바 */}
-          {showControls && (
-            <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-[100] flex items-center gap-2 bg-black/50 backdrop-blur-sm rounded-lg p-2 transition-opacity duration-200">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleRotateLeft}
-                className="text-white hover:bg-white/20"
-                aria-label="왼쪽으로 회전"
-              >
-                <RotateCcw className="h-4 w-4" />
-              </Button>
+        <DialogTitle className="sr-only">이미지 보기</DialogTitle>
+        <div id="image-dialog-description" className="sr-only">
+          이미지를 확대하거나 편집할 수 있습니다
+        </div>
 
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleRotateRight}
-                className="text-white hover:bg-white/20"
-                aria-label="오른쪽으로 회전"
-              >
-                <RotateCw className="h-4 w-4" />
-              </Button>
-
-              <div className="w-px h-6 bg-white/30" />
-
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleZoomOut}
-                disabled={zoom <= 0.5}
-                className="text-white hover:bg-white/20 disabled:opacity-50"
-                aria-label="축소"
-              >
-                <ZoomOut className="h-4 w-4" />
-              </Button>
-
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleZoomReset}
-                className="text-white hover:bg-white/20 text-xs px-2"
-                aria-label="100%"
-              >
-                {Math.round(zoom * 100)}%
-              </Button>
-
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleZoomIn}
-                disabled={zoom >= 3}
-                className="text-white hover:bg-white/20 disabled:opacity-50"
-                aria-label="확대"
-              >
-                <ZoomIn className="h-4 w-4" />
-              </Button>
-
-              <div className="w-px h-6 bg-white/30" />
-
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleDownload}
-                className="text-white hover:bg-white/20"
-                aria-label="다운로드"
-              >
-                <Download className="h-4 w-4" />
-              </Button>
-
-              {enableDrawing && (
-                <>
-                  <div className="w-px h-6 bg-white/30" />
-
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleToggleDrawing}
-                    className={cn(
-                      "text-white hover:bg-white/20",
-                      isDrawingMode && "bg-white/20"
-                    )}
-                    aria-label="펜 그리기"
-                  >
-                    <Pen className="h-4 w-4" />
-                  </Button>
-                </>
-              )}
-
-              {onSend && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleSend}
-                  className="text-white hover:bg-white/20"
-                  aria-label="전송"
-                >
-                  <Send className="h-4 w-4" />
-                </Button>
-              )}
-            </div>
+        <div className="relative w-full h-full flex items-center justify-center">
+          {/* 헤더: 작성자 정보 */}
+          {showHeader && (
+            <LightboxHeader
+              senderName={senderName}
+              senderAvatar={senderAvatar}
+              sentAt={sentAt || new Date()}
+              visible={showUI}
+            />
           )}
 
-          {/* 펜 툴바 (그리기 모드일 때만 표시) */}
-          {showControls && isDrawingMode && (
-            <div className="absolute top-20 left-1/2 transform -translate-x-1/2 z-[100] flex items-center gap-2 bg-black/50 backdrop-blur-sm rounded-lg p-2 transition-opacity duration-200">
-              {/* 펜/지우개 토글 */}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setTool('pen')}
-                className={cn(
-                  "text-white hover:bg-white/20",
-                  tool === 'pen' && "bg-white/20"
-                )}
-                aria-label="펜"
-              >
-                <Pen className="h-4 w-4" />
-              </Button>
+          {/* 닫기 버튼 (항상 표시) */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onClose}
+            className="absolute top-4 right-4 z-30 h-10 w-10 rounded-full bg-black/60 hover:bg-black/80 text-white backdrop-blur-md"
+            aria-label="닫기"
+          >
+            <X className="h-5 w-5" />
+          </Button>
 
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setTool('eraser')}
-                className={cn(
-                  "text-white hover:bg-white/20",
-                  tool === 'eraser' && "bg-white/20"
-                )}
-                aria-label="지우개"
-              >
-                <Eraser className="h-4 w-4" />
-              </Button>
-
-              <div className="w-px h-6 bg-white/30" />
-
-              {/* 색상 선택 */}
-              {colors.map((color) => (
-                <button
-                  key={color}
-                  onClick={() => setBrushColor(color)}
-                  className={cn(
-                    "w-6 h-6 rounded-full border-2 transition-all",
-                    brushColor === color ? "border-white scale-110" : "border-transparent"
-                  )}
-                  style={{ backgroundColor: color }}
-                  aria-label={`색상 ${color}`}
-                />
-              ))}
-
-              <div className="w-px h-6 bg-white/30" />
-
-              {/* 굵기 선택 */}
-              {brushSizes.map((size) => (
-                <Button
-                  key={size}
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setBrushSize(size)}
-                  className={cn(
-                    "text-white hover:bg-white/20 w-8",
-                    brushSize === size && "bg-white/20"
-                  )}
-                  aria-label={`굵기 ${size}px`}
-                >
-                  <div
-                    className="rounded-full bg-white"
-                    style={{ width: size, height: size }}
-                  />
-                </Button>
-              ))}
-
-              <div className="w-px h-6 bg-white/30" />
-
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleClearDrawing}
-                className="text-white hover:bg-white/20"
-                aria-label="전체 지우기"
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            </div>
+          {/* 전송 버튼 (편집 모드에서만) */}
+          {showSendButton && onSend && (
+            <Button
+              variant="default"
+              size="sm"
+              onClick={handleSend}
+              className="absolute top-4 right-16 z-30 bg-primary hover:bg-primary/90 text-white backdrop-blur-md"
+            >
+              <Send className="h-4 w-4 mr-2" />
+              전송
+            </Button>
           )}
 
           {/* 이미지 + Canvas 컨테이너 */}
           <div
-            className="flex items-center justify-center w-full h-full min-h-[50vh] p-4 cursor-pointer"
+            className={cn(
+              "relative flex items-center justify-center w-full h-full px-4",
+              isMobile
+                ? viewMode === 'editPen'
+                  ? "max-h-[calc(100vh-260px)]"  // Mobile: Pen toolbar (더 많은 공간)
+                  : viewMode === 'editSelect'
+                  ? "max-h-[calc(100vh-220px)]"  // Mobile: Edit toolbar
+                  : "max-h-[calc(100vh-160px)]"  // Mobile: Base toolbar
+                : viewMode === 'editPen'
+                ? "max-h-[calc(100vh-200px)]"  // Desktop: Pen toolbar
+                : viewMode === 'editSelect'
+                ? "max-h-[calc(100vh-180px)]"  // Desktop: Edit toolbar
+                : "max-h-[calc(100vh-120px)]"  // Desktop: Base toolbar
+            )}
             onClick={handleImageClick}
           >
             {isLoading && (
@@ -559,22 +373,28 @@ export function ImageLightbox({
                 <p className="text-sm text-white/70">{src}</p>
               </div>
             ) : (
-              <div className="relative">
-                {/* 이미지 */}
-                <div
-                  className="relative transition-transform duration-200 ease-out"
-                  style={{
-                    transform: `scale(${zoom}) rotate(${rotation}deg)`,
-                    transformOrigin: 'center center'
-                  }}
-                >
-                  <Image
+              <div className="relative w-full h-full flex items-center justify-center">
+                <div className="relative inline-block overflow-visible">
+                  <NextImage
                     ref={imageRef}
                     src={src}
                     alt={alt}
-                    width={800}
-                    height={600}
-                    className="max-w-[90vw] max-h-[80vh] w-auto h-auto object-contain"
+                    width={1920}
+                    height={1080}
+                    className={cn(
+                      "max-w-full w-auto h-auto object-contain block",
+                      isMobile
+                        ? viewMode === 'editPen'
+                          ? "max-h-[calc(100vh-280px)]"  // Mobile: 펜 툴바 공간 확보
+                          : viewMode === 'editSelect'
+                          ? "max-h-[calc(100vh-240px)]"  // Mobile: 편집 툴바
+                          : "max-h-[calc(100vh-180px)]"  // Mobile: 기본 툴바
+                        : viewMode === 'editPen'
+                        ? "max-h-[calc(100vh-240px)]"  // Desktop: 펜 툴바 공간 확보
+                        : viewMode === 'editSelect'
+                        ? "max-h-[calc(100vh-200px)]"  // Desktop: 편집 툴바
+                        : "max-h-[calc(100vh-140px)]"  // Desktop: 기본 툴바
+                    )}
                     priority
                     unoptimized
                     onLoad={handleImageLoad}
@@ -584,20 +404,39 @@ export function ImageLightbox({
                     }}
                   />
 
-                  {/* Canvas 오버레이 (그리기 모드일 때) */}
+                  {/* Canvas 오버레이 (펜 모드일 때) - 이미지와 정확히 같은 크기/위치 */}
                   {isDrawingMode && typeof window !== 'undefined' && (
-                    <div className="absolute top-0 left-0 w-full h-full pointer-events-auto">
-                      <KonvaCanvas
-                        stageRef={stageRef}
-                        lines={lines}
-                        width={canvasSize.width}
-                        height={canvasSize.height}
-                        onMouseDown={handleMouseDown}
-                        onMouseMove={handleMouseMove}
-                        onMouseUp={handleMouseUp}
-                      />
-                    </div>
+                    <DrawingCanvas
+                      stageRef={stageRef}
+                      lines={lines}
+                      width={canvasSize.width}
+                      height={canvasSize.height}
+                      rotation={0}
+                      onMouseDown={handleMouseDown}
+                      onMouseMove={handleMouseMove}
+                      onMouseUp={handleMouseUp}
+                    />
                   )}
+                </div>
+
+                {/* 하단 툴바 - absolute positioning으로 고정 */}
+                <div className="absolute bottom-0 left-0 right-0 z-20 bg-black/40 backdrop-blur-md py-2">
+                  <LightboxToolbar
+                    viewMode={viewMode}
+                    visible={showUI}
+                    onDownload={handleDownload}
+                    onShare={handleShare}
+                    onDelete={handleDelete}
+                    onEdit={handleEdit}
+                    onBack={handleBack}
+                    activeEditMode={activeEditMode}
+                    onEditModeChange={handleEditModeChange}
+                    penTool={tool}
+                    penColor={color}
+                    onPenToolChange={setTool}
+                    onPenColorChange={setColor}
+                    onClearAllDrawing={handleClearAllDrawing}
+                  />
                 </div>
               </div>
             )}
@@ -608,7 +447,7 @@ export function ImageLightbox({
   );
 }
 
-// 이미지 클릭 가능한 컴포넌트
+// ==================== ClickableImage (기존 인터페이스 유지) ====================
 export interface ClickableImageProps {
   src: string;
   alt: string;
@@ -620,7 +459,6 @@ export interface ClickableImageProps {
   unoptimized?: boolean;
   onLoad?: () => void;
   onSend?: (imageDataUrl: string, fileName: string) => void;
-  enableDrawing?: boolean;
 }
 
 export function ClickableImage({
@@ -634,7 +472,6 @@ export function ClickableImage({
   unoptimized = true,
   onLoad,
   onSend,
-  enableDrawing = true,
 }: ClickableImageProps) {
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
 
@@ -653,7 +490,7 @@ export function ClickableImage({
         )}
         onClick={handleImageClick}
       >
-        <Image
+        <NextImage
           src={src}
           alt={alt}
           width={width}
@@ -679,7 +516,6 @@ export function ClickableImage({
         onClose={() => setIsLightboxOpen(false)}
         fileName={fileName}
         onSend={onSend}
-        enableDrawing={enableDrawing}
       />
     </>
   );
