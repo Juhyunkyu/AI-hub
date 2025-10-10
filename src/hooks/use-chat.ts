@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useAuthStore } from "@/stores/auth";
 import { ChatMessage, ChatRoomWithParticipants } from "@/types/chat";
 import { toast } from "sonner";
@@ -18,12 +18,14 @@ const sortRoomsByLastMessage = (rooms: ChatRoomWithParticipants[]) => {
   });
 };
 
-// 메시지 찾기 헬퍼 함수
+// 메시지 찾기 헬퍼 함수 (React 19 + Context7 Pattern)
+// 다중 파일 업로드 시 file_name으로 정확히 매칭
 const findTempMessage = (messages: ChatMessage[], targetMessage: ChatMessage) => {
   return messages.findIndex(m =>
     m.id.startsWith('temp-') &&
     m.content === targetMessage.content &&
     m.sender_id === targetMessage.sender_id &&
+    m.file_name === targetMessage.file_name &&  // ✅ 파일 이름 매칭 추가
     Math.abs(new Date(m.created_at).getTime() - new Date(targetMessage.created_at).getTime()) < 10000
   );
 };
@@ -56,8 +58,21 @@ export function useChatHook() {
   const [loading, setLoading] = useState(false);
   const [messagesLoading, setMessagesLoading] = useState(false);
 
+  // React 19 + Context7 Pattern: 중복 메시지 처리 방지 (batching 대응)
+  const processingMessagesRef = useRef<Set<string>>(new Set());
+
   // 실시간 메시지 핸들러들 (React 19 최적화)
   const handleNewRealtimeMessage = useCallback((message: ChatMessage) => {
+    // Guard: 이미 처리 중인 메시지는 무시 (React batching 중복 방지)
+    if (processingMessagesRef.current.has(message.id)) {
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`⚠️ Duplicate realtime message ignored: ${message.id}`);
+      }
+      return;
+    }
+
+    // 처리 시작 표시
+    processingMessagesRef.current.add(message.id);
     setMessages(prev => {
       // 임시 메시지 찾기 (헬퍼 함수 사용)
       const tempMessageIndex = findTempMessage(prev, message);
@@ -127,6 +142,11 @@ export function useChatHook() {
       });
       return sortRoomsByLastMessage(updatedRooms);
     });
+
+    // 메모리 관리: 1초 후 처리 완료 표시 제거
+    setTimeout(() => {
+      processingMessagesRef.current.delete(message.id);
+    }, 1000);
   }, [currentRoom]);
 
   const handleMessageUpdate = useCallback((message: ChatMessage) => {
@@ -259,8 +279,9 @@ export function useChatHook() {
       if (!user || (!content.trim() && !file)) return;
 
       // Optimistic update - 즉시 UI에 메시지 표시
+      // React 19 + Context7 Pattern: 고유한 임시 ID 생성 (중복 방지)
       const optimisticMessage = {
-        id: `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        id: `temp-${Date.now()}-${Math.random()}-${performance.now()}`,
         room_id: roomId,
         sender_id: user.id,
         content: content.trim(),

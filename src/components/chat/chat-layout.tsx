@@ -89,20 +89,23 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(({ initialR
   // 반응형 화면 크기 감지
   const { isMobile } = useResponsive();
 
-  // 파일 선택 상태 - React 19 최적화
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  // 다중 파일 선택 상태 - React 19 최적화 (최대 5개)
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
 
-  // 파일 선택 핸들러
+  // 파일 선택 핸들러 - 다중 파일 지원 (최대 5개)
   const handleFileSelect = useCallback((files: File[]) => {
-    // 다중 파일을 지원하지만 현재는 첫 번째 파일만 사용
     if (files.length > 0) {
-      setSelectedFile(files[0]);
+      setSelectedFiles(prev => {
+        // 기존 파일 + 새 파일을 합쳐서 최대 5개까지만 유지
+        const combined = [...prev, ...files];
+        return combined.slice(0, 5);
+      });
     }
   }, []);
 
-  // 파일 제거 핸들러
-  const handleFileRemove = useCallback(() => {
-    setSelectedFile(null);
+  // 파일 제거 핸들러 - 인덱스 기반 제거
+  const handleFileRemove = useCallback((index: number) => {
+    setSelectedFiles(prev => prev.filter((_, i) => i !== index));
   }, []);
 
   // Next.js 15 공식 패턴: URL 파라미터 안전 업데이트 - React 19 최적화
@@ -174,8 +177,8 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(({ initialR
     messages,
     messagesLoading,
     isRealtimeConnected,
-    selectedFile,
-    onFileRemove: handleFileRemove
+    selectedFiles,
+    onFilesRemove: () => setSelectedFiles([])
   });
 
   // 외부에서 호출할 수 있는 함수 노출
@@ -516,13 +519,21 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(({ initialR
 
             {/* 메시지 입력 */}
             <div className="p-4 border-t">
-              {/* 선택된 파일 미리보기 */}
-              {selectedFile && (
-                <div className="mb-3">
-                  <FilePreview
-                    file={selectedFile}
-                    onRemove={handleFileRemove}
-                  />
+              {/* 선택된 파일 미리보기 - 다중 파일 지원 */}
+              {selectedFiles.length > 0 && (
+                <div className="mb-3 space-y-2">
+                  {selectedFiles.map((file, index) => (
+                    <FilePreview
+                      key={`${file.name}-${index}`}
+                      file={file}
+                      onRemove={() => handleFileRemove(index)}
+                    />
+                  ))}
+                  {selectedFiles.length >= 5 && (
+                    <div className="text-xs text-muted-foreground">
+                      최대 5개까지 선택 가능합니다.
+                    </div>
+                  )}
                 </div>
               )}
 
