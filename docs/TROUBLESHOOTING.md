@@ -6,6 +6,60 @@
 
 ## ✅ 최근 해결된 문제
 
+### 0. SECURITY DEFINER 뷰 보안 문제 (2025-10-10)
+
+**문제:** Supabase에서 보안 경고 - 뷰가 SECURITY DEFINER로 생성되어 RLS 우회
+
+**영향받는 뷰:**
+- `profiles_security_stats`
+- `profiles_audit_stats`
+- `unread_message_counts`
+
+**위험성:**
+```sql
+-- SECURITY DEFINER (위험)
+-- 뷰 생성자(postgres) 권한으로 실행 → RLS 우회
+-- 일반 사용자가 모든 사용자 데이터 접근 가능!
+
+CREATE VIEW profiles_security_stats AS
+SELECT id, email, password_hash FROM profiles;
+-- ⚠️ anon 사용자도 모든 프로필 조회 가능
+```
+
+**해결:**
+```sql
+-- SECURITY INVOKER (안전)
+-- 쿼리 실행자 권한으로 실행 → RLS 정책 준수
+
+CREATE VIEW profiles_security_stats
+WITH (security_invoker = true)  -- ✅ Postgres 15+ 필수
+AS
+SELECT
+  id,
+  username,
+  role,
+  created_at
+FROM profiles;
+
+GRANT SELECT ON profiles_security_stats TO authenticated;
+```
+
+**마이그레이션:**
+- 파일: `supabase/migrations/20251010000000_fix_security_definer_views.sql`
+- 적용: `supabase db push` 또는 Supabase Dashboard에서 실행
+
+**검증:**
+```sql
+-- security_invoker 확인
+SELECT table_name, security_invoker
+FROM information_schema.views
+WHERE table_schema = 'public'
+  AND table_name IN ('profiles_security_stats', 'profiles_audit_stats', 'unread_message_counts');
+-- 결과: security_invoker = 'YES'
+```
+
+---
+
 ### 1. 위치 공유 지도 렌더링 완성 (2025-10-01)
 
 **문제:** 지도 영역만 생성되고 카카오맵 SDK 초기화 없음

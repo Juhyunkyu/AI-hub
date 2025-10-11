@@ -141,15 +141,23 @@ export function useRealtimeChat({
         console.warn(`⚠️ No access token available for realtime auth`);
       }
 
-      // 기존 채널 정리
-      if (channelRef.current) {
+      // 같은 roomId면 재구독 금지
+      // @ts-ignore - topic is internal
+      const currentTopic = (channelRef.current && (channelRef.current as any).topic) as string | undefined;
+      const nextTopic = `room:${roomId}:messages`;
+      if (currentTopic === nextTopic) {
         if (process.env.NODE_ENV === 'development') {
-          console.log(`🧹 Cleaning up previous channel for room: ${roomId}`);
+          console.log('🔁 Reuse existing realtime channel for same room');
         }
-        supabase.removeChannel(channelRef.current);
+        setIsConnected(true);
+        setConnectionState('connected');
+        setError(null);
+        return;
       }
-      const channel = supabase
-        .channel(`room:${roomId}:messages`)
+
+      // 새 채널 생성 및 구독
+      const nextChannel = supabase
+        .channel(nextTopic)
         .on(
           'postgres_changes',
           {
@@ -197,7 +205,12 @@ export function useRealtimeChat({
           }
         });
 
-      channelRef.current = channel;
+      // 스왑: 새 채널 설정 후 이전 채널 정리
+      const prev = channelRef.current;
+      channelRef.current = nextChannel;
+      if (prev) {
+        supabase.removeChannel(prev);
+      }
 
     } catch (error) {
       setConnectionState('error');

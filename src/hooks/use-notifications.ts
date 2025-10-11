@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useAuthStore } from "@/stores/auth";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { RealtimeChannel } from "@supabase/supabase-js";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/lib/query-keys";
 
 interface UnreadCount {
   room_id: string;
@@ -24,12 +26,32 @@ const supabase = createSupabaseBrowserClient();
 
 export function useNotifications() {
   const { user } = useAuthStore();
-  const [notificationState, setNotificationState] = useState<NotificationState>({
-    hasUnreadMessages: false,
-    totalUnreadCount: 0,
-    roomCounts: [],
-    loading: true,
-    error: null
+  const queryClient = useQueryClient();
+
+  // TanStack Query: /api/chat/unread 캐싱 + in-flight dedupe + 백오프
+  const unreadQuery = useQuery({
+    queryKey: queryKeys.chat.unreadCount(),
+    enabled: !!user,
+    queryFn: async () => {
+      const response = await fetch('/api/chat/unread', {
+        headers: { 'Cache-Control': 'no-cache' }
+      });
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        const message = (errorData && errorData.error) || `HTTP ${response.status}`;
+        const err: any = new Error(message);
+        (err.status = response.status);
+        throw err;
+      }
+      return response.json();
+    },
+    staleTime: 15_000,
+    refetchOnWindowFocus: false,
+    select: (data: any): Omit<NotificationState, 'loading' | 'error'> => ({
+      hasUnreadMessages: !!data?.hasUnreadMessages,
+      totalUnreadCount: typeof data?.totalUnreadCount === 'number' ? data.totalUnreadCount : 0,
+      roomCounts: Array.isArray(data?.roomCounts) ? data.roomCounts : []
+    })
   });
 
   // 실시간 구독 채널 상태 관리
@@ -39,65 +61,32 @@ export function useNotifications() {
   // React 19 최적화: 디바운싱을 위한 타임아웃 참조
   const loadTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // 읽지 않은 메시지 카운트 로드 - 에러 처리 강화
-  const loadUnreadCounts = useCallback(async () => {
-    if (!user) return;
-
-    try {
-      setNotificationState(prev => ({ ...prev, loading: true, error: null }));
-
-      const response = await fetch('/api/chat/unread', {
-        headers: {
-          'Cache-Control': 'no-cache',
-        }
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `HTTP ${response.status}`);
-      }
-
-      const data = await response.json();
-
-      setNotificationState(prev => ({
-        ...prev,
-        hasUnreadMessages: data.hasUnreadMessages || false,
-        totalUnreadCount: data.totalUnreadCount || 0,
-        roomCounts: data.roomCounts || [],
-        loading: false,
-        error: null
-      }));
-    } catch (error) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('Error loading unread counts:', error);
-      }
-      setNotificationState(prev => ({
-        ...prev,
-        loading: false,
-        error: error instanceof Error ? error.message : 'Unknown error'
-      }));
+  // 쿼리 무효화(디바운스)
+  const invalidateUnreadRef = useRef<NodeJS.Timeout | null>(null);
+  const scheduleInvalidateUnread = useCallback((delayMs: number) => {
+    if (invalidateUnreadRef.current) {
+      clearTimeout(invalidateUnreadRef.current);
     }
-  }, [user]);
+    invalidateUnreadRef.current = setTimeout(() => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.chat.unreadCount() });
+      invalidateUnreadRef.current = null;
+    }, delayMs);
+  }, [queryClient]);
 
   // Supabase 최적화: 읽음 처리 with optimistic updates
   const markAsRead = useCallback(async (roomId: string, messageId?: string) => {
     if (!user || !roomId) return;
 
-    // 즉시 로컬 상태 업데이트 (Optimistic UI)
-    setNotificationState(prev => {
-      const updatedRoomCounts = prev.roomCounts.map(room =>
-        room.room_id === roomId
-          ? { ...room, unreadCount: 0 }
-          : room
-      );
-
-      const newTotalCount = updatedRoomCounts.reduce((sum, room) => sum + room.unreadCount, 0);
-
+    // Optimistic update: 캐시 데이터 즉시 갱신
+    queryClient.setQueryData(queryKeys.chat.unreadCount(), (prev: any) => {
+      const roomCounts = Array.isArray(prev?.roomCounts) ? prev.roomCounts : [];
+      const patched = roomCounts.map((r: any) => r?.room_id === roomId ? { ...r, unreadCount: 0 } : r);
+      const total = patched.reduce((sum: number, r: any) => sum + (r?.unreadCount || 0), 0);
       return {
-        ...prev,
-        roomCounts: updatedRoomCounts,
-        totalUnreadCount: newTotalCount,
-        hasUnreadMessages: newTotalCount > 0
+        ...(prev || {}),
+        hasUnreadMessages: total > 0,
+        totalUnreadCount: total,
+        roomCounts: patched
       };
     });
 
@@ -132,7 +121,7 @@ export function useNotifications() {
             console.warn('Server error, will retry:', errorData);
           }
           // 실제 데이터로 새로고침하여 정확한 상태 복원
-          setTimeout(() => loadUnreadCounts(), 1000);
+          scheduleInvalidateUnread(1000);
           return;
         }
 
@@ -140,22 +129,22 @@ export function useNotifications() {
       }
 
       // 성공한 경우: 서버와 동기화 확인을 위한 백그라운드 새로고침
-      setTimeout(() => loadUnreadCounts(), 300);
+      scheduleInvalidateUnread(300);
 
     } catch (error) {
       if (process.env.NODE_ENV === 'development') {
         console.error('markAsRead network error:', error);
       }
       // 네트워크 에러의 경우 상태 복원
-      setTimeout(() => loadUnreadCounts(), 2000);
+      scheduleInvalidateUnread(2000);
     }
-  }, [user, loadUnreadCounts]);
+  }, [user, queryClient, scheduleInvalidateUnread]);
 
   // 특정 방의 읽지 않은 메시지 수 가져오기
   const getUnreadCount = useCallback((roomId: string): number => {
-    const room = notificationState.roomCounts.find(r => r.room_id === roomId);
+    const room = unreadQuery.data?.roomCounts?.find((r: any) => r?.room_id === roomId);
     return room?.unreadCount || 0;
-  }, [notificationState.roomCounts]);
+  }, [unreadQuery.data]);
 
   // 안전한 채널 정리 함수
   const cleanupChannel = useCallback((channel: RealtimeChannel) => {
@@ -218,14 +207,8 @@ export function useNotifications() {
         (payload) => {
           // Supabase 최적화: 새 메시지 실시간 처리
           if (payload.new && payload.new.sender_id !== user.id) {
-            // 디바운싱을 위한 ref 사용 (React 19 최적화)
-            if (loadTimeoutRef.current) {
-              clearTimeout(loadTimeoutRef.current);
-            }
-            loadTimeoutRef.current = setTimeout(() => {
-              loadUnreadCounts();
-              loadTimeoutRef.current = null;
-            }, 300);
+            // Realtime 이벤트 발생 시 unread 쿼리 무효화 (디바운스)
+            scheduleInvalidateUnread(300);
           }
         }
       )
@@ -238,14 +221,8 @@ export function useNotifications() {
           filter: `user_id=eq.${user.id}`
         },
         (payload) => {
-          // 읽음 상태 변경 시 즉시 업데이트
-          if (loadTimeoutRef.current) {
-            clearTimeout(loadTimeoutRef.current);
-          }
-          loadTimeoutRef.current = setTimeout(() => {
-            loadUnreadCounts();
-            loadTimeoutRef.current = null;
-          }, 150);
+          // 읽음 상태 변경 시 빠른 무효화
+          scheduleInvalidateUnread(150);
         }
       )
       .subscribe(async (status) => {
@@ -268,29 +245,23 @@ export function useNotifications() {
       cleanupChannel(channel);
       setChannelStatus('disconnected');
     };
-  }, [user, cleanupChannel]); // loadUnreadCounts 의존성 제거로 무한 루프 방지
+  }, [user, cleanupChannel, scheduleInvalidateUnread]);
 
-  // 초기 로드 및 사용자 상태 변경 처리
+  // 사용자 변경 시 상태 초기화 (쿼리는 enabled 플래그로 제어)
   useEffect(() => {
-    if (user) {
-      loadUnreadCounts();
-    } else {
-      // 로그아웃 시 상태 초기화
-      setNotificationState({
-        hasUnreadMessages: false,
-        totalUnreadCount: 0,
-        roomCounts: [],
-        loading: false,
-        error: null
-      });
+    if (!user) {
       setChannelStatus('disconnected');
     }
-  }, [user, loadUnreadCounts]);
+  }, [user]);
 
   return {
-    ...notificationState,
+    hasUnreadMessages: !!unreadQuery.data?.hasUnreadMessages,
+    totalUnreadCount: unreadQuery.data?.totalUnreadCount || 0,
+    roomCounts: unreadQuery.data?.roomCounts || [],
+    loading: unreadQuery.isLoading || unreadQuery.isFetching,
+    error: unreadQuery.error ? (unreadQuery.error as Error).message : null,
     markAsRead,
     getUnreadCount,
-    refresh: loadUnreadCounts
+    refresh: () => queryClient.invalidateQueries({ queryKey: queryKeys.chat.unreadCount() })
   };
 }

@@ -29,19 +29,24 @@ export function useTheme() {
   // 테마 변경 함수
   const changeTheme = async (newTheme: Theme) => {
     setTheme(newTheme);
-    
+
     // 로컬 스토리지에 저장 (즉시 적용)
     localStorage.setItem("theme", newTheme);
-    
+
     // 로그인한 사용자인 경우 데이터베이스에 저장
-    if (user) {
+    if (user?.id) {
       try {
-        await supabase
-          .from("profiles")
-          .update({ theme_preference: newTheme })
-          .eq("id", user.id);
+        // user가 존재하는지 다시 한번 확인 (로그아웃 직후 race condition 방지)
+        const { data: { user: currentUser } } = await supabase.auth.getUser();
+        if (currentUser?.id === user.id) {
+          await supabase
+            .from("profiles")
+            .update({ theme_preference: newTheme })
+            .eq("id", user.id);
+        }
       } catch (error) {
-        console.error("테마 설정 저장 실패:", error);
+        // 로그아웃 후 발생하는 에러는 무시
+        console.debug("테마 설정 저장 건너뜀 (로그아웃 상태)");
       }
     }
   };

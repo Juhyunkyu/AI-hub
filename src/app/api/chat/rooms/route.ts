@@ -105,10 +105,28 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // 각 채팅방의 마지막 메시지와 읽지 않은 메시지 수를 가져옴
+    // unread 카운트를 SSOT 뷰에서 일괄 조회하여 맵으로 구성
+    const { data: unreadRows, error: unreadError } = await supabase
+      .from("unread_message_counts")
+      .select("room_id, unread_count")
+      .eq("user_id", user.id)
+      .in("room_id", roomIds);
+
+    if (unreadError) {
+      console.error("Error fetching unread counts from view:", unreadError);
+    }
+
+    const unreadMap = new Map<string, number>();
+    (unreadRows || []).forEach((row: any) => {
+      if (row && row.room_id) {
+        unreadMap.set(row.room_id, row.unread_count || 0);
+      }
+    });
+
+    // 각 채팅방의 마지막 메시지와 unread 카운트(뷰 기반)를 결합
     const roomsWithDetails = await Promise.all(
       (rooms || []).map(async (room) => {
-        // 마지막 메시지 가져오기
+        // 마지막 메시지 가져오기 (기존 로직 유지)
         const { data: lastMessage } = await supabase
           .from("chat_messages")
           .select(
@@ -122,32 +140,7 @@ export async function GET(request: NextRequest) {
           .limit(1)
           .single();
 
-        // 읽지 않은 메시지 수 계산
-        const userParticipant = room.participants.find(
-          (p: ChatRoomParticipant) => p.user_id === user.id
-        );
-        const lastReadAt = userParticipant?.last_read_at;
-
-        let unreadCount = 0;
-        if (lastReadAt) {
-          const { count } = await supabase
-            .from("chat_messages")
-            .select("*", { count: "exact", head: true })
-            .eq("room_id", room.id)
-            .gt("created_at", lastReadAt)
-            .neq("sender_id", user.id);
-
-          unreadCount = count || 0;
-        } else {
-          // 처음 참여한 경우 모든 메시지가 읽지 않음
-          const { count } = await supabase
-            .from("chat_messages")
-            .select("*", { count: "exact", head: true })
-            .eq("room_id", room.id)
-            .neq("sender_id", user.id);
-
-          unreadCount = count || 0;
-        }
+        const unreadCount = unreadMap.get(room.id) || 0;
 
         return {
           ...room,

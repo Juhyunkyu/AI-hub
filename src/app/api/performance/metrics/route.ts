@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createClient as createServerClient } from '@/lib/supabase/server';
+import { createClient } from '@supabase/supabase-js';
 
 interface PerformanceMetricData {
   type: string;
@@ -99,17 +100,35 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const supabase = await createClient();
+    // For performance metrics, we need to support anonymous users
+    // Use service role key to bypass RLS since we have explicit validation
+    const supabaseAdmin = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false
+        }
+      }
+    );
 
-    // Get current user (if logged in)
-    const { data: { user } } = await supabase.auth.getUser();
+    // Try to get user from cookies if available (for attribution)
+    let user = null;
+    try {
+      const serverClient = await createServerClient();
+      const { data: { user: authUser } } = await serverClient.auth.getUser();
+      user = authUser;
+    } catch {
+      // Ignore - anonymous user
+    }
 
     // Prepare data for batch insert
     const metricsToInsert = payload.metrics.map(metric => ({
       user_id: user?.id || null, // Use actual logged in user ID or null
       session_id: payload.sessionId,
       page_url: metric.pageUrl,
-      metric_type: metric.type,
+      metric_type: metric.type.toLowerCase(), // Convert to lowercase for DB constraint
       metric_value: metric.value,
       metric_rating: metric.rating,
       user_agent: payload.deviceInfo?.userAgent || null,
@@ -125,16 +144,23 @@ export async function POST(request: NextRequest) {
       },
     }));
 
-    // Batch insert metrics
-    const { data, error } = await supabase
+    // Batch insert metrics using admin client (bypasses RLS)
+    const { data, error } = await supabaseAdmin
       .from('performance_metrics')
       .insert(metricsToInsert)
       .select('id');
 
     if (error) {
-      console.error('Performance metrics insert error:', error);
+      console.error('Performance metrics insert error:', {
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        user_id: user?.id || 'anonymous',
+        sample_data: metricsToInsert[0]
+      });
       return NextResponse.json(
-        { error: 'Failed to store metrics' },
+        { error: 'Failed to store metrics', details: error.message },
         { status: 500 }
       );
     }
@@ -157,7 +183,7 @@ export async function POST(request: NextRequest) {
 // GET endpoint for retrieving metrics (admin only)
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient();
+    const supabase = await createServerClient();
 
     // Check if user is admin
     const { data: { user } } = await supabase.auth.getUser();

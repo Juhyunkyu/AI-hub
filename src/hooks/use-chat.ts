@@ -235,7 +235,6 @@ export function useChatHook() {
 
       try {
         setMessagesLoading(true);
-        setMessages([]); // 먼저 초기화
 
         const response = await fetch(
           `/api/chat/messages?room_id=${roomId}&page=1&limit=50`
@@ -261,7 +260,6 @@ export function useChatHook() {
     async (room: ChatRoomWithParticipants) => {
       // 채팅방 선택
       setCurrentRoom(room);
-      setMessages([]); // 먼저 초기화
       await loadMessages(room.id);
     },
     [loadMessages]
