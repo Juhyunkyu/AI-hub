@@ -29,7 +29,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // 인증 상태 변경 감지
     authListener = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === "SIGNED_IN") {
-        // session.user를 먼저 사용하여 상태 업데이트 (프로필 업데이트보다 우선)
+        // session.user를 사용하여 상태 업데이트
         const user = session?.user
           ? {
               id: session.user.id,
@@ -38,17 +38,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           : null;
         setUser(user);
 
-        // 프로필 업데이트는 백그라운드에서 처리 (오류가 발생해도 사용자 상태는 유지)
-        if (session?.user) {
-          // 프로필 업데이트를 비동기로 처리하되 오류를 무시
-          (async () => {
-            try {
-              await supabase.from("profiles").upsert({ id: session.user.id });
-            } catch (error: unknown) {
-              // 프로필 업데이트 실패는 무시 (사용자 상태는 이미 업데이트됨)
-            }
-          })();
-        }
+        // 프로필은 Database Trigger (handle_new_user)가 회원가입 시 자동 생성하므로
+        // 여기서 upsert 불필요
       } else if (event === "SIGNED_OUT") {
         // 로그아웃 시 상태 초기화 및 리다이렉트
         setUser(null);

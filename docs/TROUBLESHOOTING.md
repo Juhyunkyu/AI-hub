@@ -1,12 +1,72 @@
 # 알려진 문제점 및 개선사항
 
-**문서 업데이트**: 2025-10-04
+**문서 업데이트**: 2025-10-11
 
 ---
 
 ## ✅ 최근 해결된 문제
 
-### 0. SECURITY DEFINER 뷰 보안 문제 (2025-10-10)
+### 0. 익명 사용자 성능 메트릭 수집 실패 (2025-10-11)
+
+**문제:** 로그아웃 상태에서 `/api/performance/metrics` 500 에러 발생
+
+**증상:**
+```
+POST /api/performance/metrics => 500 Internal Server Error
+Error: new row violates row-level security policy for table "performance_metrics"
+```
+
+**근본 원인:**
+1. **주요 문제**: RLS 정책이 익명 사용자의 INSERT를 차단
+2. **부차 문제**: `metric_type` CHECK 제약 조건이 소문자만 허용하는데 대문자로 전송
+
+**해결 방법:**
+
+1. Service Role Key 사용 (RLS 우회):
+```typescript
+// Service Role로 익명/로그인 사용자 모두 지원
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  { auth: { autoRefreshToken: false, persistSession: false } }
+);
+
+// 로그인 사용자 확인 (선택적)
+let user = null;
+try {
+  const serverClient = await createServerClient();
+  const { data: { user: authUser } } = await serverClient.auth.getUser();
+  user = authUser;
+} catch {
+  // 익명 사용자 - 무시
+}
+
+// user_id 처리
+user_id: user?.id || null  // 로그인: UUID, 익명: null
+```
+
+2. metric_type 소문자 변환:
+```typescript
+metric_type: metric.type.toLowerCase()  // 'CLS' → 'cls'
+```
+
+**보안 계층:**
+- ✅ Rate limiting (100 req/min per IP)
+- ✅ Payload 검증 (sessionId, metrics 필수)
+- ✅ Metric 형식 검증 (type, value, rating)
+- ✅ Batch 크기 제한 (최대 20개)
+- ✅ Service Role이지만 INSERT만 수행
+
+**영향:**
+- ✅ 익명 사용자: 메트릭 수집 가능 (user_id: null)
+- ✅ 로그인 사용자: 메트릭 수집 + user_id 기록
+- ✅ 관리자 조회: RLS 보호 유지
+
+**파일:** `src/app/api/performance/metrics/route.ts`
+
+---
+
+### 1. SECURITY DEFINER 뷰 보안 문제 (2025-10-10)
 
 **문제:** Supabase에서 보안 경고 - 뷰가 SECURITY DEFINER로 생성되어 RLS 우회
 
@@ -60,7 +120,7 @@ WHERE table_schema = 'public'
 
 ---
 
-### 1. 위치 공유 지도 렌더링 완성 (2025-10-01)
+### 2. 위치 공유 지도 렌더링 완성 (2025-10-01)
 
 **문제:** 지도 영역만 생성되고 카카오맵 SDK 초기화 없음
 
@@ -77,7 +137,7 @@ const LocationMessage = memo(({ message, locationData }) => {
 
 ---
 
-### 2. 이미지 펜 캔버스 크기 문제 (2025-10-02)
+### 3. 이미지 펜 캔버스 크기 문제 (2025-10-02)
 
 **문제:** 그린 위치와 전송 후 위치 불일치
 
@@ -98,7 +158,7 @@ ctx.scale(scaleX, scaleY);
 
 ---
 
-### 3. DOMPurify XSS 보안 강화 (2025-10-02)
+### 4. DOMPurify XSS 보안 강화 (2025-10-02)
 
 **문제:** `dangerouslySetInnerHTML` 사용으로 XSS 취약점
 
@@ -109,7 +169,7 @@ ctx.scale(scaleX, scaleY);
 
 ---
 
-### 4. 이미지 편집 툴바 Event Propagation (2025-10-03)
+### 5. 이미지 편집 툴바 Event Propagation (2025-10-03)
 
 **문제:** 버튼 클릭 시 부모 핸들러로 이벤트 전파
 
@@ -123,7 +183,7 @@ onClick={(e) => {
 
 ---
 
-### 5. 펜 툴바 "전체 지우기" 미작동 (2025-10-04)
+### 6. 펜 툴바 "전체 지우기" 미작동 (2025-10-04)
 
 **문제:** state는 초기화되나 캔버스 픽셀 남아있음
 
@@ -144,7 +204,7 @@ const handleClearAllDrawing = () => {
 
 ## 🔴 높은 우선순위
 
-### 6. 다중 파일 업로드 불완전
+### 7. 다중 파일 업로드 불완전
 
 **현재 상태:**
 ```typescript
@@ -171,7 +231,7 @@ for (const file of selectedFiles) {
 
 ## 🟡 중간 우선순위
 
-### 7. 타이핑 인디케이터 최적화
+### 8. 타이핑 인디케이터 최적화
 
 **현재 문제:** 매 호출마다 API 요청
 
@@ -193,7 +253,7 @@ const updateTyping = () => {
 
 ---
 
-### 8. 이미지 로딩 최적화
+### 9. 이미지 로딩 최적화
 
 **현재:**
 ```typescript
@@ -212,7 +272,7 @@ const updateTyping = () => {
 
 ---
 
-### 9. 읽음 표시 UI 미흡
+### 10. 읽음 표시 UI 미흡
 
 **현재:** DB에 `read_by` 배열 있으나 UI 없음
 
@@ -233,15 +293,15 @@ const updateTyping = () => {
 
 ## 🟢 낮은 우선순위
 
-### 10. 메시지 검색 기능
+### 11. 메시지 검색 기능
 - 현재 게시물만 검색 가능
 - 채팅 메시지 검색 필요
 
-### 11. 메시지 편집/삭제 UI
+### 12. 메시지 편집/삭제 UI
 - DB 로직 있음
 - 사용자 인터페이스 미구현
 
-### 12. 음성 메시지 지원
+### 13. 음성 메시지 지원
 - 녹음 기능
 - 오디오 플레이어
 
