@@ -1,12 +1,147 @@
 # 알려진 문제점 및 개선사항
 
-**문서 업데이트**: 2025-10-11
+**문서 업데이트**: 2025-10-14
 
 ---
 
 ## ✅ 최근 해결된 문제
 
-### 0. 익명 사용자 성능 메트릭 수집 실패 (2025-10-11)
+### 0. Realtime 재연결 시 메시지 유실 (2025-10-14)
+
+**문제:** Realtime 연결이 끊겼다가 재연결되는 사이(1초)에 상대방이 보낸 메시지가 UI에 나타나지 않음
+
+**증상:**
+```
+❌ Realtime channel error
+🔌 Realtime connection closed
+🔄 Reconnecting in 1000ms
+✅ Realtime SUBSCRIBED
+# 하지만 재연결 중에 보낸 메시지는 UI에 없음
+```
+
+**근본 원인:**
+- Supabase Realtime의 postgres_changes는 실시간 이벤트만 구독
+- 재연결 시 자동으로 과거 이벤트를 재전송하지 않음
+- 따라서 연결이 끊긴 사이의 메시지는 영구적으로 UI에서 누락
+
+**해결 방법:**
+```typescript
+// 1. API 엔드포인트에 'since' 파라미터 추가
+GET /api/chat/messages?room_id={id}&since={timestamp}
+
+// 2. use-chat.ts에 syncMessages 함수 추가
+const syncMessages = useCallback(async (roomId: string) => {
+  const lastMessage = messages[messages.length - 1];
+  const since = lastMessage.created_at;
+
+  const response = await fetch(
+    `/api/chat/messages?room_id=${roomId}&since=${since}&limit=50`
+  );
+
+  // 중복 제거 후 병합
+  const uniqueNewMessages = newMessages.filter(m => !existingIds.has(m.id));
+  setMessages(prev => [...prev, ...uniqueNewMessages]);
+}, [currentRoom, messages]);
+
+// 3. use-realtime-chat.ts 재연결 성공 시 동기화 트리거
+.subscribe((status) => {
+  if (status === 'SUBSCRIBED' && retryCountRef.current > 0) {
+    onSyncNeeded(roomId); // 동기화 콜백 호출
+  }
+});
+```
+
+**개선 효과:**
+- ✅ 재연결 중 메시지 유실 완전 방지
+- ✅ 자동 동기화로 사용자 경험 개선
+- ✅ 중복 방지 로직으로 안정성 확보
+- ✅ Supabase 공식 패턴 준수
+
+**파일:**
+- `src/app/api/chat/messages/route.ts`
+- `src/hooks/use-realtime-chat.ts`
+- `src/hooks/use-chat.ts`
+
+---
+
+### 1. RealtimeStatus UI 혼란 제거 (2025-10-14)
+
+**문제:** 채팅방 헤더의 "실시간/오프라인" 표시가 상대방 온라인 상태로 오해됨
+
+**증상:**
+- 상대방 닉네임 옆에 "실시간" 또는 "오프라인" 표시
+- 실제로는 **내 Realtime 연결 상태**였으나 사용자가 상대방 상태로 착각
+
+**문제점:**
+- 사용자 기대: 상대방이 온라인인지 오프라인인지
+- 실제 의미: 나의 WebSocket 연결 상태
+- 위치: 상대방 닉네임 옆 → 더욱 혼란 가중
+
+**해결 방법:**
+```typescript
+// chat-layout.tsx에서 RealtimeStatus 컴포넌트 완전 제거
+- import { RealtimeStatus } from "./realtime-status";
+- <RealtimeStatus ... />
+```
+
+**이유:**
+- Realtime 연결 끊겨도 메시지 전송 가능 (HTTP API 사용)
+- 자동 재연결 로직이 백그라운드에서 작동
+- 사용자가 알 필요 없는 기술적 정보
+- 혼란만 야기하고 실제 가치 없음
+
+**파일:** `src/components/chat/chat-layout.tsx`
+
+---
+
+### 2. 로그인 시 불필요한 profiles POST 요청 (2025-10-14)
+
+**문제:** 기존 계정 로그인 시 `POST /rest/v1/profiles => 404 Not Found` 에러 발생
+
+**증상:**
+```
+[POST] https://vzrtznpmbanzjbfyjkcb.supabase.co/rest/v1/profiles => [404]
+```
+
+**근본 원인:**
+- `auth-provider.tsx`에서 로그인할 때마다 `profiles.upsert({ id: session.user.id })`를 불필요하게 호출
+- Database Trigger (`on_auth_user_created` → `handle_new_user()`)가 회원가입 시 자동으로 프로필 생성
+- 이미 존재하는 프로필에 대해 중복 upsert 시도 → 404 에러
+
+**영향:**
+- ⚠️ 네트워크 낭비
+- ⚠️ 성능 저하
+- ⚠️ 에러 로그 오염
+
+**해결 방법:**
+```typescript
+// src/components/auth-provider.tsx (lines 31-43)
+if (event === "SIGNED_IN") {
+  // session.user를 사용하여 상태 업데이트
+  const user = session?.user
+    ? {
+        id: session.user.id,
+        email: session.user.email ?? null,
+      }
+    : null;
+  setUser(user);
+
+  // 프로필은 Database Trigger (handle_new_user)가 회원가입 시 자동 생성하므로
+  // 여기서 upsert 불필요 ← 중복 코드 제거!
+}
+```
+
+**개선 효과:**
+- ✅ 불필요한 POST 요청 완전 제거
+- ✅ 로그인 시 네트워크 호출 최소화
+- ✅ 404 에러 로그 제거
+- ✅ Database Trigger 역할 명확화
+
+**파일:** `src/components/auth-provider.tsx`
+
+---
+
+### 1. 익명 사용자 성능 메트릭 수집 실패 (2025-10-11)
 
 **문제:** 로그아웃 상태에서 `/api/performance/metrics` 500 에러 발생
 

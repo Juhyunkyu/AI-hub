@@ -14,6 +14,7 @@ interface RealtimeChatHookProps {
   onNewMessage?: (message: ChatMessage) => void;
   onMessageUpdate?: (message: ChatMessage) => void;
   onMessageDelete?: (messageId: string) => void;
+  onSyncNeeded?: (roomId: string) => void; // ✅ 재연결 시 메시지 동기화 콜백
 }
 
 interface RealtimeChatHookReturn {
@@ -28,7 +29,8 @@ export function useRealtimeChat({
   roomId,
   onNewMessage,
   onMessageUpdate,
-  onMessageDelete
+  onMessageDelete,
+  onSyncNeeded
 }: RealtimeChatHookProps): RealtimeChatHookReturn {
   const { user } = useAuthStore();
   const [isConnected, setIsConnected] = useState(false);
@@ -178,6 +180,15 @@ export function useRealtimeChat({
             setIsConnected(true);
             setConnectionState('connected');
             setError(null);
+
+            // ✅ 재연결 성공 시 메시지 동기화 트리거
+            if (retryCountRef.current > 0 && onSyncNeeded) {
+              if (process.env.NODE_ENV === 'development') {
+                console.log(`🔄 Realtime reconnected, triggering message sync for room: ${roomId}`);
+              }
+              onSyncNeeded(roomId);
+            }
+
             retryCountRef.current = 0;
             if (process.env.NODE_ENV === 'development') {
               console.log(`✅ Realtime SUBSCRIBED for room: ${roomId}`);

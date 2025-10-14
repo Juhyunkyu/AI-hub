@@ -72,6 +72,7 @@ export async function GET(request: NextRequest) {
     const room_id = searchParams.get("room_id");
     const page = parseInt(searchParams.get("page") || "1");
     const limit = parseInt(searchParams.get("limit") || "50");
+    const since = searchParams.get("since"); // ✅ 재연결 동기화를 위한 타임스탬프 파라미터
     const offset = (page - 1) * limit;
 
     if (!room_id) {
@@ -90,9 +91,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Access denied" }, { status: 403 });
     }
 
-
-    // 메시지 조회
-    const { data: messages, error } = await supabase
+    // 메시지 조회 쿼리 구성
+    let query = supabase
       .from("chat_messages")
       .select(`
         *,
@@ -103,9 +103,18 @@ export async function GET(request: NextRequest) {
         ),
         reads:chat_message_reads(user_id)
       `)
-      .eq("room_id", room_id)
-      .order("created_at", { ascending: false })
-      .range(offset, offset + limit - 1);
+      .eq("room_id", room_id);
+
+    // ✅ since 파라미터가 있으면 해당 시간 이후의 메시지만 조회 (재연결 동기화)
+    if (since) {
+      query = query.gt("created_at", since).order("created_at", { ascending: true });
+    } else {
+      // 일반 조회: 최신순 정렬 + 페이지네이션
+      query = query.order("created_at", { ascending: false }).range(offset, offset + limit - 1);
+    }
+
+    // 메시지 조회
+    const { data: messages, error } = await query.limit(limit);
 
 
     if (error) {
@@ -114,12 +123,13 @@ export async function GET(request: NextRequest) {
     }
 
     // 메시지를 시간순으로 정렬하고 읽은 사용자 목록 처리
+    // ✅ since 파라미터가 있으면 이미 ascending 정렬이므로 reverse 불필요
     const processedMessages = (messages as MessageWithSender[])
       ?.map((message) => ({
         ...message,
         read_by: message.reads?.map((read) => read.user_id) || []
       }))
-      .reverse() || [];
+      [since ? 'slice' : 'reverse'](0) || []; // since 있으면 그대로, 없으면 reverse
 
     // 마지막 읽은 시간 업데이트
     if (processedMessages.length > 0) {

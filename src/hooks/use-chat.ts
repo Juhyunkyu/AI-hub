@@ -181,6 +181,59 @@ export function useChatHook() {
     setMessages(prev => prev.filter(m => m.id !== messageId));
   }, []);
 
+  // ✅ 재연결 시 메시지 동기화 함수
+  const syncMessages = useCallback(async (roomId: string) => {
+    // 현재 방이 아니거나 메시지가 없으면 동기화 불필요
+    if (!currentRoom || currentRoom.id !== roomId || messages.length === 0) {
+      return;
+    }
+
+    try {
+      // 마지막 메시지의 타임스탬프를 기준으로 이후 메시지만 가져오기
+      const lastMessage = messages[messages.length - 1];
+      const since = lastMessage.created_at;
+
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`🔄 Syncing messages since: ${since}`);
+      }
+
+      const response = await fetch(
+        `/api/chat/messages?room_id=${roomId}&since=${encodeURIComponent(since)}&limit=50`
+      );
+
+      if (response.ok) {
+        const { messages: newMessages } = await response.json();
+
+        if (newMessages.length > 0) {
+          if (process.env.NODE_ENV === 'development') {
+            console.log(`✅ Synced ${newMessages.length} missed messages`);
+          }
+
+          // 중복 제거 및 병합
+          setMessages(prev => {
+            const existingIds = new Set(prev.map(m => m.id));
+            const uniqueNewMessages = newMessages.filter((m: ChatMessage) => !existingIds.has(m.id));
+            return [...prev, ...uniqueNewMessages];
+          });
+
+          // 채팅방 리스트의 마지막 메시지도 업데이트
+          const latestMessage = newMessages[newMessages.length - 1];
+          setRooms(prev => {
+            const updatedRooms = prev.map(room => {
+              if (room.id === roomId) {
+                return { ...room, last_message: latestMessage };
+              }
+              return room;
+            });
+            return sortRoomsByLastMessage(updatedRooms);
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Failed to sync messages:', error);
+    }
+  }, [currentRoom, messages]);
+
   // 실시간 채팅 훅 사용
   const {
     isConnected,
@@ -191,7 +244,8 @@ export function useChatHook() {
     roomId: currentRoom?.id || null,
     onNewMessage: handleNewRealtimeMessage,
     onMessageUpdate: handleMessageUpdate,
-    onMessageDelete: handleMessageDelete
+    onMessageDelete: handleMessageDelete,
+    onSyncNeeded: syncMessages // ✅ 재연결 시 동기화 콜백 연결
   });
 
   // 타이핑 인디케이터

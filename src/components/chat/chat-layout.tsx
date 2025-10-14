@@ -36,7 +36,6 @@ import { useAuthStore } from "@/stores/auth";
 import { formatLastMessageTime } from "@/lib/date-utils";
 import { ChatRoomAvatar } from "./chat-room-avatar";
 import { ChatRoomParticipantsModal } from "./chat-room-participants-modal";
-import { RealtimeStatus } from "./realtime-status";
 import { getChatRoomDisplayName } from "@/lib/chat-utils";
 import { VirtualizedMessageList } from "./virtualized";
 import { deleteChatRooms } from "@/lib/chat-api";
@@ -519,17 +518,9 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(
                     size="sm"
                   />
                   <div className="flex-1">
-                    <div className="flex items-center justify-between">
-                      <h3 className="font-semibold">
-                        {currentRoomDisplayName}
-                      </h3>
-                      <RealtimeStatus
-                        currentRoom={currentRoom}
-                        realtimeConnectionState={realtimeConnectionState}
-                        realtimeError={realtimeError || undefined}
-                        reconnectRealtime={reconnectRealtime}
-                      />
-                    </div>
+                    <h3 className="font-semibold">
+                      {currentRoomDisplayName}
+                    </h3>
                     {(currentRoom.participants?.length || 0) > 2 && (
                       <p className="text-xs text-muted-foreground">
                         {currentRoom.participants?.length}명
