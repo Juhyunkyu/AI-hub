@@ -1,9 +1,10 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import { Button } from "@/components/ui/button";
 import { Pen, Eraser, Trash2, ChevronLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useResponsive } from "@/hooks/use-responsive";
+import { ToolbarButton } from './toolbar-button';
 
 interface PenToolbarProps {
   tool: 'pen' | 'eraser';
@@ -22,6 +23,7 @@ export function PenToolbar({
   onClearAll,
   onBack
 }: PenToolbarProps) {
+  const { isMobile } = useResponsive();
   const colors = [
     '#000000', // 검정
     '#FF0000', // 빨강
@@ -87,52 +89,26 @@ export function PenToolbar({
     >
       <div className="flex items-center gap-1.5 px-4 min-w-max">
         {/* 뒤로가기 버튼 */}
-        <Button
-          variant="secondary"
-          size="lg"
-          onClick={() => {
-            onBack();
-          }}
-          className="h-11 w-11 bg-black/60 hover:bg-black/80 text-white backdrop-blur-md border-none flex-shrink-0"
-          aria-label="뒤로가기"
-        >
-          <ChevronLeft className="h-4 w-4" />
-        </Button>
+        <ToolbarButton
+          icon={ChevronLeft}
+          label="뒤로가기"
+          onClick={onBack}
+        />
 
         {/* 펜/지우개 토글 */}
-        <Button
-          variant="secondary"
-          size="lg"
-          onClick={() => {
-            onToolChange('pen');
-          }}
-          className={cn(
-            "h-11 w-11 backdrop-blur-md border-none transition-all flex-shrink-0",
-            tool === 'pen'
-              ? "bg-primary text-primary-foreground shadow-lg scale-105"
-              : "bg-black/60 hover:bg-black/80 text-white"
-          )}
-          aria-label="펜"
-        >
-          <Pen className="h-4 w-4" />
-        </Button>
+        <ToolbarButton
+          icon={Pen}
+          label="펜"
+          isActive={tool === 'pen'}
+          onClick={() => onToolChange('pen')}
+        />
 
-        <Button
-          variant="secondary"
-          size="lg"
-          onClick={() => {
-            onToolChange('eraser');
-          }}
-          className={cn(
-            "h-11 w-11 backdrop-blur-md border-none transition-all flex-shrink-0",
-            tool === 'eraser'
-              ? "bg-primary text-primary-foreground shadow-lg scale-105"
-              : "bg-black/60 hover:bg-black/80 text-white"
-          )}
-          aria-label="지우개"
-        >
-          <Eraser className="h-4 w-4" />
-        </Button>
+        <ToolbarButton
+          icon={Eraser}
+          label="지우개"
+          isActive={tool === 'eraser'}
+          onClick={() => onToolChange('eraser')}
+        />
 
         <div className="w-px h-7 bg-white/30 mx-0.5 flex-shrink-0" />
 
@@ -175,7 +151,8 @@ export function PenToolbar({
               setIsDragging(false);
             }}
             className={cn(
-              "h-9 w-9 rounded-full border-2 transition-all flex-shrink-0 cursor-pointer",
+              "rounded-full border-2 transition-all flex-shrink-0 cursor-pointer",
+              isMobile ? "h-7 w-7" : "h-9 w-9",  // 모바일: 28px, 데스크톱: 36px
               color === c
                 ? "border-white scale-110 shadow-lg shadow-white/50"
                 : "border-white/30 hover:border-white/50"
@@ -186,17 +163,12 @@ export function PenToolbar({
         ))}
 
         {/* 전체 지우기 */}
-        <Button
+        <ToolbarButton
+          icon={Trash2}
+          label="전체 지우기"
           variant="destructive"
-          size="lg"
-          onClick={() => {
-            onClearAll();
-          }}
-          className="h-11 w-11 bg-red-500/80 hover:bg-red-600 text-white backdrop-blur-md border-none flex-shrink-0"
-          aria-label="전체 지우기"
-        >
-          <Trash2 className="h-4 w-4" />
-        </Button>
+          onClick={onClearAll}
+        />
       </div>
     </div>
   );

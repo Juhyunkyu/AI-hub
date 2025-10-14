@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { LightboxHeader } from './lightbox-header';
+import { LightboxFooter } from './lightbox-footer';
 import { LightboxToolbar } from './lightbox-toolbar';
 import { DrawingCanvas, type DrawLine } from './drawing-canvas';
 import type { EditMode } from './toolbar-items/edit-toolbar';
@@ -272,7 +273,8 @@ export function ImageLightbox({
 
     setIsDrawing(true);
     const pos = e.target.getStage().getPointerPosition();
-    setLines([...lines, { tool, points: [pos.x, pos.y], color, width: 3 }]);
+    const lineWidth = tool === 'eraser' ? 20 : 3;  // 지우개는 20px, 펜은 3px
+    setLines([...lines, { tool, points: [pos.x, pos.y], color, width: lineWidth }]);
   }, [viewMode, lines, tool, color]);
 
   const handleMouseMove = useCallback((e: any) => {
@@ -300,7 +302,7 @@ export function ImageLightbox({
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogOverlay className="bg-black/95" />
       <DialogContent
-        className="max-w-none max-h-none w-screen h-screen p-0 bg-transparent border-none overflow-hidden"
+        className="max-w-none max-h-none w-screen h-screen p-0 bg-black border-none overflow-hidden flex flex-col"
         aria-describedby="image-dialog-description"
       >
         <DialogTitle className="sr-only">이미지 보기</DialogTitle>
@@ -308,7 +310,8 @@ export function ImageLightbox({
           이미지를 확대하거나 편집할 수 있습니다
         </div>
 
-        <div className="relative w-full h-full flex items-center justify-center">
+        {/* Header */}
+        <div className="flex-none relative">
           {/* 헤더: 작성자 정보 */}
           {showHeader && (
             <LightboxHeader
@@ -342,25 +345,11 @@ export function ImageLightbox({
               전송
             </Button>
           )}
+        </div>
 
-          {/* 이미지 + Canvas 컨테이너 */}
-          <div
-            className={cn(
-              "relative flex items-center justify-center w-full h-full px-4",
-              isMobile
-                ? viewMode === 'editPen'
-                  ? "max-h-[calc(100vh-260px)]"  // Mobile: Pen toolbar (더 많은 공간)
-                  : viewMode === 'editSelect'
-                  ? "max-h-[calc(100vh-220px)]"  // Mobile: Edit toolbar
-                  : "max-h-[calc(100vh-160px)]"  // Mobile: Base toolbar
-                : viewMode === 'editPen'
-                ? "max-h-[calc(100vh-200px)]"  // Desktop: Pen toolbar
-                : viewMode === 'editSelect'
-                ? "max-h-[calc(100vh-180px)]"  // Desktop: Edit toolbar
-                : "max-h-[calc(100vh-120px)]"  // Desktop: Base toolbar
-            )}
-            onClick={handleImageClick}
-          >
+        {/* Main Content Area */}
+        <div className="flex-1 min-h-0 relative flex items-center justify-center"
+             onClick={handleImageClick}>
             {isLoading && (
               <div className="absolute inset-0 flex items-center justify-center">
                 <div className="w-8 h-8 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -373,75 +362,61 @@ export function ImageLightbox({
                 <p className="text-sm text-white/70">{src}</p>
               </div>
             ) : (
-              <div className="relative w-full h-full flex items-center justify-center">
-                <div className="relative inline-block overflow-visible">
-                  <NextImage
-                    ref={imageRef}
-                    src={src}
-                    alt={alt}
-                    width={1920}
-                    height={1080}
-                    className={cn(
-                      "max-w-full w-auto h-auto object-contain block",
-                      isMobile
-                        ? viewMode === 'editPen'
-                          ? "max-h-[calc(100vh-280px)]"  // Mobile: 펜 툴바 공간 확보
-                          : viewMode === 'editSelect'
-                          ? "max-h-[calc(100vh-240px)]"  // Mobile: 편집 툴바
-                          : "max-h-[calc(100vh-180px)]"  // Mobile: 기본 툴바
-                        : viewMode === 'editPen'
-                        ? "max-h-[calc(100vh-240px)]"  // Desktop: 펜 툴바 공간 확보
-                        : viewMode === 'editSelect'
-                        ? "max-h-[calc(100vh-200px)]"  // Desktop: 편집 툴바
-                        : "max-h-[calc(100vh-140px)]"  // Desktop: 기본 툴바
-                    )}
-                    priority
-                    unoptimized
-                    onLoad={handleImageLoad}
-                    onError={() => {
-                      setIsLoading(false);
-                      setImageError(true);
-                    }}
-                  />
+              <div className="relative inline-block overflow-hidden">
+                <NextImage
+                  ref={imageRef}
+                  src={src}
+                  alt={alt}
+                  width={1920}
+                  height={1080}
+                  className="max-w-full max-h-full w-auto h-auto object-contain block"
+                  priority
+                  unoptimized
+                  onLoad={handleImageLoad}
+                  onError={() => {
+                    setIsLoading(false);
+                    setImageError(true);
+                  }}
+                />
 
-                  {/* Canvas 오버레이 (펜 모드일 때) - 이미지와 정확히 같은 크기/위치 */}
-                  {isDrawingMode && typeof window !== 'undefined' && (
-                    <DrawingCanvas
-                      stageRef={stageRef}
-                      lines={lines}
-                      width={canvasSize.width}
-                      height={canvasSize.height}
-                      rotation={0}
-                      onMouseDown={handleMouseDown}
-                      onMouseMove={handleMouseMove}
-                      onMouseUp={handleMouseUp}
-                    />
-                  )}
-                </div>
-
-                {/* 하단 툴바 - absolute positioning으로 고정 */}
-                <div className="absolute bottom-0 left-0 right-0 z-20 bg-black/40 backdrop-blur-md py-2">
-                  <LightboxToolbar
-                    viewMode={viewMode}
-                    visible={showUI}
-                    onDownload={handleDownload}
-                    onShare={handleShare}
-                    onDelete={handleDelete}
-                    onEdit={handleEdit}
-                    onBack={handleBack}
-                    activeEditMode={activeEditMode}
-                    onEditModeChange={handleEditModeChange}
-                    penTool={tool}
-                    penColor={color}
-                    onPenToolChange={setTool}
-                    onPenColorChange={setColor}
-                    onClearAllDrawing={handleClearAllDrawing}
+                {/* Canvas 오버레이 (펜 모드일 때) - 이미지와 정확히 같은 크기/위치 */}
+                {isDrawingMode && typeof window !== 'undefined' && (
+                  <DrawingCanvas
+                    stageRef={stageRef}
+                    lines={lines}
+                    width={canvasSize.width}
+                    height={canvasSize.height}
+                    rotation={0}
+                    onMouseDown={handleMouseDown}
+                    onMouseMove={handleMouseMove}
+                    onMouseUp={handleMouseUp}
                   />
-                </div>
+                )}
               </div>
             )}
-          </div>
         </div>
+
+        {/* Footer - Toolbar */}
+        {showUI && (
+          <LightboxFooter ariaLabel="이미지 편집 도구">
+            <LightboxToolbar
+              viewMode={viewMode}
+              visible={showUI}
+              onDownload={handleDownload}
+              onShare={handleShare}
+              onDelete={handleDelete}
+              onEdit={handleEdit}
+              onBack={handleBack}
+              activeEditMode={activeEditMode}
+              onEditModeChange={handleEditModeChange}
+              penTool={tool}
+              penColor={color}
+              onPenToolChange={setTool}
+              onPenColorChange={setColor}
+              onClearAllDrawing={handleClearAllDrawing}
+            />
+          </LightboxFooter>
+        )}
       </DialogContent>
     </Dialog>
   );

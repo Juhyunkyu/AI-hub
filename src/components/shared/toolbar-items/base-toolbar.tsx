@@ -1,7 +1,7 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
 import { Download, Share2, Trash2, Edit3 } from "lucide-react";
+import { ToolbarButton } from './toolbar-button';
 
 interface BaseToolbarProps {
   onDownload: () => void;
@@ -45,23 +45,17 @@ export function BaseToolbar({
   ];
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-3">
       {buttons
         .filter((b) => b.show)
-        .map(({ icon: Icon, label, onClick, variant }) => (
-          <Button
+        .map(({ icon, label, onClick, variant }) => (
+          <ToolbarButton
             key={label}
-            variant={variant || "secondary"}
-            size="lg"
-            onClick={(e) => {
-              e.stopPropagation();
-              onClick?.();
-            }}
-            className="flex-col h-16 w-16 gap-1 bg-black/60 hover:bg-black/80 text-white border-none backdrop-blur-md data-[variant=destructive]:bg-red-500/60 data-[variant=destructive]:hover:bg-red-600/80"
-          >
-            <Icon className="h-5 w-5" />
-            <span className="text-xs">{label}</span>
-          </Button>
+            icon={icon}
+            label={label}
+            variant={variant}
+            onClick={onClick!}
+          />
         ))}
     </div>
   );
