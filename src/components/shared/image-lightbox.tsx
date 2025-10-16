@@ -302,7 +302,7 @@ export function ImageLightbox({
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogOverlay className="bg-black/95" />
       <DialogContent
-        className="max-w-none max-h-none w-screen h-screen p-0 bg-black border-none overflow-hidden flex flex-col"
+        className="max-w-none max-h-none w-screen h-screen p-0 bg-black border-none rounded-none overflow-hidden flex flex-col"
         aria-describedby="image-dialog-description"
       >
         <DialogTitle className="sr-only">이미지 보기</DialogTitle>

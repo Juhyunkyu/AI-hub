@@ -249,8 +249,27 @@ function NewPostForm() {
             editorRef.current.innerHTML = j.post.content || "";
           }
           editorHtmlRef.current = j.post.content || "";
-          // 프리필: 카테고리, 토픽, 태그
-          if (j.categoryId && Array.isArray(c1)) {
+          // 핀 프리필 먼저 (카테고리 선택에 영향)
+          if (typeof j.post.pin_scope === "string") {
+            setIsPinned(true);
+            setPinScope(
+              j.post.pin_scope === "category" ? "category" : "global"
+            );
+            // 카테고리 상단고정인 경우 pinned_category_id 우선 사용
+            if (j.post.pin_scope === "category" && j.post.pinned_category_id && Array.isArray(c1)) {
+              const found = c1.find((c) => c.id === j.post.pinned_category_id);
+              if (found) setSelectedCategoryId(found.id);
+            }
+          }
+          if (typeof j.post.pin_priority === "number") {
+            setPinPriority(j.post.pin_priority);
+          }
+          if (typeof j.post.pinned_until === "string") {
+            setPinnedUntil(j.post.pinned_until);
+          }
+
+          // 프리필: 카테고리, 토픽, 태그 (핀 카테고리가 없는 경우에만)
+          if (!selectedCategoryId && j.categoryId && Array.isArray(c1)) {
             const found = c1.find((c) => c.id === j.categoryId);
             if (found) setSelectedCategoryId(found.id);
           }
@@ -272,19 +291,6 @@ function NewPostForm() {
           }
           if (typeof j.post.show_in_recent === "boolean") {
             setShowInRecent(Boolean(j.post.show_in_recent));
-          }
-          // 핀 프리필
-          if (typeof j.post.pin_scope === "string") {
-            setIsPinned(true);
-            setPinScope(
-              j.post.pin_scope === "category" ? "category" : "global"
-            );
-          }
-          if (typeof j.post.pin_priority === "number") {
-            setPinPriority(j.post.pin_priority);
-          }
-          if (typeof j.post.pinned_until === "string") {
-            setPinnedUntil(j.post.pinned_until);
           }
         } else {
           toast.error(j?.error ?? "게시글 정보를 불러오지 못했습니다");
@@ -1290,85 +1296,79 @@ function NewPostForm() {
                             });
                           })()}
                         </div>
-                        <div className="flex items-center justify-between gap-2">
+                        <div className="space-y-3">
                           <div className="flex items-center gap-2 text-sm">
-                            <label className="text-xs text-muted-foreground">
-                              시간
-                            </label>
-                            <input
-                              type="number"
-                              min={0}
-                              max={23}
-                              className="w-14 rounded border p-1 bg-background"
-                              value={(() => {
-                                const d = expirySelectedDate || new Date();
-                                return d.getHours();
-                              })()}
-                              onChange={(e) => {
-                                const h = Math.max(
-                                  0,
-                                  Math.min(
-                                    23,
-                                    parseInt(e.target.value || "0", 10)
-                                  )
-                                );
-                                const base = expirySelectedDate || new Date();
-                                const nd = new Date(base);
-                                nd.setHours(h);
-                                setPinnedUntil(toLocalDateTimeString(nd));
-                              }}
-                            />
-                            <span>:</span>
-                            <input
-                              type="number"
-                              min={0}
-                              max={59}
-                              className="w-14 rounded border p-1 bg-background"
-                              value={(() => {
-                                const d = expirySelectedDate || new Date();
-                                return d.getMinutes();
-                              })()}
-                              onChange={(e) => {
-                                const m = Math.max(
-                                  0,
-                                  Math.min(
-                                    59,
-                                    parseInt(e.target.value || "0", 10)
-                                  )
-                                );
-                                const base = expirySelectedDate || new Date();
-                                const nd = new Date(base);
-                                nd.setMinutes(m);
-                                setPinnedUntil(toLocalDateTimeString(nd));
-                              }}
-                            />
+                            <div className="flex items-center gap-2">
+                              <label className="text-xs text-muted-foreground">
+                                시간
+                              </label>
+                              <input
+                                type="number"
+                                min={0}
+                                max={23}
+                                className="w-14 rounded border p-1 bg-background"
+                                value={(() => {
+                                  const d = expirySelectedDate || new Date();
+                                  return d.getHours();
+                                })()}
+                                onChange={(e) => {
+                                  const h = Math.max(
+                                    0,
+                                    Math.min(
+                                      23,
+                                      parseInt(e.target.value || "0", 10)
+                                    )
+                                  );
+                                  const base = expirySelectedDate || new Date();
+                                  const nd = new Date(base);
+                                  nd.setHours(h);
+                                  setPinnedUntil(toLocalDateTimeString(nd));
+                                }}
+                              />
+                              <span>:</span>
+                              <input
+                                type="number"
+                                min={0}
+                                max={59}
+                                className="w-14 rounded border p-1 bg-background"
+                                value={(() => {
+                                  const d = expirySelectedDate || new Date();
+                                  return d.getMinutes();
+                                })()}
+                                onChange={(e) => {
+                                  const m = Math.max(
+                                    0,
+                                    Math.min(
+                                      59,
+                                      parseInt(e.target.value || "0", 10)
+                                    )
+                                  );
+                                  const base = expirySelectedDate || new Date();
+                                  const nd = new Date(base);
+                                  nd.setMinutes(m);
+                                  setPinnedUntil(toLocalDateTimeString(nd));
+                                }}
+                              />
+                            </div>
+                            <div className="flex-1 flex justify-center">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  const now = new Date();
+                                  setPinnedUntil(toLocalDateTimeString(now));
+                                }}
+                              >
+                                오늘
+                              </Button>
+                            </div>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              onClick={() => {
-                                const now = new Date();
-                                setExpiryView(
-                                  new Date(now.getFullYear(), now.getMonth(), 1)
-                                );
-                              }}
-                            >
-                              오늘로 이동
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              onClick={() => {
-                                const now = new Date();
-                                setPinnedUntil(toLocalDateTimeString(now));
-                              }}
-                            >
-                              오늘 선택
-                            </Button>
+                          <div className="flex items-center justify-center gap-2">
                             <Button
                               type="button"
                               variant="outline"
+                              size="sm"
                               onClick={() => {
                                 setPinnedUntil("");
                               }}
@@ -1377,6 +1377,7 @@ function NewPostForm() {
                             </Button>
                             <Button
                               type="button"
+                              size="sm"
                               onClick={() => setExpiryOpen(false)}
                             >
                               확인

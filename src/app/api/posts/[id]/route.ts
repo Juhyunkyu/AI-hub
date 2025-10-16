@@ -16,7 +16,7 @@ export async function GET(
 
     const { data: post, error } = await supabase
       .from("posts")
-      .select("id,title,content,author_id,created_at,is_notice,anonymous,post_type,allow_comments,show_in_recent")
+      .select("id,title,content,author_id,created_at,is_notice,anonymous,post_type,allow_comments,show_in_recent,pin_scope,pin_priority,pinned_until,pinned_category_id")
       .eq("id", id)
       .maybeSingle();
 

@@ -62,33 +62,44 @@ export default async function PostDetail({
   const post = postRaw as unknown as PostRow | null;
   if (!post) return notFound();
 
-  // 게시글의 카테고리 정보 가져오기
-  const { data: postTopics } = await supabase
-    .from("post_topics")
-    .select("topic_id")
-    .eq("post_id", post.id)
-    .limit(1);
+  // 공지 여부: 필드 우선, 없으면 태그로 간주 (초기 확인)
+  const isNoticeEarly =
+    Boolean((post as PostRow).is_notice);
 
+  // 게시글의 카테고리 정보 가져오기
   let categoryName = "자유게시판"; // 기본값
   let categorySlug = "free"; // 기본값
 
-  if (postTopics && postTopics.length > 0) {
-    const { data: topic } = await supabase
-      .from("topics")
-      .select("category_id")
-      .eq("id", postTopics[0].topic_id)
-      .single();
+  if (isNoticeEarly) {
+    // 공지사항인 경우
+    categoryName = "공지사항";
+    categorySlug = "/"; // 메인 페이지로 연결
+  } else {
+    // 일반 게시글인 경우 카테고리 정보 조회
+    const { data: postTopics } = await supabase
+      .from("post_topics")
+      .select("topic_id")
+      .eq("post_id", post.id)
+      .limit(1);
 
-    if (topic) {
-      const { data: category } = await supabase
-        .from("categories")
-        .select("name, slug")
-        .eq("id", topic.category_id)
+    if (postTopics && postTopics.length > 0) {
+      const { data: topic } = await supabase
+        .from("topics")
+        .select("category_id")
+        .eq("id", postTopics[0].topic_id)
         .single();
 
-      if (category) {
-        categoryName = category.name;
-        categorySlug = category.slug;
+      if (topic) {
+        const { data: category } = await supabase
+          .from("categories")
+          .select("name, slug")
+          .eq("id", topic.category_id)
+          .single();
+
+        if (category) {
+          categoryName = category.name;
+          categorySlug = category.slug;
+        }
       }
     }
   }
@@ -133,10 +144,10 @@ export default async function PostDetail({
   if (commentAuthorIds.length) {
     const { data: raw } = await supabase
       .from("profiles")
-      .select("id,username,avatar_url")
+      .select("id,username,avatar_url,role")
       .in("id", commentAuthorIds);
     const rawAuthors = (raw ?? []) as unknown as ProfileLite[];
-    
+
     // 작성자 정보 그대로 사용 (개별 댓글의 anonymous 필드로 처리)
     commentAuthors = rawAuthors;
   }
@@ -200,7 +211,7 @@ export default async function PostDetail({
             </Link>
             <ChevronRight className="h-3 w-3" />
             <Link
-              href={`/categories/${categorySlug}`}
+              href={categorySlug === "/" ? "/" : `/categories/${categorySlug}`}
               className="text-foreground font-medium hover:text-primary transition-colors"
             >
               {categoryName}
@@ -289,6 +300,7 @@ export default async function PostDetail({
           postId={post.id}
           postAuthorId={post.author_id}
           postAnonymous={post.anonymous}
+          isNoticePost={isNotice}
         />
       )}
     </div>

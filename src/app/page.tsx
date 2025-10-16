@@ -9,6 +9,7 @@ import { CategoryCard, Category } from "@/components/category-card";
 import { Button } from "@/components/ui/button";
 import { SearchBar } from "@/components/search-bar";
 import { PostAuthor } from "@/components/post-author";
+import { PinnedPostsList } from "@/components/pinned-posts-list";
 import { User } from "lucide-react";
 
 export const revalidate = 15; // 댓글 수 빠른 반영을 위한 15초 ISR
@@ -44,11 +45,11 @@ export default async function Home({
         .eq("is_notice", true)
         .or("pinned_until.is.null,pinned_until.gt." + new Date().toISOString())
         .order("pin_priority", { ascending: true })
-        .order("pinned_until", { ascending: false })
-        .limit(5),
+        .order("created_at", { ascending: false })
+        .limit(3),
       supabase
         .from("posts")
-        .select("id, title, created_at, author_id, anonymous")
+        .select("id, title, created_at, author_id, anonymous, is_notice")
         .eq("show_in_recent", true)
         .or("pin_scope.is.null,pin_scope.neq.global")
         .order("created_at", { ascending: false })
@@ -71,6 +72,7 @@ export default async function Home({
     created_at: string;
     author_id: string;
     anonymous: boolean;
+    is_notice?: boolean;
   }[];
   const recentAuthorIds = Array.from(
     new Set([...recentPosts, ...pinnedGlobal].map((r) => r.author_id))
@@ -80,17 +82,17 @@ export default async function Home({
   // 작성자 맵
   const authorMap = new Map<
     string,
-    { id: string; username: string | null; avatar_url: string | null }
+    { id: string; username: string | null; avatar_url: string | null; role?: string }
   >();
   if (recentAuthorIds.length) {
     const { data: authorsData } = await supabase
       .from("profiles")
-      .select("id,username,avatar_url")
+      .select("id,username,avatar_url,role")
       .in("id", recentAuthorIds);
     (authorsData ?? []).forEach((a) => {
       authorMap.set(
         (a as { id: string }).id,
-        a as { id: string; username: string | null; avatar_url: string | null }
+        a as { id: string; username: string | null; avatar_url: string | null; role?: string }
       );
     });
   }
@@ -388,43 +390,13 @@ export default async function Home({
       )}
 
       {/* Pinned Global Section */}
-      {!query && pinnedGlobal.length > 0 && (
-        <Section>
-          <ul className="space-y-0.5">
-            {pinnedGlobal.map((p) => (
-              <li key={p.id} className="px-3 py-1.5">
-                <div className="flex items-center justify-between gap-3">
-                  <Link
-                    href={`/posts/${p.id}`}
-                    className="hover:underline font-bold truncate text-[11px] sm:text-xs flex items-baseline"
-                  >
-                    <span className="text-muted-foreground font-bold mr-2">
-                      공지
-                    </span>
-                    <span className="truncate">{p.title}</span>
-                    {(() => {
-                      const n = commentCountByPost.get(p.id) || 0;
-                      if (n <= 0) return null;
-                      return (
-                        <span className="ml-1 text-[10px] text-muted-foreground whitespace-nowrap">
-                          {n > 99 ? "99+" : n}
-                        </span>
-                      );
-                    })()}
-                  </Link>
-                  <div className="flex items-center gap-2 text-[11px] sm:text-xs text-muted-foreground shrink-0">
-                    <PostAuthor
-                      isNotice={true}
-                      isAnonymous={p.anonymous}
-                      author={authorMap.get(p.author_id)}
-                      size="sm"
-                    />
-                  </div>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </Section>
+      {!query && (
+        <PinnedPostsList
+          posts={pinnedGlobal}
+          authorMap={authorMap}
+          commentCountByPost={commentCountByPost}
+          showGlobalLabel={true}
+        />
       )}
 
       {/* Recent Posts Section (hide on search) */}
@@ -461,6 +433,19 @@ export default async function Home({
                   </div>
                   <div className="mt-1 text-[11px] sm:text-xs text-muted-foreground flex items-center gap-2">
                     {(() => {
+                      // 공지글인 경우 무조건 "공지사항" 표시
+                      if (p.is_notice) {
+                        return (
+                          <Link
+                            href="/notice"
+                            className="hover:underline"
+                          >
+                            공지사항
+                          </Link>
+                        );
+                      }
+
+                      // 일반 게시글은 카테고리 또는 자유게시판 표시
                       const cat = categoryByPost.get(p.id);
                       return cat ? (
                         <Link
@@ -479,6 +464,7 @@ export default async function Home({
                       );
                     })()}
                     <PostAuthor
+                      isNotice={p.is_notice ?? false}
                       isAnonymous={p.anonymous}
                       author={authorMap.get(p.author_id)}
                     />

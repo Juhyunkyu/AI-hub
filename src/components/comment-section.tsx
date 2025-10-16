@@ -29,6 +29,7 @@ interface CommentSectionProps {
   postId: string;
   postAuthorId: string;
   postAnonymous?: boolean;
+  isNoticePost?: boolean;
 }
 
 export function CommentSection({
@@ -37,6 +38,7 @@ export function CommentSection({
   postId,
   postAuthorId,
   postAnonymous = false,
+  isNoticePost = false,
 }: CommentSectionProps) {
   const user = useAuthStore((s) => s.user);
   const [replyTo, setReplyTo] = useState<{
@@ -188,6 +190,7 @@ export function CommentSection({
       const displayInfo = getAnonymousDisplayInfo(c);
       const isPostAuthor = c.author_id === postAuthorId; // 익명이든 아니든 작성자면 배지 표시
       const isReply = level > 0;
+      const author = commentAuthorById.get(c.author_id);
 
       return (
         <div key={`${c.id}-${level}`} className="group">
@@ -204,6 +207,8 @@ export function CommentSection({
               authorId={c.author_id}
               authorUsername={displayInfo.username}
               authorAvatarUrl={displayInfo.avatar_url}
+              authorRole={author?.role}
+              isNoticePost={isNoticePost}
               createdAt={c.created_at}
               isPostAuthor={isPostAuthor}
               postId={postId}

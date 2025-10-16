@@ -15,6 +15,7 @@ import {
 import { SearchBar } from "@/components/search-bar";
 import { Plus, Home, ChevronRight, User } from "lucide-react";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { PinnedPostsList } from "@/components/pinned-posts-list";
 
 export const revalidate = 15; // 댓글 수 빠른 반영 (검색 시에는 noStore)
 
@@ -87,6 +88,34 @@ export default async function CategoryPage({
   let posts: PostLiteWithMeta[] = [];
   let totalPosts = 0;
 
+  // 전역 공지글과 카테고리 공지글 가져오기
+  const [{ data: pinnedGlobal }, { data: pinnedCategory }] = await Promise.all([
+    // 전역 공지글
+    supabase
+      .from("posts")
+      .select(
+        "id, title, created_at, author_id, pin_priority, pinned_until, anonymous, is_notice"
+      )
+      .eq("pin_scope", "global")
+      .eq("is_notice", true)
+      .or("pinned_until.is.null,pinned_until.gt." + new Date().toISOString())
+      .order("pin_priority", { ascending: true })
+      .order("created_at", { ascending: false })
+      .limit(3),
+    // 카테고리별 공지글
+    supabase
+      .from("posts")
+      .select(
+        "id, title, created_at, author_id, pin_priority, pinned_until, anonymous, is_notice"
+      )
+      .eq("pin_scope", "category")
+      .eq("pinned_category_id", category.id)
+      .or("pinned_until.is.null,pinned_until.gt." + new Date().toISOString())
+      .order("pin_priority", { ascending: true })
+      .order("created_at", { ascending: false })
+      .limit(3),
+  ]);
+
   if (topicIds.length > 0) {
     const { data: postTopicMappings } = await supabase
       .from("post_topics")
@@ -95,20 +124,10 @@ export default async function CategoryPage({
 
     if (postTopicMappings && postTopicMappings.length > 0) {
       const postIds = postTopicMappings.map((m) => m.post_id);
-      // 카테고리 고정글 조회 (상단 영역)
-      const { data: pinnedCategory } = await supabase
-        .from("posts")
-        .select(
-          "id, title, content, created_at, author_id, pin_priority, pinned_until, anonymous"
-        )
-        .eq("pin_scope", "category")
-        .eq("pinned_category_id", category.id)
-        .or("pinned_until.is.null,pinned_until.gt." + new Date().toISOString())
-        .order("pin_priority", { ascending: true })
-        .order("pinned_until", { ascending: false });
-      const pinnedIds = new Set(
-        ((pinnedCategory ?? []) as unknown as { id: string }[]).map((p) => p.id)
-      );
+      const pinnedIds = new Set([
+        ...((pinnedGlobal ?? []) as unknown as { id: string }[]).map((p) => p.id),
+        ...((pinnedCategory ?? []) as unknown as { id: string }[]).map((p) => p.id),
+      ]);
       // 검색이 있으면 제목/본문/태그로 필터링 (정확한 태그 매칭)
       let filteredIds = postIds.filter((id) => !pinnedIds.has(id));
       let matchedTagPostIds = new Set<string>();
@@ -175,41 +194,45 @@ export default async function CategoryPage({
             (p as unknown as { id: string }).id
           ),
         }));
-      // 상단: 고정글 + 일반글 페이지 구간
-      const pinnedPosts: PostLiteWithMeta[] = (
-        (pinnedCategory || []) as unknown as (PostLite & {
-          content?: string | null;
-        })[]
-      ).map((p) => ({
-        ...p,
-        matchedByTag: false,
-      }));
-      // 전역 고정글은 제외 (안전 장치)
-      posts = [...pinnedPosts.filter(() => true), ...normPosts];
+      // 일반 게시글만 표시 (핀 게시글은 별도 영역에 표시)
+      posts = normPosts;
     }
   }
 
-  // 작성자 정보 가져오기
-  const authorIds = Array.from(new Set(posts.map((post) => post.author_id)));
+  // 작성자 정보 가져오기 (일반 게시글 + 핀 게시글)
+  const pinnedGlobalPosts = (pinnedGlobal ?? []) as unknown as { author_id: string }[];
+  const pinnedCategoryPosts = (pinnedCategory ?? []) as unknown as { author_id: string }[];
+  const authorIds = Array.from(
+    new Set([
+      ...posts.map((post) => post.author_id),
+      ...pinnedGlobalPosts.map((p) => p.author_id),
+      ...pinnedCategoryPosts.map((p) => p.author_id),
+    ])
+  );
 
   let authors: {
     id: string;
     username: string | null;
     avatar_url: string | null;
+    role?: string;
   }[] = [];
 
   if (authorIds.length > 0) {
     const { data: authorsData } = await supabase
       .from("profiles")
-      .select("id, username, avatar_url")
+      .select("id, username, avatar_url, role")
       .in("id", authorIds);
     authors = authorsData || [];
   }
 
   const authorMap = new Map(authors.map((author) => [author.id, author]));
 
-  // 댓글 수 집계 (표시되는 게시글에 한정)
-  const displayPostIds = posts.map((p) => p.id);
+  // 댓글 수 집계 (표시되는 게시글 + 핀 게시글)
+  const displayPostIds = [
+    ...posts.map((p) => p.id),
+    ...pinnedGlobalPosts.map((p) => (p as unknown as { id: string }).id),
+    ...pinnedCategoryPosts.map((p) => (p as unknown as { id: string }).id),
+  ];
   const commentCountByPost = new Map<string, number>();
   if (displayPostIds.length) {
     const { data: commentRows } = await supabase
@@ -288,6 +311,40 @@ export default async function CategoryPage({
             ) : null}
           </div>
         </div>
+
+        {/* Pinned Posts - 전역 공지 */}
+        {!hasQuery && (
+          <PinnedPostsList
+            posts={pinnedGlobalPosts as unknown as {
+              id: string;
+              title: string;
+              created_at: string;
+              author_id: string;
+              anonymous?: boolean;
+              is_notice?: boolean;
+            }[]}
+            authorMap={authorMap}
+            commentCountByPost={commentCountByPost}
+            showGlobalLabel={true}
+          />
+        )}
+
+        {/* Pinned Posts - 카테고리 공지 */}
+        {!hasQuery && pinnedCategoryPosts.length > 0 && (
+          <PinnedPostsList
+            posts={pinnedCategoryPosts as unknown as {
+              id: string;
+              title: string;
+              created_at: string;
+              author_id: string;
+              anonymous?: boolean;
+              is_notice?: boolean;
+            }[]}
+            authorMap={authorMap}
+            commentCountByPost={commentCountByPost}
+            showGlobalLabel={false}
+          />
+        )}
 
         {/* Posts List */}
         <div className="space-y-0">

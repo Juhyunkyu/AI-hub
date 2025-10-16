@@ -9,6 +9,7 @@ interface PostAuthorProps {
     id: string;
     username: string | null;
     avatar_url: string | null;
+    role?: string;
   } | null;
   showIcon?: boolean;
   size?: "sm" | "md";
@@ -24,8 +25,8 @@ export function PostAuthor({
   const avatarSize = size === "sm" ? "size-5" : "size-6";
   const textSize = size === "sm" ? "text-[10px]" : "text-xs";
   
-  // 공지글인 경우 항상 관리자로 표시
-  if (isNotice) {
+  // 공지글이면서 작성자가 관리자인 경우에만 관리자로 표시
+  if (isNotice && author?.role === "admin") {
     return (
       <span className="inline-flex items-center gap-1.5">
         <Avatar className={avatarSize}>

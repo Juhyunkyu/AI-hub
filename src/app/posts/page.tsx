@@ -12,6 +12,7 @@ import {
   PaginationPrevious,
   PaginationEllipsis,
 } from "@/components/ui/pagination";
+import { PinnedPostsList } from "@/components/pinned-posts-list";
 import { User } from "lucide-react";
 
 const PAGE_SIZE = 15;
@@ -35,27 +36,46 @@ export default async function AllPosts({
   const from = (currentPage - 1) * PAGE_SIZE;
   const to = from + PAGE_SIZE - 1;
 
-  const { data: posts, count } = await supabase
-    .from("posts")
-    .select("id,title,created_at,author_id,anonymous", { count: "exact" })
-    .eq("is_notice", false)
-    .order("created_at", { ascending: false })
-    .range(from, to);
+  const [{ data: posts, count }, { data: pinnedGlobal }] = await Promise.all([
+    supabase
+      .from("posts")
+      .select("id,title,created_at,author_id,anonymous", { count: "exact" })
+      .eq("is_notice", false)
+      .order("created_at", { ascending: false })
+      .range(from, to),
+    supabase
+      .from("posts")
+      .select(
+        "id, title, created_at, author_id, pin_priority, pinned_until, anonymous, is_notice"
+      )
+      .eq("pin_scope", "global")
+      .eq("is_notice", true)
+      .or("pinned_until.is.null,pinned_until.gt." + new Date().toISOString())
+      .order("pin_priority", { ascending: true })
+      .order("created_at", { ascending: false })
+      .limit(3),
+  ]);
 
-  const authorIds = Array.from(new Set((posts ?? []).map((p) => p.author_id)));
+  const pinnedGlobalPosts = (pinnedGlobal ?? []) as unknown as { author_id: string }[];
+  const authorIds = Array.from(
+    new Set([
+      ...(posts ?? []).map((p) => p.author_id),
+      ...pinnedGlobalPosts.map((p) => p.author_id),
+    ])
+  );
   const authorMap = new Map<
     string,
-    { id: string; username: string | null; avatar_url: string | null }
+    { id: string; username: string | null; avatar_url: string | null; role?: string }
   >();
   if (authorIds.length) {
     const { data: authors } = await supabase
       .from("profiles")
-      .select("id,username,avatar_url")
+      .select("id,username,avatar_url,role")
       .in("id", authorIds);
     (authors ?? []).forEach((a) => {
       authorMap.set(
         (a as { id: string }).id,
-        a as { id: string; username: string | null; avatar_url: string | null }
+        a as { id: string; username: string | null; avatar_url: string | null; role?: string }
       );
     });
   }
@@ -118,13 +138,17 @@ export default async function AllPosts({
     }
   }
 
-  // 댓글 수 집계 (표시되는 게시글에 한정)
+  // 댓글 수 집계 (표시되는 게시글 + 핀 게시글)
+  const allDisplayPostIds = [
+    ...pagePostIds,
+    ...pinnedGlobalPosts.map((p) => (p as unknown as { id: string }).id),
+  ];
   const commentCountByPost = new Map<string, number>();
-  if (pagePostIds.length) {
+  if (allDisplayPostIds.length) {
     const { data: commentRows } = await supabase
       .from("comments")
       .select("post_id")
-      .in("post_id", pagePostIds);
+      .in("post_id", allDisplayPostIds);
     for (const r of commentRows ?? []) {
       const pid = (r as { post_id: string }).post_id;
       commentCountByPost.set(pid, (commentCountByPost.get(pid) || 0) + 1);
@@ -133,6 +157,21 @@ export default async function AllPosts({
 
   return (
     <div className="min-h-screen bg-background pb-0">
+      {/* Pinned Global Posts */}
+      <PinnedPostsList
+        posts={pinnedGlobalPosts as unknown as {
+          id: string;
+          title: string;
+          created_at: string;
+          author_id: string;
+          anonymous?: boolean;
+          is_notice?: boolean;
+        }[]}
+        authorMap={authorMap}
+        commentCountByPost={commentCountByPost}
+        showGlobalLabel={true}
+      />
+
       <Section>
         <div className="mt-6 mb-4">
           <h1 className="text-base sm:text-lg font-semibold">최근 게시물</h1>
@@ -177,6 +216,20 @@ export default async function AllPosts({
                   </div>
                   <div className="mt-1 text-[11px] sm:text-xs text-muted-foreground flex items-center gap-2">
                     {(() => {
+                      // 공지글인 경우 무조건 "공지사항" 표시
+                      const postData = p as { is_notice?: boolean };
+                      if (postData.is_notice) {
+                        return (
+                          <Link
+                            href="/notice"
+                            className="hover:underline"
+                          >
+                            공지사항
+                          </Link>
+                        );
+                      }
+
+                      // 일반 게시글은 카테고리 또는 기타 표시
                       const cat = categoryByPost.get(p.id);
                       return cat ? (
                         <Link

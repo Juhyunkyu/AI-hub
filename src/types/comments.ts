@@ -23,6 +23,7 @@ export interface ProfileLite {
   id: string;
   username: string | null;
   avatar_url: string | null;
+  role?: string;
 }
 
 export interface OptimisticCommentData {

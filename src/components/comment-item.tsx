@@ -11,6 +11,7 @@ import Image from "next/image";
 import { Badge } from "@/components/ui/badge";
 import { MoreHorizontal, Reply, Heart } from "lucide-react";
 import { ReportButton } from "@/components/report-button";
+import { AdminIcon } from "@/components/admin-icon";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,6 +27,8 @@ interface CommentItemProps {
   authorId: string;
   authorUsername: string | null;
   authorAvatarUrl: string | null;
+  authorRole?: string;
+  isNoticePost?: boolean;
   createdAt: string;
   isPostAuthor: boolean;
   postId: string;
@@ -46,6 +49,8 @@ export function CommentItem({
   authorId,
   authorUsername,
   authorAvatarUrl,
+  authorRole,
+  isNoticePost = false,
   createdAt,
   isPostAuthor,
   postId,
@@ -154,22 +159,27 @@ export function CommentItem({
       {/* 헤더: 아바타, 사용자명, 배지, 메뉴 */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
-          <UserAvatar
-            userId={authorId}
-            username={authorUsername}
-            avatarUrl={authorAvatarUrl}
-            size="sm"
-            showActions={showActions}
-            isOwner={false}
-            showName={true}
-          />
-          {isPostAuthor && (
-            <Badge
-              variant="secondary"
-              className="text-[9px] px-1 py-px bg-primary text-primary-foreground hover:bg-primary/90 flex-shrink-0 leading-none"
-            >
-              작성자
-            </Badge>
+          {authorRole === "admin" && isNoticePost ? (
+            <>
+              <div className="h-7 w-7 rounded-full border bg-muted flex items-center justify-center flex-shrink-0">
+                <AdminIcon className="h-3.5 w-3.5" />
+              </div>
+              <div className="flex flex-col min-w-0">
+                <span className="text-xs sm:text-sm font-medium text-foreground truncate">
+                  관리자
+                </span>
+              </div>
+            </>
+          ) : (
+            <UserAvatar
+              userId={authorId}
+              username={authorUsername}
+              avatarUrl={authorAvatarUrl}
+              size="sm"
+              showActions={showActions}
+              isOwner={false}
+              showName={true}
+            />
           )}
         </div>
 
