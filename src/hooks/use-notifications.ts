@@ -207,8 +207,9 @@ export function useNotifications() {
         (payload) => {
           // Supabase 최적화: 새 메시지 실시간 처리
           if (payload.new && payload.new.sender_id !== user.id) {
-            // Realtime 이벤트 발생 시 unread 쿼리 무효화 (디바운스)
-            scheduleInvalidateUnread(300);
+            // ✅ 현재 보고 있는 채팅방의 메시지는 즉시 읽음 처리되므로
+            // unread 카운트 갱신 약간 지연 (markAsRead 완료 후 갱신)
+            scheduleInvalidateUnread(500);
           }
         }
       )

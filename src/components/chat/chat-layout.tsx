@@ -259,13 +259,16 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(
       updateUIState,
     ]);
 
-    // 현재 방에서 새 메시지를 받으면 자동으로 읽음 처리
+    // ✅ 현재 방에서 새 메시지를 받으면 즉시 읽음 처리 (채팅방 안에 있을 때)
     useEffect(() => {
       if (currentRoom && messages.length > 0 && !messagesLoading) {
         const lastMessage = messages[messages.length - 1];
         if (lastMessage && lastMessage.sender_id !== user?.id) {
-          // 다른 사용자의 메시지인 경우 읽음 처리
-          markAsRead(currentRoom.id, lastMessage.id);
+          // 다른 사용자의 메시지인 경우 즉시 읽음 처리
+          // 임시 메시지가 아닌 실제 메시지만 읽음 처리
+          if (!lastMessage.id.startsWith('temp-')) {
+            markAsRead(currentRoom.id, lastMessage.id);
+          }
         }
       }
     }, [currentRoom, messages, messagesLoading, user?.id, markAsRead]);
