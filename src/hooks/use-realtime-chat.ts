@@ -45,6 +45,9 @@ export function useRealtimeChat({
   // 메시지 중복 방지를 위한 처리된 메시지 ID 캐시
   const processedMessagesRef = useRef<Set<string>>(new Set());
 
+  // DELETE 이벤트 중복 방지를 위한 캐시
+  const processedDeletesRef = useRef<Set<string>>(new Set());
+
   // 연결 정리 함수 (메모리 누수 방지 강화)
   const cleanup = useCallback(() => {
     // 채널 정리
@@ -66,6 +69,9 @@ export function useRealtimeChat({
 
     // 메시지 캐시 정리 (메모리 관리)
     processedMessagesRef.current.clear();
+
+    // DELETE 이벤트 캐시 정리
+    processedDeletesRef.current.clear();
 
     // 재시도 카운터 초기화
     retryCountRef.current = 0;
@@ -114,8 +120,24 @@ export function useRealtimeChat({
         break;
 
       case 'DELETE':
-        if (oldRecord && onMessageDelete) {
-          onMessageDelete(oldRecord.id);
+        if (oldRecord?.id && onMessageDelete) {
+          const messageId = oldRecord.id;
+
+          // 중복 방지 체크 (Realtime DELETE + Custom Event 이중 처리 방지)
+          if (processedDeletesRef.current.has(messageId)) {
+            if (process.env.NODE_ENV === 'development') {
+              console.log(`🔄 Duplicate DELETE ignored: ${messageId}`);
+            }
+            return;
+          }
+
+          processedDeletesRef.current.add(messageId);
+          onMessageDelete(messageId);
+
+          // 메모리 관리: 5초 후 캐시에서 제거
+          setTimeout(() => {
+            processedDeletesRef.current.delete(messageId);
+          }, 5000);
         }
         break;
     }
