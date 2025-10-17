@@ -3,7 +3,7 @@
 import React, { useState, useCallback } from "react";
 import { Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { useMediaQuery } from "@/hooks/use-media-query";
@@ -133,6 +133,9 @@ export function ChatAttachmentMenu({
           >
             <SheetHeader className="pb-4">
               <SheetTitle className="text-left">파일 첨부</SheetTitle>
+              <SheetDescription className="sr-only">
+                갤러리, 카메라, 파일, 위치 공유 등의 첨부 옵션을 선택할 수 있습니다.
+              </SheetDescription>
             </SheetHeader>
             <div className="pb-6">
               {menuOptions}
@@ -230,6 +233,9 @@ export function CustomAttachmentMenu({
           >
             <SheetHeader className="pb-4">
               <SheetTitle className="text-left">옵션 선택</SheetTitle>
+              <SheetDescription className="sr-only">
+                사용 가능한 옵션 목록에서 원하는 작업을 선택할 수 있습니다.
+              </SheetDescription>
             </SheetHeader>
             <div className="pb-6">
               {menuContent}

@@ -133,7 +133,7 @@ const MessageContent = memo(({
                 height={200}
                 className="rounded-lg"
                 fileName={message.file_name}
-                priority={false}
+                priority={true}
                 unoptimized={true}
                 onLoad={() => {
                   // TanStack Virtual이 자동으로 높이를 재측정합니다

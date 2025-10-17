@@ -575,10 +575,10 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(
               </div>
 
               {/* 메시지 입력 */}
-              <div className="p-4 border-t">
+              <div className="p-4 border-t max-w-full overflow-hidden">
                 {/* 선택된 파일 미리보기 - 다중 파일 지원 */}
                 {selectedFiles.length > 0 && (
-                  <div className="mb-3 space-y-2">
+                  <div className="mb-3 space-y-2 w-full overflow-hidden">
                     {selectedFiles.map((file, index) => (
                       <FilePreview
                         key={`${file.name}-${index}`}
@@ -597,6 +597,7 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(
                 <form
                   onSubmit={handleSendMessage}
                   className="flex gap-2 items-end"
+                  style={{ width: '100%', maxWidth: '100%' }}
                 >
                   {/* 새로운 첨부 메뉴 */}
                   <ChatAttachmentMenu
@@ -620,7 +621,7 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(
                         ? "메시지 입력..."
                         : "메시지를 입력하세요... (Shift+Enter: 줄바꿈, Enter: 전송)"
                     }
-                    className="flex-1 min-h-[40px] max-h-[120px] resize-none overflow-y-auto"
+                    className="flex-1 min-w-0 min-h-[40px] max-h-[120px] resize-none overflow-y-auto"
                     rows={1}
                   />
 

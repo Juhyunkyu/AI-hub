@@ -179,11 +179,11 @@ export function FilePreview({ file, onRemove }: FilePreviewProps) {
   };
 
   return (
-    <div className="flex items-center gap-2 p-2 bg-muted rounded-lg">
-      <span className="text-lg">{getFileIcon(file.type)}</span>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium truncate">{file.name}</p>
-        <p className="text-xs text-muted-foreground">{formatFileSize(file.size)}</p>
+    <div className="flex items-center gap-2 p-2 bg-muted rounded-lg max-w-[calc(100vw-8rem)] overflow-hidden">
+      <span className="text-lg shrink-0">{getFileIcon(file.type)}</span>
+      <div className="flex-1 min-w-0 overflow-hidden">
+        <p className="text-sm font-medium truncate" title={file.name}>{file.name}</p>
+        <p className="text-xs text-muted-foreground truncate">{formatFileSize(file.size)}</p>
       </div>
       <Button
         type="button"
