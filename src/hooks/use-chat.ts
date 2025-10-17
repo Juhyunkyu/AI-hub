@@ -150,8 +150,17 @@ export function useChatHook() {
   }, [currentRoom]);
 
   const handleMessageUpdate = useCallback((message: ChatMessage) => {
-    setMessages(prev =>
-      prev.map(m => {
+    setMessages(prev => {
+      // 🔹 Soft Delete 처리: deleted_for 배열에 현재 사용자가 포함되어 있으면 메시지 제거
+      if (message.deleted_for && user && message.deleted_for.includes(user.id)) {
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`🗑️ Message ${message.id} soft deleted for current user, removing from UI`);
+        }
+        return prev.filter(m => m.id !== message.id);
+      }
+
+      // 일반 업데이트 처리
+      return prev.map(m => {
         if (m.id === message.id) {
           // 업데이트된 메시지에 sender 정보가 없는 경우 현재 방의 참가자 정보에서 찾아서 보강
           let enrichedMessage = message;
@@ -173,9 +182,9 @@ export function useChatHook() {
           return enrichedMessage;
         }
         return m;
-      })
-    );
-  }, [currentRoom]);
+      });
+    });
+  }, [currentRoom, user]);
 
   const handleMessageDelete = useCallback((messageId: string) => {
     setMessages(prev => prev.filter(m => m.id !== messageId));
@@ -443,6 +452,48 @@ export function useChatHook() {
       loadRooms();
     }
   }, [user, loadRooms]);
+
+  // ✅ Admin Client DELETE 이벤트 수신 (커스텀 이벤트 - Hard Delete)
+  useEffect(() => {
+    const handleCustomDelete = (event: Event) => {
+      const customEvent = event as CustomEvent<{ messageId: string }>;
+      const { messageId } = customEvent.detail;
+
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🗑️ Custom message delete event received:', messageId);
+      }
+
+      // handleMessageDelete를 통해 처리
+      handleMessageDelete(messageId);
+    };
+
+    window.addEventListener('chat-message-deleted', handleCustomDelete);
+
+    return () => {
+      window.removeEventListener('chat-message-deleted', handleCustomDelete);
+    };
+  }, [handleMessageDelete]);
+
+  // ✅ Soft Delete 커스텀 이벤트 수신 (일반 Client UPDATE - Realtime 이벤트가 RLS 필터링으로 도달하지 않음)
+  useEffect(() => {
+    const handleCustomUpdate = (event: Event) => {
+      const customEvent = event as CustomEvent<ChatMessage>;
+      const updatedMessage = customEvent.detail;
+
+      if (process.env.NODE_ENV === 'development') {
+        console.log('📨 Custom message update event received:', updatedMessage.id);
+      }
+
+      // handleMessageUpdate를 통해 처리 (Soft Delete 필터링 포함)
+      handleMessageUpdate(updatedMessage);
+    };
+
+    window.addEventListener('chat-message-updated', handleCustomUpdate);
+
+    return () => {
+      window.removeEventListener('chat-message-updated', handleCustomUpdate);
+    };
+  }, [handleMessageUpdate]);
 
   return {
     rooms,

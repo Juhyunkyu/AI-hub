@@ -235,4 +235,114 @@ const debouncedUpdateTyping = debounce(updateTyping, 500);
 
 ---
 
+## 읽지 않은 메시지 카운트 시스템
+
+### 아키텍처
+
+```typescript
+// 읽음 처리 플로우
+채팅방 진입/메시지 수신
+  ↓
+markAsRead() 호출
+  ↓
+POST /api/chat/read
+  ↓
+message_reads 테이블 UPSERT
+  ↓
+unread_message_counts 뷰 자동 갱신
+  ↓
+TanStack Query 무효화 (invalidateQueries)
+  ↓
+UI 자동 업데이트
+```
+
+### 데이터베이스 구조
+
+#### message_reads 테이블
+```sql
+CREATE TABLE message_reads (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id),
+  room_id UUID NOT NULL REFERENCES chat_rooms(id),
+  last_read_message_id UUID REFERENCES chat_messages(id),
+  last_read_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(user_id, room_id)
+);
+```
+
+**역할**: 각 사용자의 채팅방별 마지막 읽은 시점 추적
+
+#### unread_message_counts 뷰
+```sql
+CREATE VIEW unread_message_counts AS
+SELECT
+  crp.room_id,
+  crp.user_id,
+  cr.name AS room_name,
+  cr.updated_at AS latest_message_time,
+  COUNT(cm.id) AS unread_count
+FROM chat_room_participants crp
+JOIN chat_rooms cr ON cr.id = crp.room_id
+-- ✅ message_reads 테이블 기반 (2025-10-16 수정)
+LEFT JOIN message_reads mr
+  ON mr.room_id = crp.room_id
+  AND mr.user_id = crp.user_id
+-- ✅ mr.last_read_at 이후 메시지만 카운트
+LEFT JOIN chat_messages cm
+  ON cm.room_id = crp.room_id
+  AND cm.created_at > COALESCE(mr.last_read_at, '1970-01-01'::timestamptz)
+  AND cm.sender_id != crp.user_id
+GROUP BY crp.room_id, crp.user_id, cr.name, cr.updated_at;
+```
+
+**역할**: 읽지 않은 메시지 수를 실시간으로 계산
+
+### 2025-10-16 버그 수정
+
+#### 문제 상황
+- **증상**: 같은 채팅방 안에 있어도 메시지 수신 시 읽지 않은 카운트 증가
+- **예시**: 주현규와 박할매가 같은 채팅방에서 대화 중 → 채팅방 리스트에 빨간 배지(1) 표시
+
+#### 근본 원인
+```typescript
+// ❌ 기존 코드 (버그)
+// unread_message_counts 뷰가 chat_room_participants.last_read_at 사용
+LEFT JOIN chat_messages cm
+  ON cm.created_at > COALESCE(crp.last_read_at, '1970-01-01')
+
+// ✅ /api/chat/read는 message_reads 테이블에 저장
+await supabase.from('message_reads').upsert({
+  user_id, room_id, last_read_at: NOW()
+});
+
+// → 데이터 소스 불일치로 읽음 처리가 반영되지 않음
+```
+
+#### 해결 방법
+1. **마이그레이션 생성**
+   - 파일: `supabase/migrations/20251016000000_fix_unread_counts_with_message_reads.sql`
+   - 뷰를 `message_reads` 테이블 기반으로 재작성
+   - 성능 최적화 인덱스 추가
+
+2. **적용 방법**
+   ```bash
+   # Supabase Dashboard SQL Editor에서 직접 실행
+   # 또는
+   npx supabase db push
+   ```
+
+3. **검증**
+   - Manual Test: `tests/manual/test-chat-unread.md`
+   - E2E Test: `tests/e2e/chat-unread-count.spec.ts`
+   - Migration Guide: `MIGRATION_GUIDE.md`
+
+#### 결과
+- ✅ 채팅방 안: 메시지 수신 시 카운트 증가 안 함
+- ✅ 채팅방 밖: 정확히 카운트 증가
+- ✅ 읽음 처리 실시간 반영
+- ✅ 성능 최적화 (인덱스 추가)
+
+---
+
 [← 아키텍처](ARCHITECTURE.md) | [기능 상세 →](FEATURES.md)

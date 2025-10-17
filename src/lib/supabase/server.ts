@@ -59,3 +59,25 @@ export async function createSupabaseServerClientReadOnly() {
     },
   })
 }
+
+// Admin 클라이언트 (Service Role 키 사용, RLS 우회)
+export async function createSupabaseAdminClient() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+  if (!supabaseUrl || !supabaseServiceRoleKey) {
+    throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY')
+  }
+
+  // Service Role은 쿠키를 사용하지 않음 (auth.admin 권한으로 직접 실행)
+  return createServerClient(supabaseUrl, supabaseServiceRoleKey, {
+    cookies: {
+      getAll() {
+        return []
+      },
+      setAll() {
+        // Service Role은 쿠키 설정 불필요
+      },
+    },
+  })
+}

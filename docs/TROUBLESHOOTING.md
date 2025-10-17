@@ -337,9 +337,78 @@ const handleClearAllDrawing = () => {
 
 ---
 
+### 7. 채팅 읽지 않은 메시지 카운트 버그 (2025-10-16)
+
+**문제:** 같은 채팅방 안에 있어도 메시지를 받으면 읽지 않은 카운트가 증가
+
+**증상:**
+- 주현규와 박할매가 같은 채팅방에서 대화 중
+- 메시지를 보낼 때마다 상대방의 채팅방 리스트에 빨간 배지(1) 표시
+- 채팅방 안에 있으므로 카운트가 증가하지 않아야 하는데 증가함
+
+**근본 원인:**
+```typescript
+// ❌ 문제: 데이터 소스 불일치
+// unread_message_counts 뷰: chat_room_participants.last_read_at 사용
+// /api/chat/read API: message_reads 테이블에 저장
+// → 읽음 처리를 해도 뷰가 반영하지 못함
+```
+
+**해결 방법:**
+
+1. **데이터베이스 마이그레이션 확인:**
+   ```bash
+   # 마이그레이션 파일 확인
+   ls -la supabase/migrations/20251016000000_fix_unread_counts_with_message_reads.sql
+
+   # 또는 Supabase Dashboard에서 확인
+   # Settings → Database → Migrations
+   ```
+
+2. **마이그레이션 미적용 시:**
+   ```bash
+   # Supabase CLI로 적용
+   npx supabase db push
+
+   # 또는 Supabase Dashboard SQL Editor에서 직접 실행
+   # MIGRATION_GUIDE.md 참조
+   ```
+
+3. **적용 확인:**
+   ```sql
+   -- unread_message_counts 뷰 확인
+   SELECT * FROM unread_message_counts LIMIT 5;
+
+   -- message_reads 테이블 데이터 확인
+   SELECT * FROM message_reads ORDER BY updated_at DESC LIMIT 10;
+   ```
+
+4. **브라우저 캐시 삭제:**
+   - Chrome: Ctrl+Shift+Delete
+   - 또는 Hard Refresh: Ctrl+Shift+R
+
+**검증 방법:**
+1. 두 명의 사용자가 같은 채팅방 진입
+2. 메시지 전송
+3. 상대방 화면에서 채팅방 리스트 확인
+4. ✅ 빨간 배지가 **나타나지 않아야** 함 (채팅방 안에 있으므로)
+
+**관련 파일:**
+- **마이그레이션**: `supabase/migrations/20251016000000_fix_unread_counts_with_message_reads.sql`
+- **가이드**: `MIGRATION_GUIDE.md` (자세한 수정 절차)
+- **테스트**: `tests/manual/test-chat-unread.md` (수동 테스트)
+- **E2E**: `tests/e2e/chat-unread-count.spec.ts` (자동화 테스트)
+
+**해결 후 기대 결과:**
+- ✅ 채팅방 안: 카운트 증가 안 함
+- ✅ 채팅방 밖: 정확히 카운트 증가
+- ✅ 읽음 처리 실시간 반영
+
+---
+
 ## 🔴 높은 우선순위
 
-### 7. 다중 파일 업로드 불완전
+### 8. 다중 파일 업로드 불완전
 
 **현재 상태:**
 ```typescript
@@ -366,7 +435,7 @@ for (const file of selectedFiles) {
 
 ## 🟡 중간 우선순위
 
-### 8. 타이핑 인디케이터 최적화
+### 9. 타이핑 인디케이터 최적화
 
 **현재 문제:** 매 호출마다 API 요청
 
@@ -388,7 +457,7 @@ const updateTyping = () => {
 
 ---
 
-### 9. 이미지 로딩 최적화
+### 10. 이미지 로딩 최적화
 
 **현재:**
 ```typescript
@@ -407,7 +476,7 @@ const updateTyping = () => {
 
 ---
 
-### 10. 읽음 표시 UI 미흡
+### 11. 읽음 표시 UI 미흡
 
 **현재:** DB에 `read_by` 배열 있으나 UI 없음
 
@@ -428,15 +497,15 @@ const updateTyping = () => {
 
 ## 🟢 낮은 우선순위
 
-### 11. 메시지 검색 기능
+### 12. 메시지 검색 기능
 - 현재 게시물만 검색 가능
 - 채팅 메시지 검색 필요
 
-### 12. 메시지 편집/삭제 UI
+### 13. 메시지 편집/삭제 UI
 - DB 로직 있음
 - 사용자 인터페이스 미구현
 
-### 13. 음성 메시지 지원
+### 14. 음성 메시지 지원
 - 녹음 기능
 - 오디오 플레이어
 

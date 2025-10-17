@@ -12,10 +12,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 import { LightboxHeader } from './lightbox-header';
 import { LightboxFooter } from './lightbox-footer';
 import { LightboxToolbar } from './lightbox-toolbar';
 import { DrawingCanvas, type DrawLine } from './drawing-canvas';
+import { FriendSelectionDialog } from './friend-selection-dialog';
 import type { EditMode } from './toolbar-items/edit-toolbar';
 import type { Stage } from 'konva/lib/Stage';
 
@@ -36,6 +38,11 @@ export interface ImageLightboxProps {
   senderName?: string;
   senderAvatar?: string | null;
   sentAt?: string | Date;
+  // Delete 기능을 위한 props
+  messageId?: string;
+  senderId?: string;
+  currentUserId?: string;
+  roomId?: string;
 }
 
 export function ImageLightbox({
@@ -48,6 +55,10 @@ export function ImageLightbox({
   senderName,
   senderAvatar,
   sentAt,
+  messageId,
+  senderId,
+  currentUserId,
+  roomId,
 }: ImageLightboxProps) {
   // ==================== 상태 관리 ====================
   const { isMobile } = useResponsive();
@@ -62,6 +73,9 @@ export function ImageLightbox({
   const [tool, setTool] = useState<'pen' | 'eraser'>('pen');
   const [color, setColor] = useState('#000000');
   const [activeEditMode, setActiveEditMode] = useState<EditMode | null>(null);
+
+  // 공유 다이얼로그 상태
+  const [isFriendDialogOpen, setIsFriendDialogOpen] = useState(false);
 
   const imageRef = useRef<HTMLImageElement>(null);
   const stageRef = useRef<Stage | null>(null);
@@ -164,14 +178,216 @@ export function ImageLightbox({
   }, [src, fileName, lines, canvasSize]);
 
   const handleShare = useCallback(() => {
-    // TODO: 공유 기능 구현
-    console.log('공유 기능 (추후 구현)');
+    setIsFriendDialogOpen(true);
   }, []);
 
-  const handleDelete = useCallback(() => {
-    // TODO: 삭제 기능 구현
-    console.log('삭제 기능 (추후 구현)');
-  }, []);
+  // 이미지 준비 함수 (그림이 있으면 합성, 없으면 원본)
+  const prepareImageForSharing = useCallback(async (): Promise<string> => {
+    // 그림이 없는 경우: 원본 이미지 URL 반환
+    if (!stageRef.current || lines.length === 0) {
+      return src;
+    }
+
+    // 그림이 있는 경우: 원본 이미지 + 그림 합성
+    if (!imageRef.current) return src;
+
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return src;
+
+    // 원본 이미지 로드
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.src = src;
+
+    await new Promise((resolve) => {
+      img.onload = resolve;
+    });
+
+    // 캔버스 크기를 원본 이미지 크기로 설정
+    canvas.width = img.width;
+    canvas.height = img.height;
+
+    // 1. 원본 이미지 그리기
+    ctx.drawImage(img, 0, 0);
+
+    // 2. Konva 캔버스에서 그림 추출
+    const drawImg = new Image();
+    drawImg.src = stageRef.current.toDataURL({ pixelRatio: 1 });
+
+    await new Promise((resolve) => {
+      drawImg.onload = resolve;
+    });
+
+    // 3. 스케일 비율 계산 (렌더링된 크기 vs 원본 크기)
+    const scaleX = img.width / canvasSize.width;
+    const scaleY = img.height / canvasSize.height;
+
+    // 4. 그림을 원본 이미지 위에 합성
+    ctx.save();
+    ctx.scale(scaleX, scaleY);
+    ctx.drawImage(drawImg, 0, 0);
+    ctx.restore();
+
+    // 5. Data URL 반환
+    return canvas.toDataURL('image/png');
+  }, [src, lines, canvasSize]);
+
+  // 친구 선택 후 공유 처리
+  const handleFriendSelection = useCallback(async (selectedFriendIds: string[]) => {
+    try {
+      // 이미지 준비
+      const imageDataUrl = await prepareImageForSharing();
+
+      // 각 친구에게 순차적으로 전송
+      let successCount = 0;
+      let failCount = 0;
+
+      for (const friendId of selectedFriendIds) {
+        try {
+          // 1. 채팅방 찾기/생성
+          const roomRes = await fetch('/api/chat/rooms', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              type: 'direct',
+              participant_ids: [friendId],
+              name: null,
+              description: null,
+              avatar_url: null,
+              is_private: false,
+              max_participants: null,
+            }),
+          });
+
+          if (!roomRes.ok) {
+            failCount++;
+            continue;
+          }
+
+          const roomData = await roomRes.json();
+          const roomId = roomData.room?.id || roomData.room_id || roomData.id;
+
+          // 2. 이미지 전송 (FormData 사용)
+          const formData = new FormData();
+          formData.append('room_id', roomId);
+          formData.append('content', '이미지 공유');
+
+          // Data URL을 Blob으로 변환
+          if (imageDataUrl.startsWith('data:')) {
+            const response = await fetch(imageDataUrl);
+            const blob = await response.blob();
+            formData.append('file', blob, fileName);
+          } else {
+            // 원본 URL인 경우 URL만 전송
+            formData.append('file_url', imageDataUrl);
+          }
+
+          const messageRes = await fetch('/api/chat/messages', {
+            method: 'POST',
+            body: formData,
+          });
+
+          if (messageRes.ok) {
+            successCount++;
+          } else {
+            failCount++;
+          }
+        } catch (error) {
+          console.error(`Failed to share with friend ${friendId}:`, error);
+          failCount++;
+        }
+      }
+
+      // 결과 알림
+      if (successCount > 0 && failCount === 0) {
+        toast.success(`${successCount}명에게 이미지를 공유했습니다`);
+      } else if (successCount > 0 && failCount > 0) {
+        toast.warning(`${successCount}명에게 공유 성공, ${failCount}명 실패`);
+      } else {
+        toast.error('이미지 공유에 실패했습니다');
+      }
+    } catch (error) {
+      console.error('Error sharing image:', error);
+      toast.error('이미지 공유 중 오류가 발생했습니다');
+    }
+  }, [prepareImageForSharing, fileName]);
+
+  const handleDelete = useCallback(async () => {
+    // 🔍 DEBUG: Props 확인
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🔍 handleDelete called with:', {
+        messageId,
+        currentUserId,
+        roomId,
+        senderId
+      });
+    }
+
+    // 필수 props 확인
+    if (!messageId || !currentUserId || !roomId) {
+      console.error('❌ Missing required props:', { messageId, currentUserId, roomId });
+      toast.error('메시지 정보가 없습니다');
+      return;
+    }
+
+    // 삭제 확인 다이얼로그 (간소화)
+    const confirmed = window.confirm('이 메시지를 삭제하시겠습니까?');
+
+    if (!confirmed) return;
+
+    try {
+      const apiUrl = `/api/chat/messages/${messageId}`;
+      console.log('🔍 DELETE API URL:', apiUrl);
+
+      const response = await fetch(apiUrl, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete message');
+      }
+
+      const result = await response.json();
+
+      // 🔍 DEBUG: API 응답 확인
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🔍 DELETE API response:', result);
+      }
+
+      if (result.success) {
+        if (result.delete_type === 'soft') {
+          toast.success('메시지가 숨겨졌습니다');
+
+          // ✅ Soft Delete도 커스텀 이벤트 발생 (Realtime UPDATE가 불안정하므로)
+          // API 응답의 updated_message로 직접 업데이트 처리
+          if (result.updated_message) {
+            window.dispatchEvent(new CustomEvent('chat-message-updated', {
+              detail: result.updated_message
+            }));
+          }
+        } else if (result.delete_type === 'hard') {
+          toast.success('메시지가 삭제되었습니다');
+
+          // ✅ Hard Delete는 Admin Client 사용으로 Realtime 이벤트가 트리거되지 않으므로
+          // API 응답의 deleted_message_id로 직접 삭제 처리
+          if (result.deleted_message_id) {
+            window.dispatchEvent(new CustomEvent('chat-message-deleted', {
+              detail: { messageId: result.deleted_message_id }
+            }));
+          }
+        }
+
+        // 라이트박스 닫기
+        onClose();
+      } else {
+        toast.error('메시지 삭제에 실패했습니다');
+      }
+    } catch (error) {
+      console.error('Error deleting message:', error);
+      toast.error('메시지 삭제 중 오류가 발생했습니다');
+    }
+  }, [messageId, senderId, currentUserId, roomId, onClose]);
 
   const handleEdit = useCallback(() => {
     setViewMode('editSelect');
@@ -418,6 +634,13 @@ export function ImageLightbox({
           </LightboxFooter>
         )}
       </DialogContent>
+
+      {/* 친구 선택 다이얼로그 */}
+      <FriendSelectionDialog
+        isOpen={isFriendDialogOpen}
+        onClose={() => setIsFriendDialogOpen(false)}
+        onConfirm={handleFriendSelection}
+      />
     </Dialog>
   );
 }
@@ -434,6 +657,16 @@ export interface ClickableImageProps {
   unoptimized?: boolean;
   onLoad?: () => void;
   onSend?: (imageDataUrl: string, fileName: string) => void;
+  enableDrawing?: boolean;
+  // Delete 기능을 위한 props
+  messageId?: string;
+  senderId?: string;
+  currentUserId?: string;
+  roomId?: string;
+  // Sender 정보 (헤더 표시용)
+  senderName?: string;
+  senderAvatar?: string | null;
+  sentAt?: string | Date;
 }
 
 export function ClickableImage({
@@ -447,6 +680,14 @@ export function ClickableImage({
   unoptimized = true,
   onLoad,
   onSend,
+  enableDrawing = true,
+  messageId,
+  senderId,
+  currentUserId,
+  roomId,
+  senderName,
+  senderAvatar,
+  sentAt,
 }: ClickableImageProps) {
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
 
@@ -491,6 +732,13 @@ export function ClickableImage({
         onClose={() => setIsLightboxOpen(false)}
         fileName={fileName}
         onSend={onSend}
+        messageId={messageId}
+        senderId={senderId}
+        currentUserId={currentUserId}
+        roomId={roomId}
+        senderName={senderName}
+        senderAvatar={senderAvatar}
+        sentAt={sentAt}
       />
     </>
   );

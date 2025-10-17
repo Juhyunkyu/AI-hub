@@ -93,12 +93,14 @@ const MessageContent = memo(({
   message,
   searchQuery,
   sendMessage,
-  currentRoomId
+  currentRoomId,
+  currentUserId
 }: {
   message: ChatMessage;
   searchQuery?: string;
   sendMessage?: (content: string, roomId: string, file?: File) => Promise<void>;
   currentRoomId?: string;
+  currentUserId?: string;
 }) => {
   // 검색어 하이라이트 함수
   const highlightText = (text: string, query?: string) => {
@@ -137,6 +139,14 @@ const MessageContent = memo(({
                   // TanStack Virtual이 자동으로 높이를 재측정합니다
                 }}
                 enableDrawing={true}
+                // Delete 기능을 위한 props
+                messageId={message.id}
+                senderId={message.sender_id}
+                currentUserId={currentUserId}
+                roomId={currentRoomId}
+                senderName={message.sender?.username}
+                senderAvatar={message.sender?.avatar_url}
+                sentAt={message.created_at}
                 onSend={async (imageDataUrl: string, fileName: string) => {
                   if (!sendMessage || !currentRoomId) {
                     console.warn('⚠️ sendMessage or currentRoomId not available');
@@ -569,6 +579,7 @@ const MessageRendererBase = ({
                 searchQuery={searchQuery}
                 sendMessage={sendMessage}
                 currentRoomId={currentRoomId}
+                currentUserId={currentUserId}
               />
             </div>
 
