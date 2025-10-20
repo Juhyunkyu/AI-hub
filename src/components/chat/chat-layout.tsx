@@ -17,6 +17,7 @@ import { useNotifications } from "@/hooks/use-notifications";
 import { useChatUIState } from "@/hooks/use-chat-ui-state";
 import { useChatMessageHandler } from "@/hooks/use-chat-message-handler";
 import { useResponsive } from "@/hooks/use-responsive";
+import { ChatMessage } from "@/types/chat";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -40,7 +41,6 @@ import { getChatRoomDisplayName } from "@/lib/chat-utils";
 import { VirtualizedMessageList } from "./virtualized";
 import { deleteChatRooms } from "@/lib/chat-api";
 import { EmojiPicker } from "@/components/ui/emoji-picker";
-import { FilePreview } from "./file-upload-button";
 import { ChatAttachmentMenu } from "@/components/upload";
 import { toast } from "sonner";
 // Dynamic imports for performance optimization (lazy loading)
@@ -114,6 +114,9 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(
       typingUsers,
       updateTyping,
       stopTyping,
+      addUploadingMessage,
+      updateUploadingMessage,
+      removeUploadingMessage,
     } = useChatHook();
 
     // 알림 시스템
@@ -121,25 +124,6 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(
 
     // 반응형 화면 크기 감지
     const { isMobile } = useResponsive();
-
-    // 다중 파일 선택 상태 - React 19 최적화 (최대 5개)
-    const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
-
-    // 파일 선택 핸들러 - 다중 파일 지원 (최대 5개)
-    const handleFileSelect = useCallback((files: File[]) => {
-      if (files.length > 0) {
-        setSelectedFiles((prev) => {
-          // 기존 파일 + 새 파일을 합쳐서 최대 5개까지만 유지
-          const combined = [...prev, ...files];
-          return combined.slice(0, 5);
-        });
-      }
-    }, []);
-
-    // 파일 제거 핸들러 - 인덱스 기반 제거
-    const handleFileRemove = useCallback((index: number) => {
-      setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
-    }, []);
 
     // Next.js 15 공식 패턴: URL 파라미터 안전 업데이트 - React 19 최적화
     const createQueryString = useCallback(
@@ -210,9 +194,68 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(
       messages,
       messagesLoading,
       isRealtimeConnected,
-      selectedFiles,
-      onFilesRemove: () => setSelectedFiles([]),
     });
+
+    // ✅ 파일 선택 즉시 업로드 (Optimistic Update 패턴)
+    const handleFileSelect = useCallback(async (files: File[]) => {
+      if (files.length === 0 || !currentRoom || !user) return;
+
+      // 현재 메시지 텍스트 저장 (첫 파일에만 포함)
+      const messageText = newMessage;
+      setNewMessage(''); // 메시지 입력창 즉시 초기화
+
+      // 각 파일마다 즉시 업로드 시작 (순차 처리)
+      for (let i = 0; i < Math.min(files.length, 5); i++) {
+        const file = files[i];
+        const tempId = `temp-${Date.now()}-${i}-${Math.random()}`;
+
+        // 1. 임시 메시지 생성 및 추가 (uploading: true)
+        const tempMessage: ChatMessage = {
+          id: tempId,
+          room_id: currentRoom.id,
+          sender_id: user.id,
+          content: i === 0 ? messageText : '', // 첫 파일에만 메시지 텍스트
+          message_type: file.type.startsWith('image/') ? 'image' : 'file',
+          file_name: file.name,
+          file_size: file.size,
+          uploading: true,
+          tempFile: file,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          sender: {
+            id: user.id,
+            username: user.username || '',
+            avatar_url: user.avatar_url || undefined
+          },
+          read_by: [user.id]
+        };
+
+        addUploadingMessage(tempMessage);
+
+        // 2. 실제 업로드 시작 (skipOptimistic: true로 중복 방지)
+        try {
+          await sendMessage(i === 0 ? messageText : '', currentRoom.id, file, true);
+          // 성공: Realtime으로 실제 메시지가 도착하면 findTempMessage로 자동 교체됨
+        } catch (error: any) {
+          // 실패: 에러 상태로 업데이트
+          updateUploadingMessage(tempId, {
+            uploading: false,
+            uploadError: error.message || '업로드 실패'
+          });
+        }
+      }
+    }, [currentRoom, user, newMessage, setNewMessage, addUploadingMessage, sendMessage, updateUploadingMessage]);
+
+    // ✅ 업로드 재시도 핸들러
+    const handleRetryUpload = useCallback(async (message: ChatMessage) => {
+      if (!message.tempFile || !currentRoom || !user) return;
+
+      // 실패한 임시 메시지 제거
+      removeUploadingMessage(message.id);
+
+      // 동일한 파일로 재시도
+      await handleFileSelect([message.tempFile]);
+    }, [currentRoom, user, removeUploadingMessage, handleFileSelect]);
 
     // 외부에서 호출할 수 있는 함수 노출
     useImperativeHandle(
@@ -570,29 +613,13 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(
                     participants={currentRoom?.participants}
                     sendMessage={sendMessage}
                     currentRoomId={currentRoom?.id}
+                    onRetryUpload={handleRetryUpload}
                   />
                 )}
               </div>
 
               {/* 메시지 입력 */}
               <div className="p-4 border-t max-w-full overflow-hidden">
-                {/* 선택된 파일 미리보기 - 다중 파일 지원 */}
-                {selectedFiles.length > 0 && (
-                  <div className="mb-3 space-y-2 w-full overflow-hidden">
-                    {selectedFiles.map((file, index) => (
-                      <FilePreview
-                        key={`${file.name}-${index}`}
-                        file={file}
-                        onRemove={() => handleFileRemove(index)}
-                      />
-                    ))}
-                    {selectedFiles.length >= 5 && (
-                      <div className="text-xs text-muted-foreground">
-                        최대 5개까지 선택 가능합니다.
-                      </div>
-                    )}
-                  </div>
-                )}
 
                 <form
                   onSubmit={handleSendMessage}

@@ -10,8 +10,6 @@ interface UseChatMessageHandlerProps {
   messages: any[];
   messagesLoading: boolean;
   isRealtimeConnected: boolean;
-  selectedFiles?: File[];
-  onFilesRemove?: () => void;
 }
 
 export function useChatMessageHandler({
@@ -21,9 +19,7 @@ export function useChatMessageHandler({
   stopTyping,
   messages,
   messagesLoading,
-  isRealtimeConnected,
-  selectedFiles = [],
-  onFilesRemove
+  isRealtimeConnected
 }: UseChatMessageHandlerProps) {
   const [newMessage, setNewMessage] = useState("");
   const [messagesContainerHeight, setMessagesContainerHeight] = useState(400);
@@ -48,34 +44,20 @@ export function useChatMessageHandler({
     }
   }, []);
 
-  // 메시지 전송 핸들러 - 다중 파일 순차 전송
+  // 메시지 전송 핸들러 - 텍스트만 전송 (파일은 별도 처리)
   const handleSendMessage = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentRoom) return;
 
-    // 메시지나 파일 중 하나라도 있어야 전송 가능
+    // 메시지가 있어야 전송 가능
     const hasMessage = newMessage.trim().length > 0;
-    const hasFiles = selectedFiles.length > 0;
-    if (!hasMessage && !hasFiles) return;
+    if (!hasMessage) return;
 
     const messageContent = newMessage;
     setNewMessage("");
 
-    // 다중 파일 순차 전송 (카카오톡 방식)
-    if (hasFiles) {
-      for (let i = 0; i < selectedFiles.length; i++) {
-        // 첫 번째 파일에만 메시지 텍스트 포함, 나머지는 파일만
-        const content = i === 0 ? messageContent : '';
-        await sendMessage(content, currentRoom.id, selectedFiles[i]);
-      }
-      // 모든 파일 전송 후 제거
-      if (onFilesRemove) {
-        onFilesRemove();
-      }
-    } else {
-      // 텍스트만 있는 경우
-      await sendMessage(messageContent, currentRoom.id);
-    }
+    // 텍스트 메시지 전송
+    await sendMessage(messageContent, currentRoom.id);
 
     // 실시간 연결 상태에 관계없이 메시지 전송 후 즉시 스크롤
     setTimeout(() => scrollToBottom("smooth"), 100);
@@ -84,7 +66,7 @@ export function useChatMessageHandler({
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
-  }, [currentRoom, newMessage, selectedFiles, sendMessage, onFilesRemove, scrollToBottom]);
+  }, [currentRoom, newMessage, sendMessage, scrollToBottom]);
 
   // 텍스트 입력 핸들러 - React 19 최적화
   const handleTextareaChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {

@@ -6,7 +6,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { formatMessageTime } from "@/lib/date-utils";
 import type { ChatMessage } from "@/types/chat";
-import { FileIcon, ImageIcon, ReplyIcon, Download, MapPin } from "lucide-react";
+import { FileIcon, ImageIcon, ReplyIcon, Download, MapPin, Loader2, RefreshCw } from "lucide-react";
 import { ClickableImage } from "@/components/shared/image-lightbox";
 import { loadKakaoMaps } from "@/lib/kakao-maps-loader";
 
@@ -18,6 +18,7 @@ interface MessageData {
   onLoadImage?: (messageId: string) => void;
   sendMessage?: (content: string, roomId: string, file?: File) => Promise<void>;
   currentRoomId?: string;
+  onRetryUpload?: (message: ChatMessage) => void;
 }
 
 /**
@@ -94,13 +95,15 @@ const MessageContent = memo(({
   searchQuery,
   sendMessage,
   currentRoomId,
-  currentUserId
+  currentUserId,
+  onRetryUpload
 }: {
   message: ChatMessage;
   searchQuery?: string;
   sendMessage?: (content: string, roomId: string, file?: File) => Promise<void>;
   currentRoomId?: string;
   currentUserId?: string;
+  onRetryUpload?: (message: ChatMessage) => void;
 }) => {
   // 검색어 하이라이트 함수
   const highlightText = (text: string, query?: string) => {
@@ -122,6 +125,67 @@ const MessageContent = memo(({
 
   switch (message.message_type) {
     case 'image':
+      // ✅ 업로드 중 상태 체크
+      if (message.uploading) {
+        return (
+          <div className="space-y-2">
+            <div className="relative max-w-sm">
+              {/* 임시 파일로 이미지 프리뷰 */}
+              {message.tempFile && (
+                <Image
+                  src={URL.createObjectURL(message.tempFile)}
+                  alt="업로드 중..."
+                  width={300}
+                  height={200}
+                  className="rounded-lg opacity-50"
+                  unoptimized
+                />
+              )}
+
+              {/* 로딩 오버레이 */}
+              {!message.uploadError && (
+                <div className="absolute inset-0 bg-black/40 rounded-lg flex items-center justify-center">
+                  <div className="flex flex-col items-center gap-2">
+                    <Loader2 className="h-8 w-8 animate-spin text-white" />
+                    <span className="text-white text-sm font-medium">
+                      업로드 중...
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* 업로드 실패 표시 + 재시도 버튼 */}
+              {message.uploadError && (
+                <div className="absolute inset-0 bg-black/60 rounded-lg flex items-center justify-center">
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="bg-red-500 text-white text-xs px-3 py-1 rounded-full">
+                      업로드 실패
+                    </div>
+                    {onRetryUpload && (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => onRetryUpload(message)}
+                        className="gap-2"
+                      >
+                        <RefreshCw className="h-4 w-4" />
+                        재시도
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+            {message.content && (
+              <div className="text-sm text-muted-foreground">
+                {highlightText(message.content, searchQuery)}
+              </div>
+            )}
+          </div>
+        );
+      }
+
+      // 정상 렌더링 (업로드 완료)
       return (
         <div className="space-y-2">
           {message.file_url ? (
@@ -438,7 +502,8 @@ const MessageRendererBase = ({
     searchQuery,
     highlightIndices = [],
     sendMessage,
-    currentRoomId
+    currentRoomId,
+    onRetryUpload
   } = data;
 
   const message = messages[index];
@@ -580,6 +645,7 @@ const MessageRendererBase = ({
                 sendMessage={sendMessage}
                 currentRoomId={currentRoomId}
                 currentUserId={currentUserId}
+                onRetryUpload={onRetryUpload}
               />
             </div>
 

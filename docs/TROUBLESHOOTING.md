@@ -1,10 +1,149 @@
 # 알려진 문제점 및 개선사항
 
-**문서 업데이트**: 2025-10-14
+**문서 업데이트**: 2025-10-17
 
 ---
 
 ## ✅ 최근 해결된 문제
+
+### 0. Next.js Image Priority 및 Radix UI 접근성 경고 (2025-10-17)
+
+**문제:** 콘솔에 2가지 경고 메시지가 지속적으로 표시됨
+
+**증상:**
+```
+1. Image with src "..." was detected as the Largest Contentful Paint (LCP).
+   Please add the "priority" property if this image is above the fold.
+
+2. Warning: Missing `Description` or `aria-describedby={undefined}` for {DialogContent}.
+```
+
+**해결 방법:**
+
+1. **LCP 이미지 Priority 설정** (MessageRenderer.tsx:136)
+```tsx
+// ❌ BEFORE
+<ClickableImage
+  priority={false}  // LCP 이미지에 false는 부적절
+  ...
+/>
+
+// ✅ AFTER
+<ClickableImage
+  priority={true}  // LCP 이미지에 우선 로딩 활성화
+  ...
+/>
+```
+
+2. **Sheet Description 접근성 추가** (chat-attachment-menu.tsx)
+```tsx
+// ❌ BEFORE
+<SheetHeader>
+  <SheetTitle>파일 첨부</SheetTitle>
+  {/* Description 누락 */}
+</SheetHeader>
+
+// ✅ AFTER
+<SheetHeader>
+  <SheetTitle>파일 첨부</SheetTitle>
+  <SheetDescription className="sr-only">
+    갤러리, 카메라, 파일, 위치 공유 등의 첨부 옵션을 선택할 수 있습니다.
+  </SheetDescription>
+</SheetHeader>
+```
+
+**개선 효과:**
+- ✅ LCP 성능 최적화로 페이지 로딩 속도 개선
+- ✅ 스크린 리더 사용자를 위한 접근성 향상
+- ✅ Radix UI 접근성 권장사항 준수
+- ✅ 콘솔 경고 완전 제거
+
+**참고 문서:**
+- Next.js 15.1.8: `priority` prop 공식 문서
+- Radix UI Primitives: Dialog/Sheet Description 요구사항
+
+**파일:**
+- `src/components/chat/virtualized/MessageRenderer.tsx`
+- `src/components/upload/chat-attachment-menu.tsx`
+
+---
+
+### 1. 모바일 파일 업로드 UI 버그 - 긴 파일명으로 전송 버튼 숨김 (2025-10-17)
+
+**문제:** 모바일에서 긴 파일명(151자+)의 파일을 첨부하면 전송 버튼이 화면 밖으로 밀려나 메시지를 전송할 수 없음
+
+**증상:**
+- 파일 프리뷰가 화면 너비를 초과
+- 전송 버튼(📤)이 오른쪽으로 완전히 숨겨짐
+- 사용자가 메시지 전송 불가능 (치명적)
+
+**테스트 환경:**
+- Viewport: 375x667 (iPhone 6/7/8)
+- 테스트 파일명: 151자 길이
+
+**근본 원인:**
+```tsx
+// ❌ 이전 수정 실패 원인
+<div className="mb-3 space-y-2">  {/* 부모 컨테이너 너비 제한 없음 */}
+  <FilePreview className="max-w-[calc(100%-80px)]" />
+  {/* calc(100%)는 부모의 자연스러운 너비 참조 → 무제한 확장 가능 */}
+</div>
+```
+
+**해결 방법:**
+
+**1단계: 부모 컨테이너 너비 제약** (chat-layout.tsx:581)
+```tsx
+// ✅ FIXED
+<div className="mb-3 space-y-2 w-full overflow-hidden">
+  {/* w-full: 뷰포트 너비 준수 */}
+  {/* overflow-hidden: 콘텐츠가 컨테이너 확장 방지 */}
+</div>
+```
+
+**2단계: FilePreview 컴포넌트** (file-upload-button.tsx:182-186)
+```tsx
+// ❌ BEFORE
+<div className="flex items-center gap-2 p-2 bg-muted rounded-lg max-w-[calc(100%-80px)]">
+  <div className="flex-1 min-w-0">
+    <p className="text-sm font-medium truncate">{file.name}</p>
+    <p className="text-xs text-muted-foreground">{formatFileSize(file.size)}</p>
+  </div>
+</div>
+
+// ✅ AFTER
+<div className="flex items-center gap-2 p-2 bg-muted rounded-lg w-full overflow-hidden">
+  <span className="text-lg shrink-0">{getFileIcon(file.type)}</span>
+  <div className="flex-1 min-w-0 overflow-hidden">
+    <p className="text-sm font-medium truncate" title={file.name}>{file.name}</p>
+    <p className="text-xs text-muted-foreground truncate">{formatFileSize(file.size)}</p>
+  </div>
+  <Button className="h-6 w-6 p-0 shrink-0">×</Button>
+</div>
+```
+
+**개선 효과:**
+- ✅ 전송 버튼 항상 화면에 표시
+- ✅ 긴 파일명 자동 말줄임(...) 처리
+- ✅ 전체 파일명은 호버 시 툴팁으로 표시
+- ✅ 모바일/데스크톱 모든 뷰포트에서 정상 작동
+
+**교훈:**
+- DevTools 시뮬레이션 ≠ 실제 모바일 디바이스
+- `calc(100%)`는 부모의 자연스러운 너비 참조 (뷰포트 아님)
+- Flexbox 너비 제약은 상위→하위로 계단식 적용 필요
+- 모바일 레이아웃은 실제 기기 테스트 필수
+
+**파일:**
+- `src/components/chat/file-upload-button.tsx`
+- `src/components/chat/chat-layout.tsx`
+
+**관련 문서:**
+- `/claudedocs/MOBILE_FILE_UPLOAD_FIX_SUMMARY.md`
+- `/claudedocs/mobile-file-preview-fix-analysis.md`
+- `/claudedocs/mobile-testing-checklist.md`
+
+---
 
 ### 0. Realtime 재연결 시 메시지 유실 (2025-10-14)
 

@@ -40,6 +40,8 @@ interface VirtualizedMessageListProps {
   // 이미지 편집 전송용 props 추가
   sendMessage?: (content: string, roomId: string, file?: File) => Promise<void>;
   currentRoomId?: string;
+  // 업로드 재시도용 props 추가
+  onRetryUpload?: (message: ChatMessage) => void;
 }
 
 export interface VirtualizedMessageListRef {
@@ -76,7 +78,8 @@ export const VirtualizedMessageList = forwardRef<
   typingUsers = [],
   participants = [],
   sendMessage,
-  currentRoomId
+  currentRoomId,
+  onRetryUpload
 }, ref) => {
   // Refs
   const parentRef = useRef<HTMLDivElement>(null);
@@ -163,8 +166,9 @@ export const VirtualizedMessageList = forwardRef<
     searchQuery,
     highlightIndices,
     sendMessage,
-    currentRoomId
-  }), [messages, currentUserId, searchQuery, highlightIndices, sendMessage, currentRoomId]);
+    currentRoomId,
+    onRetryUpload
+  }), [messages, currentUserId, searchQuery, highlightIndices, sendMessage, currentRoomId, onRetryUpload]);
 
   /**
    * 스크롤을 맨 아래로 이동

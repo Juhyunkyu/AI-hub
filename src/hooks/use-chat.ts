@@ -21,13 +21,30 @@ const sortRoomsByLastMessage = (rooms: ChatRoomWithParticipants[]) => {
 // 메시지 찾기 헬퍼 함수 (React 19 + Context7 Pattern)
 // 다중 파일 업로드 시 file_name으로 정확히 매칭
 const findTempMessage = (messages: ChatMessage[], targetMessage: ChatMessage) => {
-  return messages.findIndex(m =>
-    m.id.startsWith('temp-') &&
-    m.content === targetMessage.content &&
-    m.sender_id === targetMessage.sender_id &&
-    m.file_name === targetMessage.file_name &&  // ✅ 파일 이름 매칭 추가
-    Math.abs(new Date(m.created_at).getTime() - new Date(targetMessage.created_at).getTime()) < 10000
-  );
+  return messages.findIndex(m => {
+    // Must be a temp message
+    if (!m.id.startsWith('temp-')) return false;
+
+    // Must be same sender
+    if (m.sender_id !== targetMessage.sender_id) return false;
+
+    // For file uploads, file_name is the primary matcher
+    if (targetMessage.file_name && m.file_name) {
+      if (m.file_name !== targetMessage.file_name) return false;
+
+      // Time check with more generous window (30 seconds for large uploads)
+      const timeDiff = Math.abs(new Date(m.created_at).getTime() - new Date(targetMessage.created_at).getTime());
+      return timeDiff < 30000;
+    }
+
+    // For text messages, content is the primary matcher
+    if (m.content === targetMessage.content) {
+      const timeDiff = Math.abs(new Date(m.created_at).getTime() - new Date(targetMessage.created_at).getTime());
+      return timeDiff < 10000;
+    }
+
+    return false;
+  });
 };
 
 // 이미지 파일인지 판단하는 헬퍼 함수
@@ -335,44 +352,49 @@ export function useChatHook() {
   }, []);
 
   // 메시지 전송 (Optimistic Update + 실시간 백업)
+  // skipOptimistic: handleFileSelect에서 이미 optimistic 메시지를 생성한 경우 중복 방지
   const sendMessage = useCallback(
-    async (content: string, roomId: string, file?: File) => {
+    async (content: string, roomId: string, file?: File, skipOptimistic: boolean = false) => {
       if (!user || (!content.trim() && !file)) return;
 
-      // Optimistic update - 즉시 UI에 메시지 표시
-      // React 19 + Context7 Pattern: 고유한 임시 ID 생성 (중복 방지)
-      const optimisticMessage = {
-        id: `temp-${Date.now()}-${Math.random()}-${performance.now()}`,
-        room_id: roomId,
-        sender_id: user.id,
-        content: content.trim(),
-        message_type: getMessageType(file),
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        sender: {
-          id: user.id,
-          username: user.username || "Unknown",
-          avatar_url: user.avatar_url || null,
-        },
-        file_url: file ? URL.createObjectURL(file) : null,
-        file_name: file?.name || null,
-        file_size: file?.size || null,
-        reply_to_id: null,
-        reply_to: null,
-        reads: [],
-        read_by: [user.id],
-      };
+      let optimisticMessage: any = null;
 
-      // 즉시 UI 업데이트 (optimistic)
-      setMessages((prev) => [...prev, optimisticMessage]);
-      setRooms((prev) => {
-        const updatedRooms = prev.map((room) =>
-          room.id === roomId
-            ? { ...room, last_message: optimisticMessage }
-            : room
-        );
-        return sortRoomsByLastMessage(updatedRooms);
-      });
+      // ✅ Optimistic update 생성 (skipOptimistic이 false일 때만)
+      if (!skipOptimistic) {
+        // React 19 + Context7 Pattern: 고유한 임시 ID 생성 (중복 방지)
+        optimisticMessage = {
+          id: `temp-${Date.now()}-${Math.random()}-${performance.now()}`,
+          room_id: roomId,
+          sender_id: user.id,
+          content: content.trim(),
+          message_type: getMessageType(file),
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          sender: {
+            id: user.id,
+            username: user.username || "Unknown",
+            avatar_url: user.avatar_url || null,
+          },
+          file_url: file ? URL.createObjectURL(file) : null,
+          file_name: file?.name || null,
+          file_size: file?.size || null,
+          reply_to_id: null,
+          reply_to: null,
+          reads: [],
+          read_by: [user.id],
+        };
+
+        // 즉시 UI 업데이트 (optimistic)
+        setMessages((prev) => [...prev, optimisticMessage]);
+        setRooms((prev) => {
+          const updatedRooms = prev.map((room) =>
+            room.id === roomId
+              ? { ...room, last_message: optimisticMessage }
+              : room
+          );
+          return sortRoomsByLastMessage(updatedRooms);
+        });
+      }
 
       try {
         let response: Response;
@@ -415,31 +437,37 @@ export function useChatHook() {
             console.log(`✅ Message sent successfully: ${serverMessage.id}`);
           }
 
-          // Optimistic 메시지를 실제 메시지로 교체
-          setMessages((prev) =>
-            prev.map((msg) =>
-              msg.id === optimisticMessage.id ? serverMessage : msg
-            )
-          );
-
-          setRooms((prev) => {
-            const updatedRooms = prev.map((room) =>
-              room.id === roomId
-                ? { ...room, last_message: serverMessage }
-                : room
+          // ✅ Optimistic 메시지를 실제 메시지로 교체 (skipOptimistic이 false일 때만)
+          if (!skipOptimistic && optimisticMessage) {
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === optimisticMessage.id ? serverMessage : msg
+              )
             );
-            return sortRoomsByLastMessage(updatedRooms);
-          });
+
+            setRooms((prev) => {
+              const updatedRooms = prev.map((room) =>
+                room.id === roomId
+                  ? { ...room, last_message: serverMessage }
+                  : room
+              );
+              return sortRoomsByLastMessage(updatedRooms);
+            });
+          }
 
           return serverMessage;
         } else {
-          // 서버 요청 실패시 optimistic 메시지 제거
-          setMessages((prev) => prev.filter((msg) => msg.id !== optimisticMessage.id));
+          // 서버 요청 실패시 optimistic 메시지 제거 (optimistic 메시지가 있을 때만)
+          if (!skipOptimistic && optimisticMessage) {
+            setMessages((prev) => prev.filter((msg) => msg.id !== optimisticMessage.id));
+          }
           toast.error("메시지 전송에 실패했습니다");
         }
       } catch (error) {
-        // 네트워크 오류시 optimistic 메시지 제거
-        setMessages((prev) => prev.filter((msg) => msg.id !== optimisticMessage.id));
+        // 네트워크 오류시 optimistic 메시지 제거 (optimistic 메시지가 있을 때만)
+        if (!skipOptimistic && optimisticMessage) {
+          setMessages((prev) => prev.filter((msg) => msg.id !== optimisticMessage.id));
+        }
         toast.error("메시지 전송에 실패했습니다");
       }
     },
@@ -495,6 +523,23 @@ export function useChatHook() {
     };
   }, [handleMessageUpdate]);
 
+  // ✅ Optimistic upload: 업로드 중인 임시 메시지 추가
+  const addUploadingMessage = useCallback((tempMessage: ChatMessage) => {
+    setMessages(prev => [...prev, tempMessage]);
+  }, []);
+
+  // ✅ Optimistic upload: 임시 메시지 업데이트 (에러 상태 등)
+  const updateUploadingMessage = useCallback((tempId: string, updates: Partial<ChatMessage>) => {
+    setMessages(prev => prev.map(msg =>
+      msg.id === tempId ? { ...msg, ...updates } : msg
+    ));
+  }, []);
+
+  // ✅ Optimistic upload: 임시 메시지 제거
+  const removeUploadingMessage = useCallback((tempId: string) => {
+    setMessages(prev => prev.filter(msg => msg.id !== tempId));
+  }, []);
+
   return {
     rooms,
     currentRoom,
@@ -515,7 +560,11 @@ export function useChatHook() {
     typingUsers,
     updateTyping,
     startTyping,
-    stopTyping
+    stopTyping,
+    // ✅ Optimistic upload 함수들
+    addUploadingMessage,
+    updateUploadingMessage,
+    removeUploadingMessage
   };
 }
 

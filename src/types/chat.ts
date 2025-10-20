@@ -39,6 +39,11 @@ export interface ChatMessage {
   };
   reply_to?: ChatMessage;
   read_by: string[];
+
+  // Optimistic upload fields (temporary messages)
+  uploading?: boolean;      // 업로드 중 플래그
+  tempFile?: File;          // 프리뷰용 임시 파일 객체
+  uploadError?: string;     // 업로드 실패 시 에러 메시지
 }
 
 export interface ChatMessageRead {

@@ -1,241 +1,231 @@
 # 내일 작업 재개 가이드
 
-**날짜**: 2025-10-16 작성
+**날짜**: 2025-10-17 작성
 **다음 세션 시작 시 읽을 것**
 
 ---
 
 ## 🎯 오늘의 작업 요약
 
-### 완료한 작업
-1. ✅ Share 기능 API 오류 수정 (400 → 200, 403 → 200)
-2. ✅ 친구 선택 UI 개선 (bio 제거, 검색 기능 추가)
-3. ✅ Delete 기능 props 전달 수정 (ReferenceError 해결)
-4. ✅ Playwright MCP로 end-to-end 테스트 실행
+### ✅ 완료한 작업
 
-### ⚠️ 사용자 피드백
-> "지금 내가 의도한대로 되지 않았다"
+#### 1. 모바일 파일 업로드 UI 버그 수정 (치명적 버그 해결)
+**문제**: 긴 파일명(151자+) 첨부 시 전송 버튼이 화면 밖으로 밀려나 메시지 전송 불가
 
-→ **무엇이 의도대로 되지 않았는지 명확하지 않음**. 다음 세션에서 확인 필요.
+**해결**:
+- `chat-layout.tsx`: 부모 컨테이너에 `w-full overflow-hidden` 추가
+- `file-upload-button.tsx`: FilePreview를 `w-full overflow-hidden`으로 변경
+- calc(100%) 문제 해결: 부모 너비 제약을 명시적으로 설정
+
+**결과**:
+- ✅ 전송 버튼 항상 화면에 표시
+- ✅ 긴 파일명 자동 말줄임 처리
+- ✅ 모든 뷰포트에서 정상 작동
+
+#### 2. Next.js Image LCP Priority 경고 수정
+**문제**: 콘솔에 LCP 이미지 priority 경고
+
+**해결**:
+- `MessageRenderer.tsx:136`: `priority={false}` → `priority={true}`
+- Context7 MCP로 Next.js 15.1.8 공식 문서 확인
+
+**결과**: LCP 성능 최적화 + 콘솔 경고 제거
+
+#### 3. Radix UI Dialog/Sheet 접근성 경고 수정
+**문제**: Sheet 컴포넌트에 Description 누락으로 접근성 경고
+
+**해결**:
+- `chat-attachment-menu.tsx`: SheetDescription 추가 (sr-only로 숨김 처리)
+- 두 개의 Sheet 컴포넌트에 적절한 설명 추가
+
+**결과**: 접근성 향상 + 콘솔 경고 제거
+
+#### 4. 문서 통합 및 정리
+- `docs/TROUBLESHOOTING.md` 업데이트: 오늘 수정 사항 추가
+- claudedocs의 모바일 버그 관련 문서 정리 완료
 
 ---
 
-## 📋 내일 시작 시 체크리스트
+## 📋 다음 세션 체크리스트
 
-### 1단계: 상황 파악 (5분)
+### 1단계: 프로젝트 상태 확인
 ```bash
-# 1. 상세 요약 문서 읽기
-cat claudedocs/image-lightbox-testing-summary.md
-
-# 2. 개발 서버 실행
+# 개발 서버 실행
 npm run dev
 
-# 3. 브라우저에서 직접 테스트
-# http://localhost:3000/chat?room=a009a352-0548-49af-a223-acfd497965d6
+# Git 상태 확인
+git status
+
+# 최근 수정 내용 확인
+cat docs/TROUBLESHOOTING.md | head -150
 ```
 
-### 2단계: 사용자에게 질문 (정확한 요구사항 파악)
-다음 질문들을 사용자에게 물어볼 것:
+### 2단계: 브라우저 테스트
+1. http://localhost:3000/chat 접속
+2. 긴 파일명 파일 첨부 테스트
+3. 콘솔에 경고가 없는지 확인
+4. 모바일 뷰포트(375px)에서 전송 버튼 확인
 
-**삭제 기능 관련**:
-- Q: "삭제 버튼을 눌렀을 때, 채팅 목록에서 메시지가 즉시 사라졌나요?"
-- Q: "아니면 새로고침을 해야 사라졌나요?"
-- Q: "혹시 '메시지 정보가 없습니다' 오류가 여전히 나타나나요?"
+### 3단계: 추가 개선 작업
 
-**공유 기능 관련**:
-- Q: "공유를 했을 때, 상대방 채팅방에 이미지가 제대로 전송되었나요?"
-- Q: "이미지가 깨지거나 안 보이는 문제가 있나요?"
+**우선순위 높음**:
+- [ ] 다중 파일 업로드 완성 (현재 첫 번째 파일만 전송)
+- [ ] 타이핑 인디케이터 최적화 (debounce 추가)
+- [ ] 이미지 로딩 최적화 (lazy loading, placeholder)
 
-**친구 검색 관련**:
-- Q: "친구 이름을 검색할 때 잘 작동하나요?"
-- Q: "한글로 검색했을 때도 잘 되나요?"
+**우선순위 중간**:
+- [ ] 읽음 표시 UI 구현 (DB에는 있으나 UI 없음)
+- [ ] 메시지 검색 기능 추가
 
-**기타**:
-- Q: "구체적으로 어떤 부분이 의도한대로 되지 않았나요?"
-
-### 3단계: 문제 재현 및 디버깅
-
-#### 시나리오 A: 삭제 후 메시지가 안 사라짐
-**증상**: DELETE API는 성공(200)하는데 UI에서 메시지가 남아있음
-
-**원인 추정**:
-- TanStack Query 캐시 무효화 누락
-- Realtime 구독에서 DELETE 이벤트 미처리
-
-**해결 방법**:
-```typescript
-// src/components/shared/image-lightbox.tsx의 handleDelete 함수 수정
-const handleDelete = async () => {
-  // ... 기존 DELETE 로직 ...
-
-  if (deleteRes.ok) {
-    // 🔹 추가: 캐시 무효화
-    queryClient.invalidateQueries(['chat-messages', roomId]);
-    // 또는
-    queryClient.setQueryData(['chat-messages', roomId], (old: any) => ({
-      ...old,
-      pages: old.pages.map((page: any) => ({
-        ...page,
-        data: page.data.filter((msg: any) => msg.id !== messageId)
-      }))
-    }));
-
-    onClose();
-  }
-};
-```
-
-#### 시나리오 B: 공유된 이미지가 상대방에게 안 보임
-**증상**: POST 요청은 성공하는데 상대방 채팅방에 이미지가 안 보임
-
-**확인 사항**:
-1. `/api/chat/messages` 라우트에서 file_url이 제대로 저장되는지
-2. MessageRenderer에서 이미지 타입 메시지를 제대로 렌더링하는지
-3. Storage 권한 문제는 없는지
-
-**디버깅**:
-```sql
--- Supabase에서 직접 확인
-SELECT id, message_type, file_url, created_at
-FROM chat_messages
-WHERE room_id = 'room_id'
-ORDER BY created_at DESC
-LIMIT 5;
-```
-
-#### 시나리오 C: 친구 검색이 안 됨
-**증상**: 검색창에 입력해도 필터링이 안 됨
-
-**확인 사항**:
-```typescript
-// friend-selection-dialog.tsx:55-61 확인
-const filteredFriends = useMemo(() => {
-  if (!searchQuery.trim()) return friends;
-  const query = searchQuery.toLowerCase();
-  return friends.filter(friend =>
-    friend.username.toLowerCase().includes(query)
-  );
-}, [friends, searchQuery]);
-```
+**우선순위 낮음**:
+- [ ] 메시지 편집/삭제 UI
+- [ ] 음성 메시지 지원
 
 ---
 
 ## 🛠️ 주요 파일 위치
 
-### 수정한 파일
-1. `src/components/shared/image-lightbox.tsx`
-   - Lines 252-260: Share API 호출 (Zod 필드 추가)
-   - Line 269: Room ID 추출 로직
-   - Lines 624-666: ClickableImage props 인터페이스
-   - Lines 703-717: ImageLightbox props 전달
+### 오늘 수정한 파일
+1. **`src/components/chat/virtualized/MessageRenderer.tsx`**
+   - Line 136: `priority={true}` 설정
 
-2. `src/components/shared/friend-selection-dialog.tsx`
-   - Line 5: Search import
-   - Line 39: searchQuery state
-   - Lines 54-61: filteredFriends 로직
-   - Lines 110-120: 검색 UI
-   - Lines 174-176: bio 제거
+2. **`src/components/upload/chat-attachment-menu.tsx`**
+   - Line 6: SheetDescription import 추가
+   - Lines 136-138: 첫 번째 Sheet Description
+   - Lines 236-238: 두 번째 Sheet Description
 
-3. `src/components/chat/virtualized/MessageRenderer.tsx`
-   - Lines 92-104: MessageContent props
-   - Lines 141-149: ClickableImage props 전달
-   - Lines 577-583: currentUserId 전달
+3. **`src/components/chat/file-upload-button.tsx`**
+   - Line 182: FilePreview `w-full overflow-hidden` 적용
 
-### 관련 API
-- `src/app/api/chat/messages/[messageId]/route.ts` - DELETE 엔드포인트
-- `src/app/api/chat/messages/route.ts` - POST 엔드포인트
-- `src/app/api/chat/rooms/route.ts` - 채팅방 생성
+4. **`src/components/chat/chat-layout.tsx`**
+   - Line 581: 부모 컨테이너 `w-full overflow-hidden` 추가
+
+5. **`docs/TROUBLESHOOTING.md`**
+   - 오늘 수정 내용 문서화 (최상단에 추가)
+
+### 참고 문서
+- `/claudedocs/MOBILE_FILE_UPLOAD_FIX_SUMMARY.md` - 모바일 버그 수정 요약
+- `/claudedocs/mobile-file-preview-fix-analysis.md` - 기술 분석
+- `/claudedocs/mobile-testing-checklist.md` - 테스트 체크리스트
 
 ---
 
-## 🔍 디버깅 명령어
+## 🔍 디버깅 및 테스트 명령어
 
+### 개발 서버
 ```bash
-# 서버 로그 실시간 확인
-npm run dev 2>&1 | grep -E "(DELETE|POST) /api/chat"
-
-# 특정 에러 검색
-npm run dev 2>&1 | grep -E "(error|Error|ERROR)"
-
-# Playwright 브라우저 테스트
-# (이미 Playwright MCP 설정되어 있음)
+npm run dev                 # 개발 서버 시작 (포트 3000)
+npm run build              # 프로덕션 빌드
+npm start                  # 프로덕션 실행
 ```
 
-### 브라우저 DevTools에서 확인
+### Git 작업
+```bash
+git status                 # 변경 파일 확인
+git diff                   # 변경 내용 상세 확인
+git log --oneline -5       # 최근 커밋 5개 확인
+```
+
+### 브라우저 DevTools
 ```javascript
-// 1. Network 탭에서 API 요청 확인
-// DELETE /api/chat/messages/[id] → 200 응답 확인
+// 1. Console 탭에서 경고 확인
+// - Next.js Image priority 경고: 사라져야 함
+// - Radix UI Description 경고: 사라져야 함
 
-// 2. Console에서 Realtime 이벤트 확인
-// "📨 New realtime message received" 로그
+// 2. Network 탭에서 성능 확인
+// - LCP 이미지 priority 로딩 확인
 
-// 3. React DevTools Components 탭에서
-// ImageLightbox props 확인
-// - messageId, senderId, currentUserId, roomId 값이 있는지
-
-// 4. TanStack Query Devtools에서
-// ['chat-messages', roomId] 캐시 상태 확인
+// 3. Elements 탭에서 레이아웃 확인
+// - 모바일 375px: 전송 버튼 위치 확인
+// - 파일명 truncate 동작 확인
 ```
 
 ---
 
-## 💡 추가 개선 아이디어
+## 💡 기술적 교훈
 
-현재 작동하는 기능들이지만, 더 나은 UX를 위해:
+### 1. calc(100%) 함정
+```tsx
+// ❌ 실패: 부모가 제약 없으면 calc(100%)는 무한 확장 가능
+<div className="mb-3 space-y-2">
+  <FilePreview className="max-w-[calc(100%-80px)]" />
+</div>
 
-1. **삭제 시 낙관적 업데이트 (Optimistic Update)**
-   - 서버 응답을 기다리지 않고 즉시 UI에서 제거
-   - 실패 시에만 롤백
+// ✅ 성공: 부모에 명시적 제약 → calc()가 올바른 참조
+<div className="mb-3 space-y-2 w-full overflow-hidden">
+  <FilePreview className="w-full overflow-hidden" />
+</div>
+```
 
-2. **공유 진행 상태 표시**
-   - "이미지 공유 중..." 로딩 인디케이터
-   - 진행률 표시
+### 2. Radix UI 접근성
+- Dialog/Sheet는 Description 필수 또는 `aria-describedby={undefined}` 명시
+- `sr-only` 클래스로 시각적으로 숨기고 스크린 리더용으로만 제공 가능
 
-3. **친구 검색 디바운싱**
-   - 입력 중에는 검색하지 않고 0.3초 후에 검색
-   - 성능 향상
+### 3. Next.js Image Priority
+- LCP 이미지는 `priority={true}` 설정 필수
+- 페이지 로딩 성능 직접 영향
 
-4. **에러 메시지 개선**
-   - "삭제에 실패했습니다. 다시 시도해주세요."
-   - "공유할 수 없습니다. 네트워크를 확인해주세요."
+### 4. DevTools vs 실제 기기
+- 모바일 DevTools 시뮬레이션 ≠ 실제 모바일 기기
+- 레이아웃 버그는 반드시 실제 디바이스 테스트 필요
 
 ---
 
-## 📞 연락 사항
+## 📊 프로젝트 현황
 
-**프로젝트 정보**:
-- 디렉토리: `/home/dandy02/possible/team_hub`
-- Branch: `master`
-- Modified files: `docs/FEATURES.md`
+### 해결된 주요 버그
+- ✅ Realtime 재연결 시 메시지 유실 (2025-10-14)
+- ✅ 로그인 시 불필요한 profiles POST 요청 (2025-10-14)
+- ✅ 채팅 읽지 않은 메시지 카운트 버그 (2025-10-16)
+- ✅ 모바일 파일 업로드 UI 버그 (2025-10-17)
+- ✅ Next.js Image Priority 경고 (2025-10-17)
+- ✅ Radix UI 접근성 경고 (2025-10-17)
 
-**테스트 환경**:
-- URL: http://localhost:3000
-- 테스트 계정: 주현규 (로그인 상태)
-- 테스트 채팅방: 박할매 (ID: a009a352-0548-49af-a223-acfd497965d6)
+### 현재 알려진 문제
+- 🟡 다중 파일 업로드 불완전 (첫 번째만 전송)
+- 🟡 타이핑 인디케이터 최적화 필요
+- 🟢 읽음 표시 UI 미구현
+- 🟢 메시지 검색 기능 없음
 
-**개발 서버**:
-- Port: 3000
-- Start: `npm run dev`
-- Build: `npm run build`
+---
+
+## 📞 프로젝트 정보
+
+**디렉토리**: `/home/dandy02/possible/team_hub`
+**브랜치**: `master`
+**포트**: 3000 (개발), 3001 (대체)
+
+**주요 기술 스택**:
+- Next.js 15.4.6 (App Router, Turbopack)
+- React 19.1.0 (React Compiler)
+- Supabase (PostgreSQL, Realtime, Storage)
+- TailwindCSS 4
+- shadcn/ui + Radix UI
+
+**MCP 서버**:
+- Context7: 라이브러리 문서 조회
+- Playwright: 브라우저 자동화 테스트
+- Sequential Thinking: 복잡한 분석
 
 ---
 
 ## ✅ 다음 세션 목표
 
-1. **사용자로부터 정확한 피드백 받기**
-   - 무엇이 의도대로 안 되었는지 구체적으로 확인
+1. **성능 최적화**
+   - 이미지 lazy loading 구현
+   - 타이핑 인디케이터 debounce
 
-2. **문제 재현 및 수정**
-   - 위 시나리오 A/B/C 중 해당하는 것 찾아서 수정
+2. **기능 완성**
+   - 다중 파일 업로드 지원
+   - 읽음 표시 UI 구현
 
-3. **수동 테스트로 검증**
-   - Share: 상대방 채팅방에서 이미지 확인
-   - Delete: 메시지 목록에서 즉시 사라지는지 확인
-   - Search: 친구 검색이 잘 되는지 확인
-
-4. **완료 확인**
-   - 사용자가 "잘 된다"고 확인할 때까지 반복
+3. **사용자 경험 개선**
+   - 메시지 검색 기능
+   - 로딩 상태 개선
 
 ---
 
-**📌 중요**: 이 문서와 `claudedocs/image-lightbox-testing-summary.md`를 함께 읽을 것!
+**📌 중요**:
+- 모든 수정사항은 `docs/TROUBLESHOOTING.md`에 문서화됨
+- 모바일 버그 관련 상세 분석은 `/claudedocs/` 참조
+- Context7 MCP를 활용한 정확한 문서 참조 유지
