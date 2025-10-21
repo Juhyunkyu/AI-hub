@@ -108,7 +108,7 @@ export function ChatAttachmentMenu({
       onClick={toggleMenu}
       disabled={disabled}
       className={cn(
-        "w-10 h-10 p-0 rounded-full",
+        "w-8 h-8 md:w-9 md:h-9 p-0 rounded-full",
         "hover:bg-accent hover:text-accent-foreground",
         "disabled:opacity-50 disabled:cursor-not-allowed",
         isOpen && "bg-accent",
@@ -190,7 +190,7 @@ export function CustomAttachmentMenu({
       onClick={() => setIsOpen(!isOpen)}
       disabled={disabled}
       className={cn(
-        "w-10 h-10 p-0 rounded-full",
+        "w-8 h-8 md:w-9 md:h-9 p-0 rounded-full",
         "hover:bg-accent hover:text-accent-foreground",
         "disabled:opacity-50 disabled:cursor-not-allowed",
         isOpen && "bg-accent",

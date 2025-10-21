@@ -6,41 +6,10 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useAuthStore } from "@/stores/auth";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import { compressAvatar, validateImageFile } from "@/lib/utils/image-compression";
 
 const AVATARS_BUCKET =
   process.env.NEXT_PUBLIC_SUPABASE_BUCKET_AVATARS || "posts";
-
-async function compressImage(
-  file: File,
-  maxSize = 512,
-  quality = 0.8
-): Promise<Blob> {
-  const img = document.createElement("img");
-  const reader = new FileReader();
-  const load = new Promise<string>((resolve, reject) => {
-    reader.onerror = () => reject(new Error("read error"));
-    reader.onload = () => resolve(reader.result as string);
-  });
-  reader.readAsDataURL(file);
-  const dataUrl = await load;
-  await new Promise<void>((res) => {
-    img.onload = () => res();
-    img.src = dataUrl;
-  });
-
-  const canvas = document.createElement("canvas");
-  const scale = Math.min(1, maxSize / Math.max(img.width, img.height));
-  canvas.width = Math.max(1, Math.round(img.width * scale));
-  canvas.height = Math.max(1, Math.round(img.height * scale));
-  const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("canvas ctx");
-  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-  const type = file.type.includes("png") ? "image/png" : "image/jpeg";
-  const blob: Blob = await new Promise((resolve) =>
-    canvas.toBlob((b) => resolve(b as Blob), type, quality)
-  );
-  return blob;
-}
 
 export function UploadAvatar() {
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -54,27 +23,26 @@ export function UploadAvatar() {
     if (!file) return;
     if (!user) return toast.error("로그인이 필요합니다");
 
-    if (!/^image\//.test(file.type)) {
-      toast.error("이미지 파일만 업로드할 수 있습니다");
-      return;
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error("파일은 최대 5MB까지 지원합니다");
+    // 파일 유효성 검사
+    const validation = validateImageFile(file, { maxSize: 10 * 1024 * 1024 });
+    if (!validation.valid) {
+      toast.error(validation.error);
       return;
     }
 
     setLoading(true);
     try {
-      const blob = await compressImage(file, 512, 0.85);
+      // browser-image-compression으로 압축
+      const { file: compressedFile } = await compressAvatar(file);
 
       const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
       const path = `avatars/${user.id}/${Date.now()}.${ext}`;
 
-      const { data: uploadData, error: upErr } = await supabase.storage
+      const { error: upErr } = await supabase.storage
         .from(AVATARS_BUCKET)
-        .upload(path, blob, {
+        .upload(path, compressedFile, {
           upsert: true,
-          contentType: blob.type,
+          contentType: compressedFile.type,
           cacheControl: "3600",
         });
 

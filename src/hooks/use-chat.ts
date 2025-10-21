@@ -19,25 +19,26 @@ const sortRoomsByLastMessage = (rooms: ChatRoomWithParticipants[]) => {
 };
 
 // 메시지 찾기 헬퍼 함수 (React 19 + Context7 Pattern)
-// 다중 파일 업로드 시 file_name으로 정확히 매칭
+// tempId 기반 정확한 매칭 - 시간 제약 없음 (큰 파일 업로드도 안전)
 const findTempMessage = (messages: ChatMessage[], targetMessage: ChatMessage) => {
   return messages.findIndex(m => {
-    // Must be a temp message
-    if (!m.id.startsWith('temp-')) return false;
+    // tempId가 있으면 정확히 매칭 (가장 안전한 방법)
+    if (m.tempId && targetMessage.tempId) {
+      return m.tempId === targetMessage.tempId;
+    }
 
-    // Must be same sender
+    // tempId가 없는 레거시 메시지는 기존 로직 사용
+    if (!m.id.startsWith('temp-')) return false;
     if (m.sender_id !== targetMessage.sender_id) return false;
 
-    // For file uploads, file_name is the primary matcher
+    // 파일 업로드: file_name + 시간 체크 (30초 window)
     if (targetMessage.file_name && m.file_name) {
       if (m.file_name !== targetMessage.file_name) return false;
-
-      // Time check with more generous window (30 seconds for large uploads)
       const timeDiff = Math.abs(new Date(m.created_at).getTime() - new Date(targetMessage.created_at).getTime());
       return timeDiff < 30000;
     }
 
-    // For text messages, content is the primary matcher
+    // 텍스트 메시지: content + 시간 체크 (10초 window)
     if (m.content === targetMessage.content) {
       const timeDiff = Math.abs(new Date(m.created_at).getTime() - new Date(targetMessage.created_at).getTime());
       return timeDiff < 10000;
@@ -77,19 +78,36 @@ export function useChatHook() {
 
   // React 19 + Context7 Pattern: 중복 메시지 처리 방지 (batching 대응)
   const processingMessagesRef = useRef<Set<string>>(new Set());
+  const processedMessagesRef = useRef<Set<string>>(new Set());
 
   // 실시간 메시지 핸들러들 (React 19 최적화)
   const handleNewRealtimeMessage = useCallback((message: ChatMessage) => {
-    // Guard: 이미 처리 중인 메시지는 무시 (React batching 중복 방지)
+    // Guard 1: 이미 처리 완료된 메시지는 무시 (영구 캐시)
+    if (processedMessagesRef.current.has(message.id)) {
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`⚠️ Already processed message ignored: ${message.id}`);
+      }
+      return;
+    }
+
+    // Guard 2: 이미 처리 중인 메시지는 무시 (React batching 중복 방지)
     if (processingMessagesRef.current.has(message.id)) {
       if (process.env.NODE_ENV === 'development') {
-        console.log(`⚠️ Duplicate realtime message ignored: ${message.id}`);
+        console.log(`⚠️ Duplicate realtime message ignored (processing): ${message.id}`);
       }
       return;
     }
 
     // 처리 시작 표시
     processingMessagesRef.current.add(message.id);
+    processedMessagesRef.current.add(message.id);
+
+    // 메모리 관리: 1000개 제한
+    if (processedMessagesRef.current.size > 1000) {
+      const messagesArray = Array.from(processedMessagesRef.current);
+      processedMessagesRef.current.delete(messagesArray[0]);
+    }
+
     setMessages(prev => {
       // 임시 메시지 찾기 (헬퍼 함수 사용)
       const tempMessageIndex = findTempMessage(prev, message);
@@ -160,10 +178,8 @@ export function useChatHook() {
       return sortRoomsByLastMessage(updatedRooms);
     });
 
-    // 메모리 관리: 1초 후 처리 완료 표시 제거
-    setTimeout(() => {
-      processingMessagesRef.current.delete(message.id);
-    }, 1000);
+    // 처리 중 플래그는 즉시 제거 (영구 캐시는 유지)
+    processingMessagesRef.current.delete(message.id);
   }, [currentRoom]);
 
   const handleMessageUpdate = useCallback((message: ChatMessage) => {

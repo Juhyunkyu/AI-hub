@@ -6,7 +6,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { formatMessageTime } from "@/lib/date-utils";
 import type { ChatMessage } from "@/types/chat";
-import { FileIcon, ImageIcon, ReplyIcon, Download, MapPin, Loader2, RefreshCw } from "lucide-react";
+import { FileIcon, ImageIcon, ReplyIcon, Download, MapPin, Loader2, RefreshCw, X } from "lucide-react";
 import { ClickableImage } from "@/components/shared/image-lightbox";
 import { loadKakaoMaps } from "@/lib/kakao-maps-loader";
 
@@ -129,7 +129,7 @@ const MessageContent = memo(({
       if (message.uploading) {
         return (
           <div className="space-y-2">
-            <div className="relative max-w-sm">
+            <div className="relative max-w-[280px] sm:max-w-sm md:max-w-md">
               {/* 임시 파일로 이미지 프리뷰 */}
               {message.tempFile && (
                 <Image
@@ -142,14 +142,53 @@ const MessageContent = memo(({
                 />
               )}
 
-              {/* 로딩 오버레이 */}
+              {/* 로딩 오버레이 - SVG Circular Progress */}
               {!message.uploadError && (
                 <div className="absolute inset-0 bg-black/40 rounded-lg flex items-center justify-center">
-                  <div className="flex flex-col items-center gap-2">
-                    <Loader2 className="h-8 w-8 animate-spin text-white" />
-                    <span className="text-white text-sm font-medium">
-                      업로드 중...
-                    </span>
+                  <div className="relative w-20 h-20">
+                    {/* SVG Circular Progress */}
+                    <svg
+                      className="w-20 h-20 transform -rotate-90"
+                      viewBox="0 0 100 100"
+                    >
+                      {/* Background circle */}
+                      <circle
+                        cx="50"
+                        cy="50"
+                        r="40"
+                        stroke="rgba(255, 255, 255, 0.2)"
+                        strokeWidth="4"
+                        fill="none"
+                      />
+                      {/* Progress circle */}
+                      <circle
+                        cx="50"
+                        cy="50"
+                        r="40"
+                        stroke="white"
+                        strokeWidth="4"
+                        fill="none"
+                        strokeDasharray="251.2"
+                        strokeDashoffset={
+                          251.2 - (251.2 * (message.uploadProgress || 0) / 100)
+                        }
+                        strokeLinecap="round"
+                        className="transition-all duration-300 ease-out"
+                      />
+                    </svg>
+
+                    {/* X button centered */}
+                    {message.uploadAbortController && (
+                      <button
+                        onClick={() => {
+                          message.uploadAbortController?.abort();
+                        }}
+                        className="absolute inset-0 flex items-center justify-center hover:bg-white/10 rounded-full transition-colors"
+                        title="업로드 취소"
+                      >
+                        <X className="h-6 w-6 text-white" />
+                      </button>
+                    )}
                   </div>
                 </div>
               )}
@@ -189,7 +228,7 @@ const MessageContent = memo(({
       return (
         <div className="space-y-2">
           {message.file_url ? (
-            <div className="relative max-w-sm">
+            <div className="relative max-w-[280px] sm:max-w-sm md:max-w-md">
               <ClickableImage
                 src={message.file_url}
                 alt={message.file_name || "이미지"}
@@ -560,11 +599,12 @@ const MessageRendererBase = ({
 
 
   // 컨테이너 스타일 - 텍스트 래핑을 허용하는 유연한 높이
+  // 상대방 메시지는 왼쪽 여백 축소 (4px), 자신의 메시지는 기존 유지 (16px)
   const containerStyle: CSSProperties = {
     width: '100%',
     minHeight: style.height || 'auto', // 최소 높이만 설정
     height: 'auto', // 콘텐츠에 따라 자연스러운 높이
-    padding: '2px 16px', // 상하 간격 (4px total)
+    padding: isOwnMessage ? '2px 16px' : '2px 16px 2px 4px', // 상대방 메시지만 왼쪽 4px
     display: 'flex',
     alignItems: 'flex-start',
     boxSizing: 'border-box',
@@ -582,89 +622,145 @@ const MessageRendererBase = ({
       <div className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'} gap-2 ${
         message.message_type === 'location' ? 'w-full' : 'w-full'
       }`}>
-        {/* 아바타 (내 메시지가 아니고 그룹핑 조건을 만족하는 경우만) */}
-        {!isOwnMessage && showAvatar ? (
-          <Avatar className="h-8 w-8 flex-shrink-0 mt-1">
-            <AvatarImage src={message.sender?.avatar_url || ""} />
-            <AvatarFallback className="text-xs">
-              {message.sender?.username?.[0]?.toUpperCase() ||
-               message.sender_id?.slice(-1)?.toUpperCase() || "U"}
-            </AvatarFallback>
-          </Avatar>
-        ) : !isOwnMessage ? (
-          /* 아바타 자리 플레이스홀더 (메시지 정렬을 위해) */
-          <div className={`flex-shrink-0 ${message.message_type === 'location' ? 'w-0' : 'w-8 h-8'}`} />
-        ) : null}
-
-        <div className={`flex flex-col ${isOwnMessage ? 'items-end' : 'items-start'} ${
-          message.message_type === 'location'
-            ? 'flex-1 max-w-[83%]'
-            : 'max-w-[75%] sm:max-w-[80%]'
-        } min-w-0 ${message.message_type === 'location' ? '' : 'flex-shrink-0'}`}>
-          {/* 사용자명 (내 메시지가 아니고 그룹핑 조건을 만족하는 경우만) */}
-          {!isOwnMessage && showUsername && (
-            <div className="text-xs text-muted-foreground mb-2">
-              {message.sender?.username || `사용자${message.sender_id?.slice(-4) || ''}`}
-            </div>
-          )}
-
-          {/* 메시지 컨테이너 - 시간 분리된 깔끔한 구조 */}
-          <div className={`relative ${message.message_type === 'location' ? 'w-full' : ''}`}>
-            {/* 메시지 버블 - 텍스트만 배경과 테두리 적용 */}
-            <div className={`${
-              message.message_type === 'text'
-                ? `rounded-lg inline-block px-3 py-2 ${
-                    isOwnMessage
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-muted text-foreground'
-                  }`
-                : message.message_type === 'location'
-                ? 'block w-full p-0 min-w-full bg-transparent'
-                : 'inline-block bg-transparent'
-            }`} style={{
-              wordBreak: 'break-word',
-              overflowWrap: 'break-word',
-              wordWrap: 'break-word',
-              hyphens: 'auto',
-              lineHeight: '1.4', // 정확한 lineHeight 지정
-              maxWidth: '100%', // 부모 컨테이너(70%) 기준으로 100%
-              width: 'auto',
-              whiteSpace: 'pre-wrap',
-              // 추가 스타일링 일관성
-              fontSize: '14px', // text-sm 명시적 지정
-              margin: 0,
-              padding: message.message_type === 'text' ? '8px 12px' : '0' // 텍스트만 패딩 적용
-            }}>
-              {/* 답글 프리뷰 */}
-              <ReplyPreview replyToMessage={replyToMessage} />
-
-              {/* 메시지 컨텐츠 */}
-              <MessageContent
-                message={message}
-                searchQuery={searchQuery}
-                sendMessage={sendMessage}
-                currentRoomId={currentRoomId}
-                currentUserId={currentUserId}
-                onRetryUpload={onRetryUpload}
-              />
-            </div>
-
-            {/* 시간 표시 - absolute 포지셔닝으로 버블 외부에 배치 */}
-            {showTime && (
-              <div
-                className={`absolute text-xs text-muted-foreground whitespace-nowrap ${
-                  isOwnMessage ? 'right-full mr-2' : 'left-full ml-2'
-                }`}
-                style={{
-                  bottom: '2px', // 버블 하단에 맞춤
-                  transform: 'none'
-                }}
-              >
-                {formattedTime}
-              </div>
+        {/* 상대방 메시지: 왼쪽 아바타 + 오른쪽 (닉네임 + 메시지) */}
+        {!isOwnMessage && (
+          <>
+            {/* 왼쪽: 아바타 또는 플레이스홀더 */}
+            {showAvatar ? (
+              <Avatar className="h-8 w-8 flex-shrink-0 ring-2 ring-border/20 mt-0.5">
+                <AvatarImage src={message.sender?.avatar_url || ""} />
+                <AvatarFallback className="text-xs">
+                  {message.sender?.username?.[0]?.toUpperCase() ||
+                   message.sender_id?.slice(-1)?.toUpperCase() || "U"}
+                </AvatarFallback>
+              </Avatar>
+            ) : (
+              /* 연속 메시지: 아바타 자리에 빈 공간 */
+              <div className={`flex-shrink-0 ${message.message_type === 'location' ? 'w-0' : 'w-8'}`} />
             )}
+
+            {/* 오른쪽: 닉네임 + 메시지 */}
+            <div className={`flex flex-col ${
+              message.message_type === 'location'
+                ? 'flex-1 max-w-[83%]'
+                : 'max-w-[75%] sm:max-w-[80%]'
+            } min-w-0`}>
+              {/* 닉네임 (첫 번째 메시지만) */}
+              {showUsername && (
+                <div className="text-xs text-muted-foreground mb-1">
+                  {message.sender?.username || `사용자${message.sender_id?.slice(-4) || ''}`}
+                </div>
+              )}
+
+              {/* 메시지 컨테이너 */}
+              <div className={`relative ${message.message_type === 'location' ? 'w-full' : ''}`}>
+                {/* 메시지 버블 */}
+                <div className={`${
+                  message.message_type === 'text'
+                    ? `rounded-lg inline-block px-3 py-2 ${
+                        isOwnMessage
+                          ? 'bg-primary text-primary-foreground'
+                          : 'bg-muted text-foreground'
+                      }`
+                    : message.message_type === 'location'
+                    ? 'block w-full p-0 min-w-full bg-transparent'
+                    : 'inline-block bg-transparent'
+                }`} style={{
+                  wordBreak: 'break-word',
+                  overflowWrap: 'break-word',
+                  wordWrap: 'break-word',
+                  hyphens: 'auto',
+                  lineHeight: '1.4',
+                  maxWidth: '100%',
+                  width: 'auto',
+                  whiteSpace: 'pre-wrap',
+                  fontSize: '14px',
+                  margin: 0,
+                  padding: message.message_type === 'text' ? '8px 12px' : '0'
+                }}>
+                  {/* 답글 프리뷰 */}
+                  <ReplyPreview replyToMessage={replyToMessage} />
+
+                  {/* 메시지 컨텐츠 */}
+                  <MessageContent
+                    message={message}
+                    searchQuery={searchQuery}
+                    sendMessage={sendMessage}
+                    currentRoomId={currentRoomId}
+                    currentUserId={currentUserId}
+                    onRetryUpload={onRetryUpload}
+                  />
+                </div>
+
+                {/* 시간 표시 */}
+                {showTime && (
+                  <div
+                    className="absolute text-xs text-muted-foreground whitespace-nowrap left-full ml-2"
+                    style={{
+                      bottom: '2px',
+                      transform: 'none'
+                    }}
+                  >
+                    {formattedTime}
+                  </div>
+                )}
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* 자신의 메시지 (기존 로직 유지) */}
+        {isOwnMessage && (
+          <div className={`flex flex-col items-end ${
+            message.message_type === 'location'
+              ? 'flex-1 max-w-[83%]'
+              : 'max-w-[75%] sm:max-w-[80%]'
+          } min-w-0`}>
+            <div className={`relative ${message.message_type === 'location' ? 'w-full' : ''}`}>
+              <div className={`${
+                message.message_type === 'text'
+                  ? 'rounded-lg inline-block px-3 py-2 bg-primary text-primary-foreground'
+                  : message.message_type === 'location'
+                  ? 'block w-full p-0 min-w-full bg-transparent'
+                  : 'inline-block bg-transparent'
+              }`} style={{
+                wordBreak: 'break-word',
+                overflowWrap: 'break-word',
+                wordWrap: 'break-word',
+                hyphens: 'auto',
+                lineHeight: '1.4',
+                maxWidth: '100%',
+                width: 'auto',
+                whiteSpace: 'pre-wrap',
+                fontSize: '14px',
+                margin: 0,
+                padding: message.message_type === 'text' ? '8px 12px' : '0'
+              }}>
+                <ReplyPreview replyToMessage={replyToMessage} />
+                <MessageContent
+                  message={message}
+                  searchQuery={searchQuery}
+                  sendMessage={sendMessage}
+                  currentRoomId={currentRoomId}
+                  currentUserId={currentUserId}
+                  onRetryUpload={onRetryUpload}
+                />
+              </div>
+
+              {showTime && (
+                <div
+                  className="absolute text-xs text-muted-foreground whitespace-nowrap right-full mr-2"
+                  style={{
+                    bottom: '2px',
+                    transform: 'none'
+                  }}
+                >
+                  {formattedTime}
+                </div>
+              )}
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

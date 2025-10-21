@@ -191,8 +191,8 @@ export function validateImageFile(file: File): { valid: boolean; error?: string 
     return { valid: false, error: "이미지 파일만 업로드할 수 있습니다" };
   }
 
-  if (!validateFileSize(file, 10 * 1024 * 1024)) {
-    return { valid: false, error: "이미지는 최대 10MB까지 지원합니다" };
+  if (!validateFileSize(file, 50 * 1024 * 1024)) {
+    return { valid: false, error: "이미지는 최대 50MB까지 지원합니다" };
   }
 
   return { valid: true };

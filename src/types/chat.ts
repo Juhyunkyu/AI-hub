@@ -41,9 +41,12 @@ export interface ChatMessage {
   read_by: string[];
 
   // Optimistic upload fields (temporary messages)
+  tempId?: string;          // 임시 메시지 고유 ID (매칭용)
   uploading?: boolean;      // 업로드 중 플래그
   tempFile?: File;          // 프리뷰용 임시 파일 객체
   uploadError?: string;     // 업로드 실패 시 에러 메시지
+  uploadProgress?: number;  // 업로드 진행률 (0-100, 압축 0-50, 업로드 50-100)
+  uploadAbortController?: AbortController; // 업로드 취소 컨트롤러
 }
 
 export interface ChatMessageRead {

@@ -1,122 +1,165 @@
 /**
  * 이미지 압축 유틸리티
- * 5MB 이상의 이미지를 자동으로 압축하여 업로드 크기를 줄입니다.
+ * browser-image-compression 라이브러리 사용
+ * React 19 + Next.js 15 호환
  */
 
-export interface CompressedImage {
-  file: File;
-  originalSize: number;
-  compressedSize: number;
-  quality: number;
+import imageCompression from 'browser-image-compression';
+
+/**
+ * 압축 진행 상태 콜백 타입
+ */
+export type CompressionProgressCallback = (progress: number) => void;
+
+/**
+ * 압축 옵션
+ */
+export interface ImageCompressionOptions {
+  /** 최대 파일 크기 (MB) */
+  maxSizeMB?: number;
+  /** 최대 너비 또는 높이 (픽셀) */
+  maxWidthOrHeight?: number;
+  /** 초기 품질 (0-1) */
+  initialQuality?: number;
+  /** EXIF 메타데이터 보존 */
+  preserveExif?: boolean;
+  /** 진행 상태 콜백 */
+  onProgress?: CompressionProgressCallback;
+  /** 취소 시그널 */
+  signal?: AbortSignal;
+  /** Web Worker 사용 여부 */
+  useWebWorker?: boolean;
 }
 
 /**
- * 이미지를 압축하는 함수
- * @param file 원본 이미지 파일
- * @param maxSizeMB 최대 파일 크기 (MB)
- * @param maxWidth 최대 너비 (픽셀)
- * @param maxHeight 최대 높이 (픽셀)
- * @param cropToSquare 정사각형으로 크롭할지 여부 (프로필 이미지용)
+ * 압축 결과
+ */
+export interface CompressionResult {
+  /** 압축된 파일 */
+  file: File;
+  /** 원본 크기 (bytes) */
+  originalSize: number;
+  /** 압축 후 크기 (bytes) */
+  compressedSize: number;
+  /** 압축률 (0-100%) */
+  compressionRatio: number;
+}
+
+/**
+ * 이미지 파일 압축
+ *
+ * @param file - 압축할 이미지 파일
+ * @param options - 압축 옵션
  * @returns 압축된 이미지 정보
+ *
+ * @example
+ * ```ts
+ * // 기본 압축
+ * const result = await compressImage(file);
+ *
+ * // 진행률 콜백 사용
+ * const result = await compressImage(file, {
+ *   maxSizeMB: 2,
+ *   onProgress: (progress) => console.log(`${progress}%`)
+ * });
+ *
+ * // 취소 가능한 압축
+ * const controller = new AbortController();
+ * try {
+ *   const result = await compressImage(file, { signal: controller.signal });
+ * } catch (error) {
+ *   if (error.message.includes('aborted')) {
+ *     console.log('압축 취소됨');
+ *   }
+ * }
+ * ```
  */
 export async function compressImage(
   file: File,
-  maxSizeMB: number = 5,
-  maxWidth: number = 1024,
-  maxHeight: number = 1024,
-  cropToSquare: boolean = false
-): Promise<CompressedImage> {
-  const maxSizeBytes = maxSizeMB * 1024 * 1024;
-  
-  // 파일이 이미 충분히 작으면 압축하지 않음
-  if (file.size <= maxSizeBytes) {
+  options: ImageCompressionOptions = {}
+): Promise<CompressionResult> {
+  const {
+    maxSizeMB = 2,
+    maxWidthOrHeight = 1920,
+    initialQuality = 0.9,
+    preserveExif = true,
+    onProgress,
+    signal,
+    useWebWorker = true,
+  } = options;
+
+  const originalSize = file.size;
+
+  // 이미 충분히 작으면 압축하지 않음
+  if (originalSize <= maxSizeMB * 1024 * 1024) {
     return {
       file,
-      originalSize: file.size,
-      compressedSize: file.size,
-      quality: 1.0,
+      originalSize,
+      compressedSize: originalSize,
+      compressionRatio: 0,
     };
   }
 
-  return new Promise((resolve, reject) => {
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    const img = new Image();
+  try {
+    const compressedFile = await imageCompression(file, {
+      maxSizeMB,
+      maxWidthOrHeight,
+      initialQuality,
+      preserveExif,
+      useWebWorker,
+      onProgress,
+      signal,
+    });
 
-    img.onload = () => {
-      // 이미지 크기 계산
-      let { width, height } = img;
-      
-      if (cropToSquare) {
-        // 정사각형으로 크롭
-        const size = Math.min(width, height, maxWidth, maxHeight);
-        canvas.width = size;
-        canvas.height = size;
-        
-        // 중앙을 기준으로 정사각형 크롭
-        const sourceX = (width - size) / 2;
-        const sourceY = (height - size) / 2;
-        
-        ctx?.drawImage(img, sourceX, sourceY, size, size, 0, 0, size, size);
-      } else {
-        // 비율 유지하면서 크기 조정
-        if (width > maxWidth || height > maxHeight) {
-          const ratio = Math.min(maxWidth / width, maxHeight / height);
-          width *= ratio;
-          height *= ratio;
-        }
+    const compressedSize = compressedFile.size;
+    const compressionRatio = ((originalSize - compressedSize) / originalSize) * 100;
 
-        canvas.width = width;
-        canvas.height = height;
-
-        // 이미지 그리기
-        ctx?.drawImage(img, 0, 0, width, height);
-      }
-
-      // 품질을 점진적으로 낮춰가며 압축
-      let quality = 0.9;
-      let compressedFile: File;
-
-      const tryCompress = () => {
-        canvas.toBlob(
-          (blob) => {
-            if (!blob) {
-              reject(new Error('이미지 압축에 실패했습니다'));
-              return;
-            }
-
-            compressedFile = new File([blob], file.name, {
-              type: file.type,
-              lastModified: Date.now(),
-            });
-
-            // 목표 크기에 도달했거나 품질이 너무 낮아지면 중단
-            if (compressedFile.size <= maxSizeBytes || quality <= 0.1) {
-              resolve({
-                file: compressedFile,
-                originalSize: file.size,
-                compressedSize: compressedFile.size,
-                quality,
-              });
-            } else {
-              // 품질을 더 낮춰서 다시 시도
-              quality -= 0.1;
-              tryCompress();
-            }
-          },
-          file.type,
-          quality
-        );
-      };
-
-      tryCompress();
+    return {
+      file: compressedFile,
+      originalSize,
+      compressedSize,
+      compressionRatio: Math.max(0, compressionRatio),
     };
+  } catch (error) {
+    // AbortError는 그대로 던지기
+    if (error instanceof Error && error.message.includes('abort')) {
+      throw error;
+    }
 
-    img.onerror = () => {
-      reject(new Error('이미지를 로드할 수 없습니다'));
-    };
+    // 다른 에러는 래핑
+    throw new Error(`이미지 압축 실패: ${error instanceof Error ? error.message : '알 수 없는 오류'}`);
+  }
+}
 
-    img.src = URL.createObjectURL(file);
+/**
+ * 프로필 아바타용 이미지 압축
+ * 정사각형으로 크롭하고 512x512로 리사이즈
+ */
+export async function compressAvatar(
+  file: File,
+  options: Omit<ImageCompressionOptions, 'maxWidthOrHeight'> = {}
+): Promise<CompressionResult> {
+  return compressImage(file, {
+    ...options,
+    maxSizeMB: options.maxSizeMB ?? 1,
+    maxWidthOrHeight: 512,
+    initialQuality: options.initialQuality ?? 0.9,
+  });
+}
+
+/**
+ * 채팅용 이미지 압축
+ * 비율 유지하면서 최대 1920px, 2MB로 압축
+ */
+export async function compressChatImage(
+  file: File,
+  options: ImageCompressionOptions = {}
+): Promise<CompressionResult> {
+  return compressImage(file, {
+    ...options,
+    maxSizeMB: options.maxSizeMB ?? 2,
+    maxWidthOrHeight: options.maxWidthOrHeight ?? 1920,
+    initialQuality: options.initialQuality ?? 0.9,
   });
 }
 
@@ -124,13 +167,13 @@ export async function compressImage(
  * 파일 크기를 사람이 읽기 쉬운 형태로 변환
  */
 export function formatFileSize(bytes: number): string {
-  if (bytes === 0) return '0 Bytes';
-  
+  if (bytes === 0) return '0 B';
+
   const k = 1024;
-  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+  const sizes = ['B', 'KB', 'MB', 'GB'];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
-  
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
 }
 
 /**
@@ -144,6 +187,60 @@ export function isImageFile(file: File): boolean {
  * 지원되는 이미지 형식인지 확인
  */
 export function isSupportedImageFormat(file: File): boolean {
-  const supportedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+  const supportedTypes = [
+    'image/jpeg',
+    'image/jpg',
+    'image/png',
+    'image/webp',
+    'image/gif',
+  ];
   return supportedTypes.includes(file.type);
+}
+
+/**
+ * 이미지 파일 유효성 검사
+ */
+export interface ImageValidationOptions {
+  /** 최대 파일 크기 (bytes) */
+  maxSize?: number;
+  /** 허용된 파일 타입 */
+  allowedTypes?: string[];
+}
+
+export interface ImageValidationResult {
+  valid: boolean;
+  error?: string;
+}
+
+export function validateImageFile(
+  file: File,
+  options: ImageValidationOptions = {}
+): ImageValidationResult {
+  const {
+    maxSize = 50 * 1024 * 1024, // 50MB
+    allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'],
+  } = options;
+
+  if (!isImageFile(file)) {
+    return {
+      valid: false,
+      error: '이미지 파일만 업로드할 수 있습니다',
+    };
+  }
+
+  if (!allowedTypes.includes(file.type)) {
+    return {
+      valid: false,
+      error: `지원하지 않는 형식입니다. ${allowedTypes.join(', ')} 형식을 사용해주세요`,
+    };
+  }
+
+  if (file.size > maxSize) {
+    return {
+      valid: false,
+      error: `파일 크기가 너무 큽니다. 최대 ${formatFileSize(maxSize)}까지 업로드 가능합니다`,
+    };
+  }
+
+  return { valid: true };
 }

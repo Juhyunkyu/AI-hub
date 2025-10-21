@@ -78,8 +78,8 @@ export const FileTypes = {
 
 // 파일 크기 제한 상수
 export const FILE_SIZE_LIMITS = {
-  IMAGE: 10 * 1024 * 1024, // 10MB
+  IMAGE: 50 * 1024 * 1024, // 50MB (압축 후 업로드되므로 여유있게 설정)
   VIDEO: 100 * 1024 * 1024, // 100MB
   DOCUMENT: 50 * 1024 * 1024, // 50MB
-  DEFAULT: 25 * 1024 * 1024, // 25MB
+  DEFAULT: 50 * 1024 * 1024, // 50MB
 } as const;

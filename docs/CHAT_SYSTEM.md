@@ -1,6 +1,6 @@
 # 채팅 시스템 상세
 
-**문서 업데이트**: 2025-10-04
+**문서 업데이트**: 2025-10-20
 
 ---
 
@@ -76,7 +76,7 @@ handleNewRealtimeMessage(message)
 
 ## 파일 업로드 시스템
 
-### 업로드 플로우
+### 업로드 플로우 (2025-10-20 개선)
 
 ```typescript
 1. ChatAttachmentMenu (+ 버튼)
@@ -86,18 +86,125 @@ handleNewRealtimeMessage(message)
    └─ LocationOption (위치)
    ↓
 2. handleFileSelect([file])
-   ├─ selectedFile 상태 업데이트
-   └─ FilePreview 표시
+   ├─ tempId 생성 (고유 ID)
+   ├─ AbortController 생성 (취소용)
+   ├─ 임시 메시지 생성 (Optimistic UI)
+   └─ 업로드 시작
    ↓
-3. API: POST /api/chat/messages
+3. 이미지 압축 (>1MB)
+   ├─ browser-image-compression v2.0.2
+   ├─ 진행률: 0-50% (압축 단계)
+   ├─ Web Worker 사용 (비차단)
+   └─ 최대 2MB, 1920px, 90% 품질
+   ↓
+4. 파일 업로드 (XMLHttpRequest)
+   ├─ 진행률: 50-100% (업로드 단계)
    ├─ FormData 전송
    ├─ Supabase Storage 업로드
    └─ DB 저장 (file_url)
    ↓
-4. 실시간 렌더링
-   ├─ "image" → ClickableImage
-   ├─ "file" → 다운로드 버튼
-   └─ "location" → LocationMessage
+5. Realtime 동기화
+   ├─ tempId 기반 메시지 매칭
+   ├─ 임시 → 실제 메시지 교체
+   └─ UI 자동 업데이트
+```
+
+### 이미지 압축 시스템
+
+**라이브러리**: browser-image-compression v2.0.2
+
+```typescript
+// src/lib/utils/image-compression.ts
+export async function compressChatImage(
+  file: File,
+  options: ImageCompressionOptions = {}
+): Promise<CompressionResult> {
+  return compressImage(file, {
+    maxSizeMB: 2,                    // 최대 2MB
+    maxWidthOrHeight: 1920,          // Full HD
+    initialQuality: 0.9,             // 90% 품질
+    preserveExif: true,              // 메타데이터 보존
+    useWebWorker: true,              // 백그라운드 처리
+    onProgress: (progress) => {...}, // 진행률 콜백
+    signal: abortController.signal,  // 취소 지원
+  });
+}
+```
+
+**압축 조건**:
+- 1MB 이상 이미지만 압축
+- 1MB 미만은 원본 그대로 업로드
+- 압축 진행률: 0-50%
+
+### 업로드 진행률 표시
+
+**UI 구성** (MessageRenderer.tsx):
+```typescript
+{uploading && (
+  <div className="absolute inset-0 bg-black/40 rounded-lg flex items-center justify-center">
+    <div className="flex flex-col items-center gap-3">
+      <Loader2 className="h-8 w-8 animate-spin text-white" />
+      <div className="flex flex-col items-center gap-1">
+        <span className="text-white text-sm font-medium">업로드 중...</span>
+        {/* 큰 퍼센테이지 숫자 표시 */}
+        <span className="text-white text-2xl font-bold">
+          {uploadProgress}%
+        </span>
+      </div>
+      {/* 취소 버튼 */}
+      <Button onClick={() => uploadAbortController?.abort()}>
+        <X className="h-4 w-4" />
+        취소
+      </Button>
+    </div>
+  </div>
+)}
+```
+
+**진행률 매핑**:
+- 0-50%: 이미지 압축 단계 (compressChatImage)
+- 50-100%: 파일 업로드 단계 (XMLHttpRequest)
+
+### 업로드 취소 기능
+
+**AbortController 사용**:
+```typescript
+const abortController = new AbortController();
+
+// 압축 취소
+await compressChatImage(file, {
+  signal: abortController.signal
+});
+
+// 업로드 취소
+xhr.addEventListener('abort', () => {
+  reject(new Error('업로드 취소됨'));
+});
+
+abortController.signal.addEventListener('abort', () => {
+  xhr.abort();
+});
+```
+
+### tempId 기반 메시지 매칭
+
+**문제 해결** (2025-10-20):
+- **기존**: 시간 기반 매칭 (30초 윈도우) → 큰 파일 업로드 시 중복 이미지 버그
+- **개선**: tempId 기반 정확한 매칭 → 시간 제약 없음
+
+```typescript
+// src/hooks/use-chat.ts
+const findTempMessage = (messages: ChatMessage[], targetMessage: ChatMessage) => {
+  return messages.findIndex(m => {
+    // tempId가 있으면 정확히 매칭 (시간 제약 없음)
+    if (m.tempId && targetMessage.tempId) {
+      return m.tempId === targetMessage.tempId;
+    }
+
+    // 레거시 메시지는 기존 로직 사용
+    // ... (시간 기반 fallback)
+  });
+};
 ```
 
 ### 메시지 타입 자동 판단
@@ -109,6 +216,19 @@ function getMessageType(file?: File, fileName?: string) {
   // 기타 → "file"
 }
 ```
+
+### 성능 최적화
+
+1. **Dynamic Import**: 압축 라이브러리를 필요 시에만 로드
+   ```typescript
+   const { compressChatImage } = await import('@/lib/utils/image-compression');
+   ```
+
+2. **Web Worker**: 메인 스레드 블로킹 없이 압축 처리
+
+3. **XMLHttpRequest**: fetch 대신 사용하여 업로드 진행률 트래킹
+
+4. **Optimistic UI**: 임시 메시지 즉시 표시로 체감 속도 향상
 
 ---
 

@@ -30,9 +30,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Access denied" }, { status: 403 });
     }
 
-    // 파일 크기 제한 (10MB)
-    if (file.size > 10 * 1024 * 1024) {
-      return NextResponse.json({ error: "File size must be less than 10MB" }, { status: 400 });
+    // 파일 크기 제한 (50MB - 압축 전 원본 파일 기준)
+    if (file.size > 50 * 1024 * 1024) {
+      return NextResponse.json({ error: "File size must be less than 50MB" }, { status: 400 });
     }
 
     // 파일 확장자 검증

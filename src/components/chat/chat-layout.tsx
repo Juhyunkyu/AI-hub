@@ -196,7 +196,7 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(
       isRealtimeConnected,
     });
 
-    // ✅ 파일 선택 즉시 업로드 (Optimistic Update 패턴)
+    // ✅ 파일 선택 즉시 압축 + 업로드 (Optimistic Update + 진행률 + 취소)
     const handleFileSelect = useCallback(async (files: File[]) => {
       if (files.length === 0 || !currentRoom || !user) return;
 
@@ -208,18 +208,22 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(
       for (let i = 0; i < Math.min(files.length, 5); i++) {
         const file = files[i];
         const tempId = `temp-${Date.now()}-${i}-${Math.random()}`;
+        const abortController = new AbortController();
 
-        // 1. 임시 메시지 생성 및 추가 (uploading: true)
+        // 1. 임시 메시지 생성 및 추가
         const tempMessage: ChatMessage = {
           id: tempId,
+          tempId, // 매칭용 고유 ID
           room_id: currentRoom.id,
           sender_id: user.id,
-          content: i === 0 ? messageText : '', // 첫 파일에만 메시지 텍스트
+          content: i === 0 ? messageText : '',
           message_type: file.type.startsWith('image/') ? 'image' : 'file',
           file_name: file.name,
           file_size: file.size,
           uploading: true,
+          uploadProgress: 0,
           tempFile: file,
+          uploadAbortController: abortController,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
           sender: {
@@ -232,19 +236,105 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(
 
         addUploadingMessage(tempMessage);
 
-        // 2. 실제 업로드 시작 (skipOptimistic: true로 중복 방지)
+        // 2. 압축 + 업로드 프로세스
         try {
-          await sendMessage(i === 0 ? messageText : '', currentRoom.id, file, true);
-          // 성공: Realtime으로 실제 메시지가 도착하면 findTempMessage로 자동 교체됨
+          let fileToUpload = file;
+
+          // 이미지 파일이고 1MB 이상이면 압축
+          if (file.type.startsWith('image/') && file.size > 1024 * 1024) {
+            console.log(`🗜️ 압축 시작: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB)`);
+            const { compressChatImage } = await import('@/lib/utils/image-compression');
+
+            const { file: compressedFile } = await compressChatImage(file, {
+              onProgress: (progress) => {
+                // 압축 진행률: 0-50%
+                const adjustedProgress = Math.round(progress / 2);
+                console.log(`📊 압축 진행률: ${progress}% → ${adjustedProgress}%`);
+                updateUploadingMessage(tempId, { uploadProgress: adjustedProgress });
+              },
+              signal: abortController.signal,
+            });
+
+            console.log(`✅ 압축 완료: ${compressedFile.name} (${(compressedFile.size / 1024 / 1024).toFixed(2)}MB)`);
+            fileToUpload = compressedFile;
+          } else {
+            console.log(`⏭️ 압축 건너뛰기: ${file.name} (${(file.size / 1024).toFixed(2)}KB)`);
+          }
+
+          // 3. XMLHttpRequest로 업로드 (진행률 50-100%)
+          await new Promise<void>((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            const formData = new FormData();
+            formData.append('room_id', currentRoom.id);
+            formData.append('content', i === 0 ? messageText : '');
+            formData.append('message_type', file.type.startsWith('image/') ? 'image' : 'file');
+            formData.append('file', fileToUpload);
+
+            // 취소 시그널 연결
+            abortController.signal.addEventListener('abort', () => {
+              xhr.abort();
+            });
+
+            // 업로드 진행률 추적 (50-100%)
+            xhr.upload.addEventListener('progress', (e) => {
+              if (e.lengthComputable) {
+                const uploadProgress = Math.round((e.loaded / e.total) * 100);
+                // 50% (압축 완료) + 50% (업로드 진행률의 절반)
+                const totalProgress = 50 + Math.round(uploadProgress / 2);
+                console.log(`📤 업로드 진행률: ${uploadProgress}% → 총 ${totalProgress}% (${e.loaded}/${e.total} bytes)`);
+                updateUploadingMessage(tempId, { uploadProgress: totalProgress });
+              }
+            });
+
+            xhr.addEventListener('load', () => {
+              if (xhr.status === 200) {
+                try {
+                  const response = JSON.parse(xhr.responseText);
+                  console.log(`✅ 업로드 성공, 메시지 ID: ${response.message?.id}`);
+
+                  // 임시 메시지 제거 - Realtime으로 실제 메시지만 받음
+                  removeUploadingMessage(tempId);
+
+                  resolve();
+                } catch (error) {
+                  // JSON 파싱 실패 시에도 임시 메시지 제거
+                  console.warn('응답 파싱 실패하였으나 업로드는 성공:', error);
+                  removeUploadingMessage(tempId);
+                  resolve();
+                }
+              } else {
+                reject(new Error('업로드 실패'));
+              }
+            });
+
+            xhr.addEventListener('error', () => {
+              reject(new Error('네트워크 오류'));
+            });
+
+            xhr.addEventListener('abort', () => {
+              reject(new Error('업로드 취소됨'));
+            });
+
+            xhr.open('POST', '/api/chat/messages');
+            xhr.send(formData);
+          });
+
+          // 성공: Realtime으로 실제 메시지가 도착하면 tempId로 자동 교체됨
         } catch (error: any) {
           // 실패: 에러 상태로 업데이트
-          updateUploadingMessage(tempId, {
-            uploading: false,
-            uploadError: error.message || '업로드 실패'
-          });
+          if (error.message?.includes('abort')) {
+            // 사용자가 취소한 경우 메시지 제거
+            removeUploadingMessage(tempId);
+          } else {
+            // 다른 에러는 재시도 가능하도록 표시
+            updateUploadingMessage(tempId, {
+              uploading: false,
+              uploadError: error.message || '업로드 실패'
+            });
+          }
         }
       }
-    }, [currentRoom, user, newMessage, setNewMessage, addUploadingMessage, sendMessage, updateUploadingMessage]);
+    }, [currentRoom, user, newMessage, setNewMessage, addUploadingMessage, updateUploadingMessage, removeUploadingMessage]);
 
     // ✅ 업로드 재시도 핸들러
     const handleRetryUpload = useCallback(async (message: ChatMessage) => {
@@ -619,11 +709,11 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(
               </div>
 
               {/* 메시지 입력 */}
-              <div className="p-4 border-t max-w-full overflow-hidden">
+              <div className="px-1 py-2 border-t max-w-full overflow-hidden">
 
                 <form
                   onSubmit={handleSendMessage}
-                  className="flex gap-2 items-end"
+                  className="flex gap-1 items-center"
                   style={{ width: '100%', maxWidth: '100%' }}
                 >
                   {/* 새로운 첨부 메뉴 */}
@@ -633,56 +723,59 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(
                       console.error("첨부 파일 오류:", error);
                       toast.error(error);
                     }}
-                    className="mb-1"
                   />
 
-                  {/* 메시지 입력창 */}
-                  <Textarea
-                    ref={textareaRef}
-                    value={newMessage}
-                    onChange={handleTextareaChange}
-                    onKeyDown={handleKeyDown}
-                    onBlur={stopTypingHandler}
-                    placeholder={
-                      isMobile
-                        ? "메시지 입력..."
-                        : "메시지를 입력하세요... (Shift+Enter: 줄바꿈, Enter: 전송)"
-                    }
-                    className="flex-1 min-w-0 min-h-[40px] max-h-[120px] resize-none overflow-y-auto"
-                    rows={1}
-                  />
+                  {/* 메시지 입력창 + 이모지 (카카오톡 스타일) */}
+                  <div className="flex-1 relative min-w-0">
+                    <Textarea
+                      ref={textareaRef}
+                      value={newMessage}
+                      onChange={handleTextareaChange}
+                      onKeyDown={handleKeyDown}
+                      onBlur={stopTypingHandler}
+                      placeholder={
+                        isMobile
+                          ? "메시지 입력"
+                          : "메시지를 입력하세요... (Shift+Enter: 줄바꿈, Enter: 전송)"
+                      }
+                      className="w-full pr-10 h-8 md:h-9 min-h-[32px] max-h-[32px] md:min-h-[36px] md:max-h-[36px] px-3 py-1.5 md:py-2 resize-none overflow-hidden leading-5 text-sm md:text-base"
+                      rows={1}
+                    />
 
-                  {/* 이모지 버튼 */}
-                  <EmojiPicker
-                    onEmojiSelect={(emoji) => {
-                      const currentValue = newMessage;
-                      const newValue = currentValue + emoji;
-                      setNewMessage(newValue);
+                    {/* 이모지 버튼 (입력창 안에 배치) */}
+                    <div className="absolute right-1 top-1/2 -translate-y-1/2">
+                      <EmojiPicker
+                        onEmojiSelect={(emoji) => {
+                          const currentValue = newMessage;
+                          const newValue = currentValue + emoji;
+                          setNewMessage(newValue);
 
-                      // 텍스트 영역 높이 조절
-                      setTimeout(() => {
-                        adjustTextareaHeight();
-                        textareaRef.current?.focus();
-                      }, 100);
-                    }}
-                    triggerComponent={
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="mb-1 h-9 w-9 p-0 shrink-0"
-                        title="이모지 추가"
-                      >
-                        <span className="text-sm">😊</span>
-                      </Button>
-                    }
-                  />
+                          // 텍스트 영역 높이 조절
+                          setTimeout(() => {
+                            adjustTextareaHeight();
+                            textareaRef.current?.focus();
+                          }, 100);
+                        }}
+                        triggerComponent={
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0"
+                            title="이모지 추가"
+                          >
+                            <span className="text-sm">😊</span>
+                          </Button>
+                        }
+                      />
+                    </div>
+                  </div>
 
-                  {/* 전송 버튼 */}
+                  {/* 전송 버튼 (모바일 작게) */}
                   <Button
                     type="submit"
                     size="sm"
-                    className="mb-1 h-9 w-9 p-0 shrink-0"
+                    className="h-8 w-8 md:h-9 md:w-9 p-0 shrink-0"
                   >
                     <Send className="h-4 w-4" />
                   </Button>

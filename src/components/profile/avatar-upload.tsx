@@ -6,10 +6,9 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import { X, Upload, User } from "lucide-react";
 import {
-  compressImage,
+  compressAvatar,
   formatFileSize,
-  isImageFile,
-  isSupportedImageFormat,
+  validateImageFile,
 } from "@/lib/utils/image-compression";
 
 interface AvatarUploadProps {
@@ -30,7 +29,7 @@ export function AvatarUpload({
   const [compressionInfo, setCompressionInfo] = useState<{
     originalSize: string;
     compressedSize: string;
-    quality: number;
+    compressionRatio: number;
   } | null>(null);
 
   const handleFileSelect = async (
@@ -39,36 +38,24 @@ export function AvatarUpload({
     const file = event.target.files?.[0];
     if (!file) return;
 
-    // 파일 형식 검증
-    if (!isImageFile(file)) {
-      toast.error("이미지 파일만 업로드할 수 있습니다");
-      return;
-    }
-
-    if (!isSupportedImageFormat(file)) {
-      toast.error(
-        "지원되지 않는 이미지 형식입니다. JPEG, PNG, WebP 형식을 사용해주세요"
-      );
-      return;
-    }
-
-    // 파일 크기 검증 (50MB 제한)
-    if (file.size > 50 * 1024 * 1024) {
-      toast.error("파일 크기가 너무 큽니다. 50MB 이하의 파일을 선택해주세요");
+    // 파일 유효성 검증
+    const validation = validateImageFile(file);
+    if (!validation.valid) {
+      toast.error(validation.error);
       return;
     }
 
     try {
       setUploading(true);
 
-      // 이미지 압축 (정사각형으로 크롭)
-      const compressed = await compressImage(file, 5, 512, 512, true);
+      // browser-image-compression으로 압축
+      const result = await compressAvatar(file);
 
       // 압축 정보 표시
       setCompressionInfo({
-        originalSize: formatFileSize(compressed.originalSize),
-        compressedSize: formatFileSize(compressed.compressedSize),
-        quality: Math.round(compressed.quality * 100),
+        originalSize: formatFileSize(result.originalSize),
+        compressedSize: formatFileSize(result.compressedSize),
+        compressionRatio: result.compressionRatio,
       });
 
       // 미리보기 생성
@@ -76,7 +63,7 @@ export function AvatarUpload({
       reader.onload = (e) => {
         setPreview(e.target?.result as string);
       };
-      reader.readAsDataURL(compressed.file);
+      reader.readAsDataURL(result.file);
     } catch (error) {
       console.error("Image compression error:", error);
       toast.error("이미지 처리 중 오류가 발생했습니다");
@@ -96,8 +83,8 @@ export function AvatarUpload({
     try {
       setUploading(true);
 
-      // 이미지 압축 (정사각형으로 크롭)
-      const compressed = await compressImage(file, 5, 512, 512, true);
+      // browser-image-compression으로 압축
+      const { file: compressedFile } = await compressAvatar(file);
 
       // 사용자 ID 가져오기
       const {
@@ -107,14 +94,14 @@ export function AvatarUpload({
         throw new Error("사용자 정보를 찾을 수 없습니다");
       }
 
-      // 파일명 생성 (간단한 고유 이름)
+      // 파일명 생성
       const fileExt = file.name.split(".").pop();
       const fileName = `${user.id}-${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
 
       // Supabase Storage에 업로드
-      const { data, error } = await supabase.storage
+      const { error } = await supabase.storage
         .from("avatars")
-        .upload(fileName, compressed.file, {
+        .upload(fileName, compressedFile, {
           cacheControl: "3600",
           upsert: false,
         });
@@ -132,7 +119,7 @@ export function AvatarUpload({
       const { error: updateError } = await supabase
         .from("profiles")
         .update({ avatar_url: publicUrl })
-        .eq("id", (await supabase.auth.getUser()).data.user?.id);
+        .eq("id", user.id);
 
       if (updateError) {
         throw updateError;
@@ -141,11 +128,10 @@ export function AvatarUpload({
       // 기존 아바타 삭제 (있는 경우)
       if (currentAvatarUrl) {
         try {
-          // URL에서 파일명 추출 (마지막 부분)
           const urlParts = currentAvatarUrl.split("/");
-          const fileName = urlParts[urlParts.length - 1];
-          if (fileName && fileName.includes("-")) {
-            await supabase.storage.from("avatars").remove([fileName]);
+          const oldFileName = urlParts[urlParts.length - 1];
+          if (oldFileName && oldFileName.includes("-")) {
+            await supabase.storage.from("avatars").remove([oldFileName]);
           }
         } catch (error) {
           console.warn("기존 아바타 삭제 실패:", error);
@@ -159,12 +145,12 @@ export function AvatarUpload({
 
       // 더 구체적인 에러 메시지
       if (error instanceof Error) {
-        if (error.message.includes("row-level security policy")) {
+        if (error.message.includes("row-level security")) {
           toast.error("권한이 없습니다. 다시 로그인해주세요");
         } else if (error.message.includes("bucket")) {
           toast.error("스토리지 버킷에 접근할 수 없습니다");
         } else {
-          toast.error("업로드 중 오류가 발생했습니다");
+          toast.error(error.message);
         }
       } else {
         toast.error("업로드 중 오류가 발생했습니다");
@@ -253,8 +239,10 @@ export function AvatarUpload({
             <div className="text-xs text-muted-foreground text-center space-y-1">
               <div>원본: {compressionInfo.originalSize}</div>
               <div>
-                압축: {compressionInfo.compressedSize} (품질:{" "}
-                {compressionInfo.quality}%)
+                압축: {compressionInfo.compressedSize}
+                {compressionInfo.compressionRatio > 0 && (
+                  <span> ({compressionInfo.compressionRatio.toFixed(1)}% 감소)</span>
+                )}
               </div>
             </div>
           )}
