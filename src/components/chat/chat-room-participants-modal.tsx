@@ -239,6 +239,7 @@ export function ChatRoomParticipantsModal({
         onOpenChange={setShowInviteModal}
         mode="invite"
         roomId={room.id}
+        excludeUserIds={participants.map(p => p.user_id)}
       />
     </Dialog>
   );

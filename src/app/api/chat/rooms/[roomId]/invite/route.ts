@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
+import { createClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { roomId: string } }
+  { params }: { params: Promise<{ roomId: string }> }
 ) {
   try {
     const cookieStore = await cookies();
@@ -33,7 +34,8 @@ export async function POST(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { roomId } = params;
+    // Next.js 15: params는 Promise이므로 await 필요
+    const { roomId } = await params;
     const { user_ids }: { user_ids: string[] } = await request.json();
 
     if (!user_ids || user_ids.length === 0) {
@@ -95,7 +97,20 @@ export async function POST(
       is_admin: false,
     }));
 
-    const { error: inviteError } = await supabase
+    // Admin Client로 RLS 우회 (사용자 초대는 관리 작업)
+    const supabaseAdmin = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+          detectSessionInUrl: false
+        }
+      }
+    );
+
+    const { error: inviteError } = await supabaseAdmin
       .from("chat_room_participants")
       .insert(participantsData);
 
@@ -108,14 +123,14 @@ export async function POST(
     }
 
     // 채팅방 타입을 group으로 변경 (1:1에서 그룹으로 전환)
-    const { data: currentRoom } = await supabase
+    const { data: currentRoom } = await supabaseAdmin
       .from("chat_rooms")
       .select("type")
       .eq("id", roomId)
       .single();
 
     if (currentRoom?.type === "direct") {
-      await supabase
+      await supabaseAdmin
         .from("chat_rooms")
         .update({ type: "group" })
         .eq("id", roomId);

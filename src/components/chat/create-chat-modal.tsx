@@ -7,6 +7,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,13 +33,15 @@ interface CreateChatModalProps {
   onOpenChange: (open: boolean) => void;
   mode?: "create" | "invite";
   roomId?: string;
+  excludeUserIds?: string[]; // 이미 참여 중인 사용자 ID 목록
 }
 
-export function CreateChatModal({ 
-  open, 
-  onOpenChange, 
+export function CreateChatModal({
+  open,
+  onOpenChange,
   mode = "create",
-  roomId 
+  roomId,
+  excludeUserIds = []
 }: CreateChatModalProps) {
   const [chatName, setChatName] = useState("");
   const [loading, setLoading] = useState(false);
@@ -54,7 +57,11 @@ export function CreateChatModal({
       const response = await fetch("/api/users/following");
       if (response.ok) {
         const data = await response.json();
-        setFollowingUsers(data.users || []);
+        // 이미 참여 중인 사용자 필터링
+        const filteredUsers = (data.users || []).filter(
+          (user: User) => !excludeUserIds.includes(user.id)
+        );
+        setFollowingUsers(filteredUsers);
       }
     } catch (error) {
       console.error("Error fetching following users:", error);
@@ -72,7 +79,11 @@ export function CreateChatModal({
       const response = await fetch(`/api/search/users?q=${encodeURIComponent(query)}&includeFollows=true`);
       if (response.ok) {
         const data = await response.json();
-        setSearchResults(data.users || []);
+        // 이미 참여 중인 사용자 필터링
+        const filteredUsers = (data.users || []).filter(
+          (user: User) => !excludeUserIds.includes(user.id)
+        );
+        setSearchResults(filteredUsers);
       }
     } catch (error) {
       console.error("Error searching users:", error);
@@ -96,7 +107,7 @@ export function CreateChatModal({
       setChatName("");
       setLoading(false);
     }
-  }, [open]);
+  }, [open, excludeUserIds]);
 
   // 사용자 선택/해제
   const toggleUser = (userId: string) => {
@@ -121,6 +132,12 @@ export function CreateChatModal({
       }
 
       setLoading(true);
+      console.log("📤 Sending invite request:", {
+        roomId,
+        user_ids: selectedUsers,
+        count: selectedUsers.length
+      });
+
       try {
         const response = await fetch(`/api/chat/rooms/${roomId}/invite`, {
           method: "POST",
@@ -129,15 +146,23 @@ export function CreateChatModal({
         });
 
         if (response.ok) {
+          const result = await response.json();
+          console.log("✅ Invite successful:", result);
           toast.success(`${selectedUsers.length}명을 초대했습니다`);
           onOpenChange(false);
           // 페이지 새로고침으로 업데이트된 참여자 목록 반영
           window.location.reload();
         } else {
           const error = await response.json();
+          console.error("❌ Invite failed:", {
+            status: response.status,
+            error,
+            sentData: { user_ids: selectedUsers, roomId }
+          });
           toast.error(error.error || "초대에 실패했습니다");
         }
       } catch (error) {
+        console.error("❌ Invite error:", error);
         toast.error("초대에 실패했습니다");
       } finally {
         setLoading(false);
@@ -253,6 +278,11 @@ export function CreateChatModal({
               </>
             )}
           </DialogTitle>
+          <DialogDescription>
+            {mode === "invite"
+              ? "채팅방에 초대할 사용자를 선택하세요"
+              : "새로운 채팅방을 만들 사용자를 선택하세요"}
+          </DialogDescription>
         </DialogHeader>
 
         <div className="flex-1 flex flex-col space-y-4 min-h-0">
