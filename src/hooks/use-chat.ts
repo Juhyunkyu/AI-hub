@@ -457,24 +457,19 @@ export function useChatHook() {
             console.log(`✅ Message sent successfully: ${serverMessage.id}`);
           }
 
-          // ✅ 100% Broadcast: 메시지 전송 후 Broadcast로 실시간 알림
+          // ✅ Broadcast로 실시간 전송 (클라이언트에서 전송)
           try {
             const channel = supabase.channel(`room:${roomId}:messages`);
-
-            // API 응답에 이미 sender 정보가 포함되어 있으므로 그대로 전송
-            // serverMessage는 .select('*, sender:profiles(...)') 결과를 포함
             await channel.send({
               type: 'broadcast',
               event: 'new_message',
               payload: serverMessage
             });
-
             if (process.env.NODE_ENV === 'development') {
-              console.log(`📡 Broadcast sent for message: ${serverMessage.id}`, serverMessage.sender);
+              console.log(`📡 Broadcast 전송 성공 (텍스트): ${serverMessage.id}`);
             }
           } catch (broadcastError) {
-            // Broadcast 실패는 치명적이지 않음 (DB에는 저장됨)
-            console.warn('Broadcast failed, but message saved to DB:', broadcastError);
+            console.warn('Broadcast 전송 실패 (메시지는 저장됨):', broadcastError);
           }
 
           // ✅ Optimistic 메시지를 실제 메시지로 교체 (skipOptimistic이 false일 때만)
@@ -604,7 +599,9 @@ export function useChatHook() {
     // ✅ Optimistic upload 함수들
     addUploadingMessage,
     updateUploadingMessage,
-    removeUploadingMessage
+    removeUploadingMessage,
+    // ✅ 직접 메시지 추가 (이미지 업로드 등에서 사용)
+    addMessage: handleNewRealtimeMessage
   };
 }
 

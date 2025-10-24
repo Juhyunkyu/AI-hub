@@ -703,14 +703,23 @@ const MessageRendererBase = ({
           </>
         )}
 
-        {/* 자신의 메시지 (기존 로직 유지) */}
+        {/* 자신의 메시지 - 카카오톡 스타일 inline 시간 표시 */}
         {isOwnMessage && (
           <div className={`flex flex-col items-end ${
             message.message_type === 'location'
               ? 'flex-1 max-w-[83%]'
               : 'max-w-[75%] sm:max-w-[80%]'
           } min-w-0`}>
-            <div className={`relative ${message.message_type === 'location' ? 'w-full' : ''}`}>
+            {/* 메시지 + 시간을 flex로 inline 배치 (카카오톡 스타일) */}
+            <div className={`flex items-end gap-1.5 ${message.message_type === 'location' ? 'w-full' : ''}`}>
+              {/* 시간 표시 - 메시지 왼쪽에 inline (카카오톡 스타일) */}
+              {showTime && (
+                <div className="text-xs text-muted-foreground whitespace-nowrap flex-shrink-0 order-first">
+                  {formattedTime}
+                </div>
+              )}
+
+              {/* 메시지 버블 */}
               <div className={`${
                 message.message_type === 'text'
                   ? 'rounded-lg inline-block px-3 py-2 bg-primary text-primary-foreground'
@@ -740,18 +749,6 @@ const MessageRendererBase = ({
                   onRetryUpload={onRetryUpload}
                 />
               </div>
-
-              {showTime && (
-                <div
-                  className="absolute text-xs text-muted-foreground whitespace-nowrap right-full mr-2"
-                  style={{
-                    bottom: '2px',
-                    transform: 'none'
-                  }}
-                >
-                  {formattedTime}
-                </div>
-              )}
             </div>
           </div>
         )}

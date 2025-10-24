@@ -36,6 +36,7 @@ import {
 import { useAuthStore } from "@/stores/auth";
 import { formatLastMessageTime } from "@/lib/date-utils";
 import { ChatRoomAvatar } from "./chat-room-avatar";
+import { createClient } from "@/lib/supabase/client";
 import { ChatRoomParticipantsModal } from "./chat-room-participants-modal";
 import { getChatRoomDisplayName } from "@/lib/chat-utils";
 import { VirtualizedMessageList } from "./virtualized";
@@ -117,6 +118,7 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(
       addUploadingMessage,
       updateUploadingMessage,
       removeUploadingMessage,
+      addMessage,
     } = useChatHook();
 
     // 알림 시스템
@@ -286,13 +288,33 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(
               }
             });
 
-            xhr.addEventListener('load', () => {
+            xhr.addEventListener('load', async () => {
               if (xhr.status === 200) {
                 try {
                   const response = JSON.parse(xhr.responseText);
                   console.log(`✅ 업로드 성공, 메시지 ID: ${response.message?.id}`);
 
-                  // 임시 메시지 제거 - Realtime으로 실제 메시지만 받음
+                  if (response.message && currentRoom) {
+                    // ✅ 1. 자신의 화면에 메시지 추가 (Broadcast self: false이므로 직접 추가 필요)
+                    addMessage(response.message);
+                    console.log(`📝 메시지 추가 (자신): ${response.message.id}`);
+
+                    // ✅ 2. Broadcast로 상대방에게 전송
+                    try {
+                      const supabase = createClient();
+                      const channel = supabase.channel(`room:${currentRoom.id}:messages`);
+                      await channel.send({
+                        type: 'broadcast',
+                        event: 'new_message',
+                        payload: response.message
+                      });
+                      console.log(`📡 Broadcast 전송 성공 (상대방): ${response.message.id}`);
+                    } catch (broadcastError) {
+                      console.warn('Broadcast 전송 실패 (메시지는 저장됨):', broadcastError);
+                    }
+                  }
+
+                  // 임시 메시지 제거 (실제 메시지로 교체됨)
                   removeUploadingMessage(tempId);
 
                   resolve();
@@ -334,7 +356,7 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(
           }
         }
       }
-    }, [currentRoom, user, newMessage, setNewMessage, addUploadingMessage, updateUploadingMessage, removeUploadingMessage]);
+    }, [currentRoom, user, newMessage, setNewMessage, addUploadingMessage, updateUploadingMessage, removeUploadingMessage, addMessage]);
 
     // ✅ 업로드 재시도 핸들러
     const handleRetryUpload = useCallback(async (message: ChatMessage) => {
@@ -637,34 +659,54 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(
         >
           {currentRoom ? (
             <>
-              {/* 채팅방 헤더 */}
-              <div className="p-4 border-b flex items-center justify-between">
-                <div className="flex items-center space-x-3">
+              {/* 채팅방 헤더 - 컴팩트 디자인 (메시지 프로필과 정렬) */}
+              <div className="py-2 pl-1 pr-4 border-b flex items-center justify-between">
+                <div className="flex items-center gap-2 flex-1 min-w-0">
+                  {/* 뒤로가기 버튼 - 프로필 이미지 중앙선과 일치 */}
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={handleBackToRooms}
-                    className="md:hidden"
+                    className="md:hidden h-8 w-8 p-0 flex-shrink-0"
                   >
                     <ArrowLeft className="h-4 w-4" />
                   </Button>
-                  <ChatRoomAvatar
-                    participants={currentRoom.participants}
-                    type={currentRoom.type}
-                    size="sm"
-                  />
-                  <div className="flex-1">
-                    <h3 className="font-semibold">
-                      {currentRoomDisplayName}
-                    </h3>
-                    {(currentRoom.participants?.length || 0) > 2 && (
-                      <p className="text-xs text-muted-foreground">
-                        {currentRoom.participants?.length}명
-                      </p>
-                    )}
-                  </div>
+
+                  {/* 1:1 채팅: 프로필 이미지 + 닉네임 */}
+                  {currentRoom.type === 'direct' && (
+                    <>
+                      <ChatRoomAvatar
+                        participants={currentRoom.participants}
+                        type={currentRoom.type}
+                        size="sm"
+                      />
+                      <h3 className="font-semibold text-sm truncate">
+                        {currentRoomDisplayName}
+                      </h3>
+                    </>
+                  )}
+
+                  {/* 그룹 채팅: 그룹 아이콘 + "그룹채팅" + 인원수 */}
+                  {currentRoom.type === 'group' && (
+                    <>
+                      <ChatRoomAvatar
+                        participants={currentRoom.participants}
+                        type={currentRoom.type}
+                        size="sm"
+                      />
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <h3 className="font-semibold text-sm truncate">
+                          그룹채팅
+                        </h3>
+                        <span className="text-xs text-muted-foreground whitespace-nowrap">
+                          · {currentRoom.participants?.length || 0}명
+                        </span>
+                      </div>
+                    </>
+                  )}
                 </div>
 
+                {/* 더보기 버튼 */}
                 <Button
                   variant="ghost"
                   size="sm"
@@ -674,6 +716,7 @@ export const ChatLayout = forwardRef<ChatLayoutRef, ChatLayoutProps>(
                       currentModalRoom: currentRoom,
                     })
                   }
+                  className="h-8 w-8 p-0 flex-shrink-0"
                 >
                   <MoreHorizontal className="h-4 w-4" />
                 </Button>
