@@ -42,6 +42,9 @@ export function useRealtimeChat({
   const reconnectTimeoutRef = useRef<NodeJS.Timeout>();
   const retryCountRef = useRef(0);
 
+  // ✅ 100% Broadcast: WebSocket 상태 추적 (재연결 감지용)
+  const previousStatusRef = useRef<'connecting' | 'connected' | 'disconnected' | 'error'>('disconnected');
+
   // 메시지 중복 방지를 위한 처리된 메시지 ID 캐시
   const processedMessagesRef = useRef<Set<string>>(new Set());
 
@@ -179,61 +182,110 @@ export function useRealtimeChat({
         return;
       }
 
-      // 새 채널 생성 및 구독
+      // ✅ 100% Broadcast: postgres_changes 제거, Broadcast만 사용
       const nextChannel = supabase
-        .channel(nextTopic)
-        .on(
-          'postgres_changes',
-          {
-            event: '*',
+        .channel(nextTopic, {
+          config: {
+            broadcast: { self: false }, // 자신의 메시지는 받지 않음
+            presence: { key: user.id }
+          }
+        })
+        // Broadcast 리스너: 새 메시지
+        .on('broadcast', { event: 'new_message' }, (payload) => {
+          const message = payload.payload;
+          if (process.env.NODE_ENV === 'development') {
+            console.log(`📡 Broadcast new_message received: ${message.id}`);
+          }
+
+          // postgres_changes와 동일한 형식으로 변환
+          handleMessageChange({
+            eventType: 'INSERT',
+            new: message,
+            old: {},
             schema: 'public',
             table: 'chat_messages',
-            filter: `room_id=eq.${roomId}`
-          },
-          (payload) => {
-            if (process.env.NODE_ENV === 'development') {
-              console.log(`🔥 postgres_changes event received for room ${roomId}`);
-            }
-            handleMessageChange(payload);
+            commit_timestamp: new Date().toISOString(),
+            errors: null
+          } as any);
+        })
+        // Broadcast 리스너: 메시지 업데이트
+        .on('broadcast', { event: 'update_message' }, (payload) => {
+          const message = payload.payload;
+          if (process.env.NODE_ENV === 'development') {
+            console.log(`📡 Broadcast update_message received: ${message.id}`);
           }
-        )
+
+          handleMessageChange({
+            eventType: 'UPDATE',
+            new: message,
+            old: {},
+            schema: 'public',
+            table: 'chat_messages',
+            commit_timestamp: new Date().toISOString(),
+            errors: null
+          } as any);
+        })
+        // Broadcast 리스너: 메시지 삭제
+        .on('broadcast', { event: 'delete_message' }, (payload) => {
+          const { message_id } = payload.payload;
+          if (process.env.NODE_ENV === 'development') {
+            console.log(`📡 Broadcast delete_message received: ${message_id}`);
+          }
+
+          handleMessageChange({
+            eventType: 'DELETE',
+            new: {},
+            old: { id: message_id },
+            schema: 'public',
+            table: 'chat_messages',
+            commit_timestamp: new Date().toISOString(),
+            errors: null
+          } as any);
+        })
         .subscribe((status, err) => {
           if (status === 'SUBSCRIBED') {
+            const wasDisconnected = previousStatusRef.current === 'disconnected' || previousStatusRef.current === 'error';
+
             setIsConnected(true);
             setConnectionState('connected');
             setError(null);
 
-            // ✅ 재연결 성공 시 메시지 동기화 트리거
-            if (retryCountRef.current > 0 && onSyncNeeded) {
+            // ✅ 100% Broadcast: 재연결 감지 및 동기화 트리거
+            // 조건: (1) 이전에 연결 끊김 OR (2) 재시도 카운트 > 0
+            if ((wasDisconnected || retryCountRef.current > 0) && onSyncNeeded) {
               if (process.env.NODE_ENV === 'development') {
-                console.log(`🔄 Realtime reconnected, triggering message sync for room: ${roomId}`);
+                console.log(`🔄 Broadcast reconnected (${previousStatusRef.current} → connected), syncing messages for room: ${roomId}`);
               }
               onSyncNeeded(roomId);
             }
 
+            previousStatusRef.current = 'connected';
             retryCountRef.current = 0;
             if (process.env.NODE_ENV === 'development') {
-              console.log(`✅ Realtime SUBSCRIBED for room: ${roomId}`);
+              console.log(`✅ Broadcast channel SUBSCRIBED for room: ${roomId}`);
             }
           } else if (status === 'CHANNEL_ERROR') {
+            previousStatusRef.current = 'error';
             setIsConnected(false);
             setConnectionState('error');
             setError(err?.message || '채널 연결 오류');
             if (process.env.NODE_ENV === 'development') {
-              console.error('❌ Realtime channel error:', { roomId, err });
+              console.error('❌ Broadcast channel error:', { roomId, err });
             }
           } else if (status === 'TIMED_OUT') {
+            previousStatusRef.current = 'error';
             setIsConnected(false);
             setConnectionState('error');
             setError('연결 시간 초과');
             if (process.env.NODE_ENV === 'development') {
-              console.error('⏰ Realtime connection timed out:', { roomId });
+              console.error('⏰ Broadcast connection timed out:', { roomId });
             }
           } else if (status === 'CLOSED') {
+            previousStatusRef.current = 'disconnected';
             setIsConnected(false);
             setConnectionState('disconnected');
             if (process.env.NODE_ENV === 'development') {
-              console.warn('🔌 Realtime connection closed:', { roomId });
+              console.warn('🔌 Broadcast connection closed:', { roomId });
             }
           }
         });

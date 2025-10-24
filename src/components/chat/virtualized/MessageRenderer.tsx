@@ -652,8 +652,8 @@ const MessageRendererBase = ({
                 </div>
               )}
 
-              {/* 메시지 컨테이너 */}
-              <div className={`relative ${message.message_type === 'location' ? 'w-full' : ''}`}>
+              {/* 메시지 컨테이너 - 시간을 inline으로 표시하기 위해 flex 사용 */}
+              <div className={`flex items-end gap-1.5 ${message.message_type === 'location' ? 'w-full' : ''}`}>
                 {/* 메시지 버블 */}
                 <div className={`${
                   message.message_type === 'text'
@@ -692,15 +692,9 @@ const MessageRendererBase = ({
                   />
                 </div>
 
-                {/* 시간 표시 */}
+                {/* 시간 표시 - inline 방식으로 프로필 영역 침범 방지 */}
                 {showTime && (
-                  <div
-                    className="absolute text-xs text-muted-foreground whitespace-nowrap left-full ml-2"
-                    style={{
-                      bottom: '2px',
-                      transform: 'none'
-                    }}
-                  >
+                  <div className="text-xs text-muted-foreground whitespace-nowrap flex-shrink-0">
                     {formattedTime}
                   </div>
                 )}

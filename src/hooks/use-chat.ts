@@ -5,6 +5,10 @@ import { useAuthStore } from "@/stores/auth";
 import { ChatMessage, ChatRoomWithParticipants } from "@/types/chat";
 import { toast } from "sonner";
 import { useRealtimeChat, useTypingIndicator } from "./use-realtime-chat";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+
+// Supabase 클라이언트 (Broadcast용)
+const supabase = createSupabaseBrowserClient();
 
 // 채팅방 정렬 헬퍼 함수 (React 19에서는 함수 컴포넌트 외부로 이동하여 불필요한 재생성 방지)
 const sortRoomsByLastMessage = (rooms: ChatRoomWithParticipants[]) => {
@@ -451,6 +455,26 @@ export function useChatHook() {
 
           if (process.env.NODE_ENV === 'development') {
             console.log(`✅ Message sent successfully: ${serverMessage.id}`);
+          }
+
+          // ✅ 100% Broadcast: 메시지 전송 후 Broadcast로 실시간 알림
+          try {
+            const channel = supabase.channel(`room:${roomId}:messages`);
+
+            // API 응답에 이미 sender 정보가 포함되어 있으므로 그대로 전송
+            // serverMessage는 .select('*, sender:profiles(...)') 결과를 포함
+            await channel.send({
+              type: 'broadcast',
+              event: 'new_message',
+              payload: serverMessage
+            });
+
+            if (process.env.NODE_ENV === 'development') {
+              console.log(`📡 Broadcast sent for message: ${serverMessage.id}`, serverMessage.sender);
+            }
+          } catch (broadcastError) {
+            // Broadcast 실패는 치명적이지 않음 (DB에는 저장됨)
+            console.warn('Broadcast failed, but message saved to DB:', broadcastError);
           }
 
           // ✅ Optimistic 메시지를 실제 메시지로 교체 (skipOptimistic이 false일 때만)

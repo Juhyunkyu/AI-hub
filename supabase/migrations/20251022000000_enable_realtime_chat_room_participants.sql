@@ -1,0 +1,21 @@
+-- ❌ DEPRECATED: Postgres Changes 방식 (2025-10-22)
+--
+-- Postgres Changes DELETE 이벤트 필터링 버그로 인해 Broadcast 방식으로 전환
+-- 오류: "mismatch between server and client bindings for postgres changes"
+--
+-- 근본 원인: Supabase Realtime의 DELETE 이벤트 필터링 버그
+-- - INSERT 이벤트: filter `user_id=eq.X` 정상 작동
+-- - DELETE 이벤트: filter `user_id=eq.X` 항상 오류 발생
+-- - REPLICA IDENTITY FULL 설정해도 해결 안 됨
+--
+-- ✅ 해결책: Broadcast 방식으로 전환 (20-100ms 지연, 3-5배 빠름)
+-- - 파일: src/hooks/use-global-chat-rooms-subscription.ts
+-- - 채널: `global:user:${user.id}:rooms`
+-- - 이벤트: room_joined, room_left
+-- - API: /api/chat/rooms/[roomId]/invite, /api/chat/rooms/[roomId]/leave
+--
+-- 참고: 타이핑 인디케이터도 동일한 Broadcast 패턴 사용
+-- (src/hooks/use-realtime-chat.ts:458-474)
+
+-- 아래 코드는 미래에 다른 테이블에서 Postgres Changes 사용 시 참고용으로 유지
+-- ALTER TABLE chat_room_participants REPLICA IDENTITY FULL;

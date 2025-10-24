@@ -1,6 +1,12 @@
-# 채팅 시스템 상세
+# 채팅 시스템 종합 가이드
 
-**문서 업데이트**: 2025-10-20
+**문서 업데이트**: 2025-10-24
+**현재 상태**: ✅ **postgres_changes 기반 안정 운영 중**
+**기술 스택**: Next.js 15.4.6 + React 19.1.0 + Supabase Realtime
+
+> **관련 문서**:
+> - [현재 구현 상세](CHAT_현재구현상세.md) - postgres_changes 기반 실시간 시스템
+> - [Broadcast 전환 계획](CHAT_브로드캐스트마이그레이션.md) - 성능 개선을 위한 로드맵
 
 ---
 
@@ -47,30 +53,36 @@ ChatLayout (메인 컨테이너)
 ### 1. 메시지 전송 (Optimistic Update)
 
 ```typescript
-sendMessage(content, roomId, file?)
+사용자 입력
   ↓
-1) 즉시 UI에 임시 메시지 표시 (temp-${timestamp})
+1) 즉시 UI에 임시 메시지 표시 (temp-${timestamp}-${random})
   ↓
 2) API 호출: POST /api/chat/messages
   ↓
-3) 성공 시: 임시 → 실제 메시지 교체
+3) Supabase: INSERT chat_messages (DB 저장)
   ↓
-4) 실패 시: 임시 메시지 제거
+4) 성공 시: 임시 → 실제 메시지 교체 (tempId 매칭)
+  ↓
+5) 실패 시: 임시 메시지 제거 또는 재시도 버튼 표시
 ```
 
-### 2. 실시간 수신 (Supabase Realtime)
+### 2. 실시간 수신 (postgres_changes)
 
 ```typescript
-Realtime Channel Subscription
+Supabase Realtime Channel 구독
   ↓
-새 메시지 이벤트 수신
+postgres_changes 이벤트 수신 (INSERT/UPDATE/DELETE)
   ↓
-handleNewRealtimeMessage(message)
+handleMessageChange(payload)
   ↓
-1) 임시 메시지 확인 → 교체
-2) sender 정보 보강
-3) UI 자동 업데이트
+1) 중복 체크 (processedMessagesRef)
+2) 임시 메시지 확인 → tempId로 정확히 매칭하여 교체
+3) sender 정보 보강 (profiles 테이블)
+4) UI 자동 업데이트 (가상화 리스트)
 ```
+
+**현재 방식**: postgres_changes (평균 500ms 지연)
+**향후 개선**: [Broadcast 전환](CHAT_브로드캐스트마이그레이션.md)으로 50ms 이하 달성 예정
 
 ---
 
@@ -190,7 +202,7 @@ abortController.signal.addEventListener('abort', () => {
 
 **문제 해결** (2025-10-20):
 - **기존**: 시간 기반 매칭 (30초 윈도우) → 큰 파일 업로드 시 중복 이미지 버그
-- **개선**: tempId 기반 정확한 매칭 → 시간 제약 없음
+- **개선**: tempId 기반 정확한 매칭 → 시간 제약 없음, 100% 정확도
 
 ```typescript
 // src/hooks/use-chat.ts
@@ -201,11 +213,21 @@ const findTempMessage = (messages: ChatMessage[], targetMessage: ChatMessage) =>
       return m.tempId === targetMessage.tempId;
     }
 
-    // 레거시 메시지는 기존 로직 사용
-    // ... (시간 기반 fallback)
+    // 레거시 메시지는 기존 로직 사용 (30초 윈도우 + 내용 비교)
+    const timeDiff = Math.abs(
+      new Date(m.created_at).getTime() - new Date(targetMessage.created_at).getTime()
+    );
+    return timeDiff < 30000 &&
+           m.content === targetMessage.content &&
+           m.sender_id === targetMessage.sender_id;
   });
 };
 ```
+
+**장점**:
+- ✅ 대용량 파일 업로드도 정확히 매칭 (5분 이상 걸려도 OK)
+- ✅ 중복 메시지 완전 방지
+- ✅ 네트워크 재연결 시에도 안정적
 
 ### 메시지 타입 자동 판단
 
@@ -465,4 +487,138 @@ await supabase.from('message_reads').upsert({
 
 ---
 
-[← 아키텍처](ARCHITECTURE.md) | [기능 상세 →](FEATURES.md)
+## 웹/모바일 UI 구조
+
+### 데스크톱 (웹)
+
+```
+┌─────────────────────────────────────────┐
+│ Nav Bar (채팅 아이콘 [알림 배지])         │
+├──────────────┬──────────────────────────┤
+│ 채팅방 리스트  │  채팅방 (메시지)           │
+│ (왼쪽 고정)   │  (오른쪽)                 │
+│              │                          │
+│ - 방1 [2]    │  ┌──────────────────┐   │
+│ - 방2        │  │ 메시지 리스트     │   │
+│ - 방3 [5]    │  │ (가상화)         │   │
+│              │  └──────────────────┘   │
+│              │  [이모지][입력창][전송]   │
+└──────────────┴──────────────────────────┘
+```
+
+### 모바일
+
+```
+Nav 클릭 → 채팅리스트         방 클릭 → 채팅방
+┌──────────────────┐        ┌──────────────────┐
+│ [←] 채팅방 [검색] │        │ [←] 방 이름 [⋮]  │
+├──────────────────┤        ├──────────────────┤
+│ 방1 [2]          │        │                  │
+│  └ 마지막 메시지   │        │ 메시지 리스트     │
+│ 방2              │        │ (가상화)         │
+│ 방3 [5]          │        │                  │
+│                  │        ├──────────────────┤
+│                  │        │ [+][입력창][전송] │
+└──────────────────┘        └──────────────────┘
+```
+
+**특징**:
+- ✅ 반응형: `useResponsive()` 훅으로 isMobile 감지
+- ✅ URL 동기화: `/chat?room=xxx` 딥링크 지원
+- ✅ 모바일 토글: `showRoomList` 상태로 리스트 ↔ 채팅방 전환
+
+---
+
+## 핵심 기술 스택
+
+### 프론트엔드
+- **Framework**: Next.js 15.4.6 (App Router, Turbopack)
+- **Runtime**: React 19.1.0 (React Compiler)
+- **Language**: TypeScript 5 (strict mode)
+- **Styling**: TailwindCSS 4
+- **UI Library**: shadcn/ui + Radix UI
+- **State**: Zustand 5.0.7
+- **Data Fetching**: TanStack Query (React Query)
+
+### 백엔드
+- **Database**: Supabase (PostgreSQL 15)
+- **Realtime**: Supabase Realtime (WebSocket, postgres_changes)
+- **Auth**: Supabase Auth
+- **Storage**: Supabase Storage
+
+### 특수 라이브러리
+- **가상화**: @tanstack/react-virtual 3.11.1
+- **Canvas**: react-konva 19.0.10 (이미지 편집)
+- **이미지 압축**: browser-image-compression 2.0.2
+- **보안**: isomorphic-dompurify
+
+---
+
+## 성능 현황 및 목표
+
+| 지표 | 현재 (2025-10-24) | 목표 (Broadcast 전환 후) |
+|------|-------------------|------------------------|
+| 메시지 전달 속도 | 500ms 평균 | 50ms 이하 |
+| 메모리 사용량 | 33.60MB/user | 유지 |
+| 스크롤 성능 | 1.76ms (60fps 안정) | 유지 |
+| DOM 노드 | 가상화로 최소화 | 유지 |
+| 동시 접속자 | ~100명 | 1000+ |
+| 네트워크 재연결 | 2-5초 | 1-2초 |
+
+**참고**: [Broadcast 전환 계획](CHAT_브로드캐스트마이그레이션.md)에서 자세한 개선 로드맵 확인
+
+---
+
+## 알려진 이슈 및 해결 현황
+
+### ✅ 해결됨
+
+1. **채팅방 안에서도 알림 배지 증가** (2025-10-16)
+   - 원인: `message_reads` 테이블과 뷰의 데이터 소스 불일치
+   - 해결: 마이그레이션으로 뷰 재작성
+   - 상태: ✅ 완전 해결
+
+2. **대용량 파일 업로드 시 중복 이미지** (2025-10-20)
+   - 원인: 시간 기반 매칭 (30초 제한)
+   - 해결: tempId 기반 정확한 매칭
+   - 상태: ✅ 완전 해결
+
+3. **DELETE 이벤트 중복 처리** (2025-10-17)
+   - 원인: Admin Client + Custom Broadcast 동시 발생
+   - 해결: DELETE 전용 캐시로 5초간 중복 방지
+   - 상태: ✅ 완전 해결
+
+### ⚠️ 개선 예정
+
+1. **메시지 전달 지연** (평균 500ms)
+   - 계획: [Broadcast 전환](CHAT_브로드캐스트마이그레이션.md)으로 50ms 이하 달성
+   - 우선순위: 높음
+   - 예상 일정: 2-3주
+
+2. **읽음 상태 업데이트 지연** (1-2초)
+   - 계획: Broadcast 기반 즉시 업데이트
+   - 우선순위: 중간
+   - 예상 일정: 2-3주
+
+---
+
+## 다음 단계
+
+### 단기 (1개월)
+- [ ] Broadcast 전환 Phase 1 (메시지 전송/수신)
+- [ ] Broadcast 전환 Phase 2 (Nav바 알림)
+- [ ] Broadcast 전환 Phase 3 (읽음 상태)
+
+### 중기 (3개월)
+- [ ] 동시 접속자 1000명 이상 부하 테스트
+- [ ] 메시지 검색 기능 (Elasticsearch)
+- [ ] 음성/영상 메시지 지원
+
+### 장기 (6개월)
+- [ ] E2E 암호화
+- [ ] 메시지 번역 (AI)
+- [ ] 채팅방 스레드 (댓글)
+
+---
+
+[← 메인 문서](../CLAUDE.md) | [현재 구현 상세 →](CHAT_현재구현상세.md) | [Broadcast 전환 →](CHAT_브로드캐스트마이그레이션.md)

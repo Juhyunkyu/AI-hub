@@ -32,28 +32,28 @@ export const TypingIndicatorMessage = memo(function TypingIndicatorMessage({
   return (
     <div style={{
       width: '100%',
-      padding: '2px 16px',
+      padding: '2px 16px 2px 4px', // 상대방 메시지와 동일한 패딩 (왼쪽 4px)
       display: 'flex',
       alignItems: 'flex-start',
       boxSizing: 'border-box'
     }}>
       <div className="flex justify-start gap-2 w-full">
-        {/* 사용자 아바타 */}
-        <Avatar className="h-8 w-8 flex-shrink-0 mt-1">
+        {/* 사용자 아바타 - MessageRenderer와 동일한 스타일 */}
+        <Avatar className="h-8 w-8 flex-shrink-0 ring-2 ring-border/20 mt-0.5">
           <AvatarImage src={avatarUrl || undefined} alt={username} />
           <AvatarFallback className="text-xs">
             {username.charAt(0).toUpperCase()}
           </AvatarFallback>
         </Avatar>
 
-        {/* 메시지 컨테이너 - 일반 메시지와 동일한 구조 */}
-        <div className="flex flex-col items-start max-w-[70%] min-w-0 flex-shrink-0">
-          {/* 사용자 이름 (메시지 위에) */}
-          <div className="text-xs text-muted-foreground mb-2">
+        {/* 메시지 컨테이너 - MessageRenderer와 동일한 구조 */}
+        <div className="flex flex-col max-w-[75%] sm:max-w-[80%] min-w-0">
+          {/* 사용자 이름 - MessageRenderer와 동일한 마진 */}
+          <div className="text-xs text-muted-foreground mb-1">
             {username}
           </div>
 
-          {/* 타이핑 버블 (메시지 아래) */}
+          {/* 타이핑 버블 */}
           <div className="bg-muted px-3 py-2 rounded-lg inline-block">
             <div className="flex items-center space-x-1">
               {/* 타이핑 애니메이션 점들 */}
