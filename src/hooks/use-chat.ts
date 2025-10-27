@@ -543,7 +543,7 @@ export function useChatHook() {
                 .filter(p => p.user_id !== user.id)
                 .map(async (participant) => {
                   try {
-                    // ✅ 채널 재사용 (중복 구독 방지)
+                    // ✅ 1) 채팅방 리스트 업데이트 broadcast
                     const globalChannel = getOrCreateBroadcastChannel(participant.user_id);
                     await globalChannel.send({
                       type: 'broadcast',
@@ -557,7 +557,21 @@ export function useChatHook() {
                       }
                     });
 
-                    // ✅ Nav 알림은 서버에서 전송 (API route에서 처리)
+                    // ✅ 2) Nav 알림 broadcast 추가
+                    const notificationChannel = supabase.channel(`user_notifications:${participant.user_id}`);
+                    await notificationChannel.send({
+                      type: 'broadcast',
+                      event: 'new_message_notification',
+                      payload: {
+                        room_id: roomId,
+                        sender_id: user.id,
+                        message_preview: serverMessage.content || '[파일]'
+                      }
+                    });
+
+                    if (process.env.NODE_ENV === 'development') {
+                      console.log(`🔔 Nav 알림 broadcast 전송 완료: user ${participant.user_id}`);
+                    }
                   } catch (error) {
                     console.warn(`Failed to send broadcast to user ${participant.user_id}:`, error);
                   }
