@@ -324,6 +324,7 @@ export function useChatHook() {
     return broadcastChannelCacheRef.current.get(channelName)!;
   }, []);
 
+
   // ✅ Broadcast 채널 정리 함수
   const cleanupBroadcastChannels = useCallback(() => {
     broadcastChannelCacheRef.current.forEach((channel, channelName) => {
@@ -543,7 +544,7 @@ export function useChatHook() {
                 .filter(p => p.user_id !== user.id)
                 .map(async (participant) => {
                   try {
-                    // ✅ 1) 채팅방 리스트 업데이트 broadcast
+                    // ✅ Global Rooms 채널로 'new_message' broadcast (채팅 리스트 & Nav 알림 통합)
                     const globalChannel = getOrCreateBroadcastChannel(participant.user_id);
                     await globalChannel.send({
                       type: 'broadcast',
@@ -556,22 +557,6 @@ export function useChatHook() {
                         message_type: serverMessage.message_type || 'text'
                       }
                     });
-
-                    // ✅ 2) Nav 알림 broadcast 추가
-                    const notificationChannel = supabase.channel(`user_notifications:${participant.user_id}`);
-                    await notificationChannel.send({
-                      type: 'broadcast',
-                      event: 'new_message_notification',
-                      payload: {
-                        room_id: roomId,
-                        sender_id: user.id,
-                        message_preview: serverMessage.content || '[파일]'
-                      }
-                    });
-
-                    if (process.env.NODE_ENV === 'development') {
-                      console.log(`🔔 Nav 알림 broadcast 전송 완료: user ${participant.user_id}`);
-                    }
                   } catch (error) {
                     console.warn(`Failed to send broadcast to user ${participant.user_id}:`, error);
                   }
@@ -621,7 +606,7 @@ export function useChatHook() {
         toast.error("메시지 전송에 실패했습니다");
       }
     },
-    [user, rooms, getOrCreateBroadcastChannel] // getOrCreateBroadcastChannel 추가
+    [user, rooms, getOrCreateBroadcastChannel]
   );
 
   // 초기 로드

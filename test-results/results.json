@@ -14,8 +14,7 @@
       "testType": "e2e",
       "environment": "test",
       "buildId": "local",
-      "browser": "multi-browser",
-      "actualWorkers": 2
+      "browser": "multi-browser"
     },
     "preserveOutput": "always",
     "reporter": [
@@ -61,8 +60,7 @@
           "testType": "e2e",
           "environment": "test",
           "buildId": "local",
-          "browser": "multi-browser",
-          "actualWorkers": 2
+          "browser": "multi-browser"
         },
         "id": "chromium-desktop",
         "name": "chromium-desktop",
@@ -83,8 +81,7 @@
           "testType": "e2e",
           "environment": "test",
           "buildId": "local",
-          "browser": "multi-browser",
-          "actualWorkers": 2
+          "browser": "multi-browser"
         },
         "id": "firefox-desktop",
         "name": "firefox-desktop",
@@ -105,8 +102,7 @@
           "testType": "e2e",
           "environment": "test",
           "buildId": "local",
-          "browser": "multi-browser",
-          "actualWorkers": 2
+          "browser": "multi-browser"
         },
         "id": "webkit-desktop",
         "name": "webkit-desktop",
@@ -127,8 +123,7 @@
           "testType": "e2e",
           "environment": "test",
           "buildId": "local",
-          "browser": "multi-browser",
-          "actualWorkers": 2
+          "browser": "multi-browser"
         },
         "id": "tablet-chrome",
         "name": "tablet-chrome",
@@ -149,8 +144,7 @@
           "testType": "e2e",
           "environment": "test",
           "buildId": "local",
-          "browser": "multi-browser",
-          "actualWorkers": 2
+          "browser": "multi-browser"
         },
         "id": "mobile-chrome",
         "name": "mobile-chrome",
@@ -171,8 +165,7 @@
           "testType": "e2e",
           "environment": "test",
           "buildId": "local",
-          "browser": "multi-browser",
-          "actualWorkers": 2
+          "browser": "multi-browser"
         },
         "id": "mobile-safari",
         "name": "mobile-safari",
@@ -193,8 +186,7 @@
           "testType": "e2e",
           "environment": "test",
           "buildId": "local",
-          "browser": "multi-browser",
-          "actualWorkers": 2
+          "browser": "multi-browser"
         },
         "id": "accessibility-desktop",
         "name": "accessibility-desktop",
@@ -215,8 +207,7 @@
           "testType": "e2e",
           "environment": "test",
           "buildId": "local",
-          "browser": "multi-browser",
-          "actualWorkers": 2
+          "browser": "multi-browser"
         },
         "id": "performance-mobile",
         "name": "performance-mobile",
@@ -248,178 +239,95 @@
       }
     }
   },
-  "suites": [
+  "suites": [],
+  "errors": [
     {
-      "title": "emoji-modal-issue.e2e.spec.ts",
-      "file": "emoji-modal-issue.e2e.spec.ts",
-      "column": 0,
-      "line": 0,
-      "specs": [],
-      "suites": [
-        {
-          "title": "댓글 이모지 모달 UX 테스트",
-          "file": "emoji-modal-issue.e2e.spec.ts",
-          "line": 7,
-          "column": 6,
-          "specs": [
-            {
-              "title": "현재 이모지 모달 위치 문제 재현",
-              "ok": false,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 60000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "chromium-desktop",
-                  "projectName": "chromium-desktop",
-                  "results": [
-                    {
-                      "workerIndex": 0,
-                      "parallelIndex": 0,
-                      "status": "failed",
-                      "duration": 26426,
-                      "error": {
-                        "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m()\u001b[22m failed\n\nLocator:  locator('textarea[placeholder*=\"댓글\"]')\nExpected: visible\nReceived: <element(s) not found>\nTimeout:  10000ms\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" with timeout 10000ms\u001b[22m\n\u001b[2m  - waiting for locator('textarea[placeholder*=\"댓글\"]')\u001b[22m\n",
-                        "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m()\u001b[22m failed\n\nLocator:  locator('textarea[placeholder*=\"댓글\"]')\nExpected: visible\nReceived: <element(s) not found>\nTimeout:  10000ms\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" with timeout 10000ms\u001b[22m\n\u001b[2m  - waiting for locator('textarea[placeholder*=\"댓글\"]')\u001b[22m\n\n    at /home/dandy02/possible/team_hub/tests/e2e/emoji-modal-issue.e2e.spec.ts:31:35",
-                        "location": {
-                          "file": "/home/dandy02/possible/team_hub/tests/e2e/emoji-modal-issue.e2e.spec.ts",
-                          "column": 35,
-                          "line": 31
-                        },
-                        "snippet": "  29 |     // 댓글 작성 영역 찾기\n  30 |     const commentTextarea = page.locator('textarea[placeholder*=\"댓글\"]')\n> 31 |     await expect(commentTextarea).toBeVisible()\n     |                                   ^\n  32 |\n  33 |     // 댓글 작성 영역에 포커스\n  34 |     await commentTextarea.focus()"
-                      },
-                      "errors": [
-                        {
-                          "location": {
-                            "file": "/home/dandy02/possible/team_hub/tests/e2e/emoji-modal-issue.e2e.spec.ts",
-                            "column": 35,
-                            "line": 31
-                          },
-                          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m()\u001b[22m failed\n\nLocator:  locator('textarea[placeholder*=\"댓글\"]')\nExpected: visible\nReceived: <element(s) not found>\nTimeout:  10000ms\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" with timeout 10000ms\u001b[22m\n\u001b[2m  - waiting for locator('textarea[placeholder*=\"댓글\"]')\u001b[22m\n\n\n  29 |     // 댓글 작성 영역 찾기\n  30 |     const commentTextarea = page.locator('textarea[placeholder*=\"댓글\"]')\n> 31 |     await expect(commentTextarea).toBeVisible()\n     |                                   ^\n  32 |\n  33 |     // 댓글 작성 영역에 포커스\n  34 |     await commentTextarea.focus()\n    at /home/dandy02/possible/team_hub/tests/e2e/emoji-modal-issue.e2e.spec.ts:31:35"
-                        }
-                      ],
-                      "stdout": [
-                        {
-                          "text": "게시물이 없어서 메인 페이지에서 테스트 진행\n"
-                        }
-                      ],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2025-09-22T14:06:28.669Z",
-                      "annotations": [],
-                      "attachments": [
-                        {
-                          "name": "screenshot",
-                          "contentType": "image/png",
-                          "path": "/home/dandy02/possible/team_hub/test-results/artifacts/emoji-modal-issue.e2e-댓글-이모지-모달-UX-테스트-현재-이모지-모달-위치-문제-재현-chromium-desktop/test-failed-1.png"
-                        },
-                        {
-                          "name": "video",
-                          "contentType": "video/webm",
-                          "path": "/home/dandy02/possible/team_hub/test-results/artifacts/emoji-modal-issue.e2e-댓글-이모지-모달-UX-테스트-현재-이모지-모달-위치-문제-재현-chromium-desktop/video.webm"
-                        },
-                        {
-                          "name": "error-context",
-                          "contentType": "text/markdown",
-                          "path": "/home/dandy02/possible/team_hub/test-results/artifacts/emoji-modal-issue.e2e-댓글-이모지-모달-UX-테스트-현재-이모지-모달-위치-문제-재현-chromium-desktop/error-context.md"
-                        }
-                      ],
-                      "errorLocation": {
-                        "file": "/home/dandy02/possible/team_hub/tests/e2e/emoji-modal-issue.e2e.spec.ts",
-                        "column": 35,
-                        "line": 31
-                      }
-                    }
-                  ],
-                  "status": "unexpected"
-                }
-              ],
-              "id": "37f4a25293047af5ac4f-71829a32ccf99a88b312",
-              "file": "emoji-modal-issue.e2e.spec.ts",
-              "line": 16,
-              "column": 7
-            },
-            {
-              "title": "다양한 뷰포트에서 이모지 모달 문제 확인",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 60000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "chromium-desktop",
-                  "projectName": "chromium-desktop",
-                  "results": [
-                    {
-                      "workerIndex": 1,
-                      "parallelIndex": 1,
-                      "status": "passed",
-                      "duration": 11789,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2025-09-22T14:06:28.644Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "37f4a25293047af5ac4f-8b04144c0ef129ba5136",
-              "file": "emoji-modal-issue.e2e.spec.ts",
-              "line": 98,
-              "column": 7
-            },
-            {
-              "title": "접근성 확인 - 키보드 네비게이션",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 60000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "chromium-desktop",
-                  "projectName": "chromium-desktop",
-                  "results": [
-                    {
-                      "workerIndex": 1,
-                      "parallelIndex": 1,
-                      "status": "passed",
-                      "duration": 11770,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2025-09-22T14:06:41.210Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "37f4a25293047af5ac4f-c5355ee1887467ac0762",
-              "file": "emoji-modal-issue.e2e.spec.ts",
-              "line": 122,
-              "column": 7
-            }
-          ]
-        }
-      ]
+      "message": "Error: Cannot find module 'axe-playwright'\nRequire stack:\n- /home/dandy02/possible/team_hub/tests/utils/e2e-utils.ts\n- /home/dandy02/possible/team_hub/tests/e2e/accessibility-responsive.e2e.spec.ts\n- /home/dandy02/possible/team_hub/node_modules/playwright/lib/transform/transform.js\n- /home/dandy02/possible/team_hub/node_modules/playwright/lib/common/configLoader.js\n- /home/dandy02/possible/team_hub/node_modules/playwright/lib/program.js\n- /home/dandy02/possible/team_hub/node_modules/@playwright/test/cli.js",
+      "stack": "Error: Cannot find module 'axe-playwright'\nRequire stack:\n- /home/dandy02/possible/team_hub/tests/utils/e2e-utils.ts\n- /home/dandy02/possible/team_hub/tests/e2e/accessibility-responsive.e2e.spec.ts\n- /home/dandy02/possible/team_hub/node_modules/playwright/lib/transform/transform.js\n- /home/dandy02/possible/team_hub/node_modules/playwright/lib/common/configLoader.js\n- /home/dandy02/possible/team_hub/node_modules/playwright/lib/program.js\n- /home/dandy02/possible/team_hub/node_modules/@playwright/test/cli.js\n    at Object.<anonymous> (/home/dandy02/possible/team_hub/tests/utils/e2e-utils.ts:4:1)\n    at Object.<anonymous> (/home/dandy02/possible/team_hub/tests/e2e/accessibility-responsive.e2e.spec.ts:2:1)",
+      "location": {
+        "file": "/home/dandy02/possible/team_hub/tests/utils/e2e-utils.ts",
+        "column": 1,
+        "line": 4
+      },
+      "snippet": "\u001b[90m   at \u001b[39m../utils/e2e-utils.ts:4\n\n  2 | import { createClient } from '@supabase/supabase-js'\n  3 | import { WebVitalsCollector, PerformanceMetrics } from './web-vitals-collector'\n> 4 | import { AxeResults, injectAxe, checkA11y, getViolations } from 'axe-playwright'\n    | ^\n  5 |\n  6 | // 테스트용 Supabase 클라이언트\n  7 | const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://localhost:54321'"
+    },
+    {
+      "message": "Error: Cannot find module 'axe-playwright'\nRequire stack:\n- /home/dandy02/possible/team_hub/tests/utils/e2e-utils.ts\n- /home/dandy02/possible/team_hub/tests/e2e/accessibility.e2e.spec.ts\n- /home/dandy02/possible/team_hub/node_modules/playwright/lib/transform/transform.js\n- /home/dandy02/possible/team_hub/node_modules/playwright/lib/common/configLoader.js\n- /home/dandy02/possible/team_hub/node_modules/playwright/lib/program.js\n- /home/dandy02/possible/team_hub/node_modules/@playwright/test/cli.js",
+      "stack": "Error: Cannot find module 'axe-playwright'\nRequire stack:\n- /home/dandy02/possible/team_hub/tests/utils/e2e-utils.ts\n- /home/dandy02/possible/team_hub/tests/e2e/accessibility.e2e.spec.ts\n- /home/dandy02/possible/team_hub/node_modules/playwright/lib/transform/transform.js\n- /home/dandy02/possible/team_hub/node_modules/playwright/lib/common/configLoader.js\n- /home/dandy02/possible/team_hub/node_modules/playwright/lib/program.js\n- /home/dandy02/possible/team_hub/node_modules/@playwright/test/cli.js\n    at Object.<anonymous> (/home/dandy02/possible/team_hub/tests/utils/e2e-utils.ts:4:1)\n    at Object.<anonymous> (/home/dandy02/possible/team_hub/tests/e2e/accessibility.e2e.spec.ts:2:1)",
+      "location": {
+        "file": "/home/dandy02/possible/team_hub/tests/utils/e2e-utils.ts",
+        "column": 1,
+        "line": 4
+      },
+      "snippet": "\u001b[90m   at \u001b[39m../utils/e2e-utils.ts:4\n\n  2 | import { createClient } from '@supabase/supabase-js'\n  3 | import { WebVitalsCollector, PerformanceMetrics } from './web-vitals-collector'\n> 4 | import { AxeResults, injectAxe, checkA11y, getViolations } from 'axe-playwright'\n    | ^\n  5 |\n  6 | // 테스트용 Supabase 클라이언트\n  7 | const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://localhost:54321'"
+    },
+    {
+      "message": "Error: Cannot find module 'axe-playwright'\nRequire stack:\n- /home/dandy02/possible/team_hub/tests/utils/e2e-utils.ts\n- /home/dandy02/possible/team_hub/tests/e2e/admin.e2e.spec.ts\n- /home/dandy02/possible/team_hub/node_modules/playwright/lib/transform/transform.js\n- /home/dandy02/possible/team_hub/node_modules/playwright/lib/common/configLoader.js\n- /home/dandy02/possible/team_hub/node_modules/playwright/lib/program.js\n- /home/dandy02/possible/team_hub/node_modules/@playwright/test/cli.js",
+      "stack": "Error: Cannot find module 'axe-playwright'\nRequire stack:\n- /home/dandy02/possible/team_hub/tests/utils/e2e-utils.ts\n- /home/dandy02/possible/team_hub/tests/e2e/admin.e2e.spec.ts\n- /home/dandy02/possible/team_hub/node_modules/playwright/lib/transform/transform.js\n- /home/dandy02/possible/team_hub/node_modules/playwright/lib/common/configLoader.js\n- /home/dandy02/possible/team_hub/node_modules/playwright/lib/program.js\n- /home/dandy02/possible/team_hub/node_modules/@playwright/test/cli.js\n    at Object.<anonymous> (/home/dandy02/possible/team_hub/tests/utils/e2e-utils.ts:4:1)\n    at Object.<anonymous> (/home/dandy02/possible/team_hub/tests/e2e/admin.e2e.spec.ts:2:1)",
+      "location": {
+        "file": "/home/dandy02/possible/team_hub/tests/utils/e2e-utils.ts",
+        "column": 1,
+        "line": 4
+      },
+      "snippet": "\u001b[90m   at \u001b[39m../utils/e2e-utils.ts:4\n\n  2 | import { createClient } from '@supabase/supabase-js'\n  3 | import { WebVitalsCollector, PerformanceMetrics } from './web-vitals-collector'\n> 4 | import { AxeResults, injectAxe, checkA11y, getViolations } from 'axe-playwright'\n    | ^\n  5 |\n  6 | // 테스트용 Supabase 클라이언트\n  7 | const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://localhost:54321'"
+    },
+    {
+      "message": "Error: Cannot find module 'axe-playwright'\nRequire stack:\n- /home/dandy02/possible/team_hub/tests/utils/e2e-utils.ts\n- /home/dandy02/possible/team_hub/tests/e2e/auth-comprehensive.e2e.spec.ts\n- /home/dandy02/possible/team_hub/node_modules/playwright/lib/transform/transform.js\n- /home/dandy02/possible/team_hub/node_modules/playwright/lib/common/configLoader.js\n- /home/dandy02/possible/team_hub/node_modules/playwright/lib/program.js\n- /home/dandy02/possible/team_hub/node_modules/@playwright/test/cli.js",
+      "stack": "Error: Cannot find module 'axe-playwright'\nRequire stack:\n- /home/dandy02/possible/team_hub/tests/utils/e2e-utils.ts\n- /home/dandy02/possible/team_hub/tests/e2e/auth-comprehensive.e2e.spec.ts\n- /home/dandy02/possible/team_hub/node_modules/playwright/lib/transform/transform.js\n- /home/dandy02/possible/team_hub/node_modules/playwright/lib/common/configLoader.js\n- /home/dandy02/possible/team_hub/node_modules/playwright/lib/program.js\n- /home/dandy02/possible/team_hub/node_modules/@playwright/test/cli.js\n    at Object.<anonymous> (/home/dandy02/possible/team_hub/tests/utils/e2e-utils.ts:4:1)\n    at Object.<anonymous> (/home/dandy02/possible/team_hub/tests/e2e/auth-comprehensive.e2e.spec.ts:2:1)",
+      "location": {
+        "file": "/home/dandy02/possible/team_hub/tests/utils/e2e-utils.ts",
+        "column": 1,
+        "line": 4
+      },
+      "snippet": "\u001b[90m   at \u001b[39m../utils/e2e-utils.ts:4\n\n  2 | import { createClient } from '@supabase/supabase-js'\n  3 | import { WebVitalsCollector, PerformanceMetrics } from './web-vitals-collector'\n> 4 | import { AxeResults, injectAxe, checkA11y, getViolations } from 'axe-playwright'\n    | ^\n  5 |\n  6 | // 테스트용 Supabase 클라이언트\n  7 | const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://localhost:54321'"
+    },
+    {
+      "message": "Error: Cannot find module 'axe-playwright'\nRequire stack:\n- /home/dandy02/possible/team_hub/tests/utils/e2e-utils.ts\n- /home/dandy02/possible/team_hub/tests/e2e/core-features.e2e.spec.ts\n- /home/dandy02/possible/team_hub/node_modules/playwright/lib/transform/transform.js\n- /home/dandy02/possible/team_hub/node_modules/playwright/lib/common/configLoader.js\n- /home/dandy02/possible/team_hub/node_modules/playwright/lib/program.js\n- /home/dandy02/possible/team_hub/node_modules/@playwright/test/cli.js",
+      "stack": "Error: Cannot find module 'axe-playwright'\nRequire stack:\n- /home/dandy02/possible/team_hub/tests/utils/e2e-utils.ts\n- /home/dandy02/possible/team_hub/tests/e2e/core-features.e2e.spec.ts\n- /home/dandy02/possible/team_hub/node_modules/playwright/lib/transform/transform.js\n- /home/dandy02/possible/team_hub/node_modules/playwright/lib/common/configLoader.js\n- /home/dandy02/possible/team_hub/node_modules/playwright/lib/program.js\n- /home/dandy02/possible/team_hub/node_modules/@playwright/test/cli.js\n    at Object.<anonymous> (/home/dandy02/possible/team_hub/tests/utils/e2e-utils.ts:4:1)\n    at Object.<anonymous> (/home/dandy02/possible/team_hub/tests/e2e/core-features.e2e.spec.ts:2:1)",
+      "location": {
+        "file": "/home/dandy02/possible/team_hub/tests/utils/e2e-utils.ts",
+        "column": 1,
+        "line": 4
+      },
+      "snippet": "\u001b[90m   at \u001b[39m../utils/e2e-utils.ts:4\n\n  2 | import { createClient } from '@supabase/supabase-js'\n  3 | import { WebVitalsCollector, PerformanceMetrics } from './web-vitals-collector'\n> 4 | import { AxeResults, injectAxe, checkA11y, getViolations } from 'axe-playwright'\n    | ^\n  5 |\n  6 | // 테스트용 Supabase 클라이언트\n  7 | const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://localhost:54321'"
+    },
+    {
+      "message": "Error: Cannot find module 'axe-playwright'\nRequire stack:\n- /home/dandy02/possible/team_hub/tests/utils/e2e-utils.ts\n- /home/dandy02/possible/team_hub/tests/e2e/performance-vitals.e2e.spec.ts\n- /home/dandy02/possible/team_hub/node_modules/playwright/lib/transform/transform.js\n- /home/dandy02/possible/team_hub/node_modules/playwright/lib/common/configLoader.js\n- /home/dandy02/possible/team_hub/node_modules/playwright/lib/program.js\n- /home/dandy02/possible/team_hub/node_modules/@playwright/test/cli.js",
+      "stack": "Error: Cannot find module 'axe-playwright'\nRequire stack:\n- /home/dandy02/possible/team_hub/tests/utils/e2e-utils.ts\n- /home/dandy02/possible/team_hub/tests/e2e/performance-vitals.e2e.spec.ts\n- /home/dandy02/possible/team_hub/node_modules/playwright/lib/transform/transform.js\n- /home/dandy02/possible/team_hub/node_modules/playwright/lib/common/configLoader.js\n- /home/dandy02/possible/team_hub/node_modules/playwright/lib/program.js\n- /home/dandy02/possible/team_hub/node_modules/@playwright/test/cli.js\n    at Object.<anonymous> (/home/dandy02/possible/team_hub/tests/utils/e2e-utils.ts:4:1)\n    at Object.<anonymous> (/home/dandy02/possible/team_hub/tests/e2e/performance-vitals.e2e.spec.ts:2:1)",
+      "location": {
+        "file": "/home/dandy02/possible/team_hub/tests/utils/e2e-utils.ts",
+        "column": 1,
+        "line": 4
+      },
+      "snippet": "\u001b[90m   at \u001b[39m../utils/e2e-utils.ts:4\n\n  2 | import { createClient } from '@supabase/supabase-js'\n  3 | import { WebVitalsCollector, PerformanceMetrics } from './web-vitals-collector'\n> 4 | import { AxeResults, injectAxe, checkA11y, getViolations } from 'axe-playwright'\n    | ^\n  5 |\n  6 | // 테스트용 Supabase 클라이언트\n  7 | const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://localhost:54321'"
+    },
+    {
+      "message": "SyntaxError: /home/dandy02/possible/team_hub/tests/e2e/posts.e2e.spec.ts: Expecting Unicode escape sequence \\uXXXX. (325:69)\n\n  323 |\n  324 |       // 댓글 입력란 찾기\n> 325 |       const commentInput = page.getByPlaceholder(/댓글을 입력하세요|댓글 작성/i)\\n        .or(page.locator('[data-testid=\\\"comment-input\\\"]'))\\n\\n      await commentInput.fill('이것은 테스트 댓글입니다.')\\n\\n      // 댓글 작성 버튼 클릭\\n      const submitButton = page.getByRole('button', { name: /댓글 작성|작성|submit/i })\\n      await submitButton.click()\\n\\n      // 댓글이 목록에 추가되었는지 확인\\n      await expect(page.getByText('이것은 테스트 댓글입니다.')).toBeVisible()\\n\\n      // 작성자 정보 확인\\n      await expect(page.getByText(user.username)).toBeVisible()\\n    })\\n\\n    test('댓글에 답글을 작성할 수 있어야 한다', async ({ page }) => {\\n      // 테스트용 게시물과 댓글 생성\\n      const user = testDataManager.getCreatedUsers()[0]\\n      const testPost = await testDataManager.createTestPost({\\n        title: '답글 테스트 게시물',\\n        content: '<p>답글을 달 게시물</p>',\\n        author_id: user.id\\n      })\\n\\n      // 게시물 상세 페이지로 이동\\n      await pageHelpers.navigateAndWait(`/posts/${testPost.id}`)\\n\\n      // 첫 번째 댓글 작성\\n      const commentInput = page.getByPlaceholder(/댓글을 입력하세요|댓글 작성/i)\\n      await commentInput.fill('원댓글입니다.')\\n      await page.getByRole('button', { name: /댓글 작성|작성|submit/i }).click()\\n\\n      // 댓글이 생성될 때까지 대기\\n      await expect(page.getByText('원댓글입니다.')).toBeVisible()\\n\\n      // 답글 버튼 클릭\\n      const replyButton = page.getByRole('button', { name: /답글|reply/i }).first()\\n      await replyButton.click()\\n\\n      // 답글 입력란이 나타나는지 확인\\n      const replyInput = page.locator('[data-testid=\\\"reply-input\\\"]')\\n        .or(page.getByPlaceholder(/답글을 입력하세요/i))\\n      await expect(replyInput).toBeVisible()\\n\\n      // 답글 작성\\n      await replyInput.fill('이것은 답글입니다.')\\n      await page.getByRole('button', { name: /답글 작성|작성/i }).click()\\n\\n      // 답글이 들여쓰기되어 표시되는지 확인\\n      await expect(page.getByText('이것은 답글입니다.')).toBeVisible()\\n    })\\n\\n    test('본인이 작성한 댓글을 삭제할 수 있어야 한다', async ({ page }) => {\\n      // 테스트용 게시물 생성\\n      const user = testDataManager.getCreatedUsers()[0]\\n      const testPost = await testDataManager.createTestPost({\\n        title: '댓글 삭제 테스트 게시물',\\n        content: '<p>댓글을 삭제할 게시물</p>',\\n        author_id: user.id\\n      })\\n\\n      // 게시물 상세 페이지로 이동\\n      await pageHelpers.navigateAndWait(`/posts/${testPost.id}`)\\n\\n      // 댓글 작성\\n      const commentInput = page.getByPlaceholder(/댓글을 입력하세요|댓글 작성/i)\\n      await commentInput.fill('삭제할 댓글입니다.')\\n      await page.getByRole('button', { name: /댓글 작성|작성|submit/i }).click()\\n\\n      // 댓글이 생성될 때까지 대기\\n      await expect(page.getByText('삭제할 댓글입니다.')).toBeVisible()\\n\\n      // 댓글 삭제 버튼 클릭\\n      const deleteCommentButton = page.getByRole('button', { name: /삭제|delete/i }).first()\\n      await deleteCommentButton.click()\\n\\n      // 확인 다이얼로그 처리\\n      await pageHelpers.waitForModal('댓글 삭제')\\n      await page.getByRole('button', { name: /확인|삭제/i }).click()\\n\\n      // 댓글이 삭제되었는지 확인\\n      await expect(page.getByText('삭제할 댓글입니다.')).not.toBeVisible()\\n    })\\n  })\\n\\n  test.describe('게시물 반응 기능', () => {\\n    test('게시물에 좋아요를 누를 수 있어야 한다', async ({ page }) => {\\n      // 테스트용 게시물 생성\\n      const user = testDataManager.getCreatedUsers()[0]\\n      const testPost = await testDataManager.createTestPost({\\n        title: '좋아요 테스트 게시물',\\n        content: '<p>좋아요를 누를 게시물</p>',\\n        author_id: user.id\\n      })\\n\\n      // 게시물 상세 페이지로 이동\\n      await pageHelpers.navigateAndWait(`/posts/${testPost.id}`)\\n\\n      // 좋아요 버튼 찾기\\n      const likeButton = page.getByRole('button', { name: /좋아요|like/i })\\n        .or(page.locator('[data-testid=\\\"like-button\\\"]'))\\n\\n      // 초기 좋아요 수 확인\\n      const initialLikeCount = await page.locator('[data-testid=\\\"like-count\\\"]').textContent()\\n\\n      // 좋아요 버튼 클릭\\n      await likeButton.click()\\n\\n      // 좋아요 수가 증가했는지 확인\\n      await expect(page.locator('[data-testid=\\\"like-count\\\"]')).not.toHaveText(initialLikeCount || '0')\\n\\n      // 버튼 상태가 활성화되었는지 확인\\n      await expect(likeButton).toHaveAttribute('aria-pressed', 'true')\\n    })\\n\\n    test('게시물을 북마크할 수 있어야 한다', async ({ page }) => {\\n      // 테스트용 게시물 생성\\n      const user = testDataManager.getCreatedUsers()[0]\\n      const testPost = await testDataManager.createTestPost({\\n        title: '북마크 테스트 게시물',\\n        content: '<p>북마크할 게시물</p>',\\n        author_id: user.id\\n      })\\n\\n      // 게시물 상세 페이지로 이동\\n      await pageHelpers.navigateAndWait(`/posts/${testPost.id}`)\\n\\n      // 북마크 버튼 클릭\\n      const bookmarkButton = page.getByRole('button', { name: /북마크|bookmark|저장/i })\\n        .or(page.locator('[data-testid=\\\"bookmark-button\\\"]'))\\n      await bookmarkButton.click()\\n\\n      // 성공 메시지 또는 상태 변화 확인\\n      await pageHelpers.waitForToast('북마크에 추가되었습니다')\\n\\n      // 버튼 상태가 활성화되었는지 확인\\n      await expect(bookmarkButton).toHaveAttribute('aria-pressed', 'true')\\n    })\\n  })\\n\\n  test.describe('접근성 테스트', () => {\\n    test('게시물 목록 페이지 접근성 검증', async ({ page }) => {\\n      await pageHelpers.navigateAndWait('/posts')\\n      await accessibility.checkPageA11y(page)\\n    })\\n\\n    test('게시물 작성 페이지 접근성 검증', async ({ page }) => {\\n      await pageHelpers.navigateAndWait('/posts/new')\\n      await accessibility.checkPageA11y(page)\\n    })\\n\\n    test('게시물 상세 페이지 접근성 검증', async ({ page }) => {\\n      // 테스트용 게시물 생성\\n      const user = testDataManager.getCreatedUsers()[0]\\n      const testPost = await testDataManager.createTestPost({\\n        title: '접근성 테스트 게시물',\\n        content: '<p>접근성을 확인할 게시물</p>',\\n        author_id: user.id\\n      })\\n\\n      await pageHelpers.navigateAndWait(`/posts/${testPost.id}`)\\n      await accessibility.checkPageA11y(page)\\n    })\\n\\n    test('키보드 네비게이션으로 게시물을 탐색할 수 있어야 한다', async ({ page }) => {\\n      await pageHelpers.navigateAndWait('/posts')\\n\\n      // Tab 키로 네비게이션 테스트\\n      await page.keyboard.press('Tab') // 첫 번째 포커스 가능한 요소\\n      await page.keyboard.press('Tab') // 다음 요소\\n      await page.keyboard.press('Enter') // 활성화\\n\\n      // 페이지가 변경되었는지 확인 (게시물 상세 페이지로 이동)\\n      await pageHelpers.waitForPageLoad()\\n    })\\n  })\\n\\n  test.describe('성능 테스트', () => {\\n    test('게시물 목록 로딩 성능이 양호해야 한다', async ({ page }) => {\\n      const startTime = Date.now()\\n\\n      await pageHelpers.navigateAndWait('/posts')\\n      await pageHelpers.waitForLoadingComplete()\\n\\n      const loadTime = Date.now() - startTime\\n\\n      // 페이지 로딩이 3초 이내에 완료되어야 함\\n      expect(loadTime).toBeLessThan(3000)\\n\\n      // 성능 메트릭 수집\\n      const metrics = await reportHelpers.collectPerformanceMetrics()\\n      console.log('Posts page performance metrics:', metrics)\\n\\n      // TTFB가 1초 이내여야 함\\n      expect(metrics.ttfb).toBeLessThan(1000)\\n    })\\n\\n    test('대용량 게시물 렌더링 성능이 양호해야 한다', async ({ page }) => {\\n      // 대용량 콘텐츠를 가진 게시물 생성\\n      const user = testDataManager.getCreatedUsers()[0]\\n      const longContent = '<p>' + 'Lorem ipsum '.repeat(1000) + '</p>'\\n      const testPost = await testDataManager.createTestPost({\\n        title: '대용량 콘텐츠 게시물',\\n        content: longContent,\\n        author_id: user.id\\n      })\\n\\n      const startTime = Date.now()\\n      await pageHelpers.navigateAndWait(`/posts/${testPost.id}`)\\n      const loadTime = Date.now() - startTime\\n\\n      // 대용량 게시물도 5초 이내에 로딩되어야 함\\n      expect(loadTime).toBeLessThan(5000)\\n    })\\n  })\\n})\\n\\ntest.describe('게시물 검색 및 필터링', () => {\\n  let testDataManager: TestDataManager\\n  let authHelpers: AuthHelpers\\n  let pageHelpers: PageHelpers\\n\\n  test.beforeEach(async ({ page }) => {\\n    testDataManager = new TestDataManager()\\n    authHelpers = new AuthHelpers(page)\\n    pageHelpers = new PageHelpers(page)\\n\\n    // 테스트 사용자 생성 및 로그인\\n    const testUser = await testDataManager.createTestUser()\\n    await authHelpers.loginAsTestUser(testUser)\\n\\n    // 검색용 테스트 게시물들 생성\\n    const user = testDataManager.getCreatedUsers()[0]\\n    await testDataManager.createTestPost({\\n      title: 'React 개발 가이드',\\n      content: '<p>React를 이용한 웹 개발 방법</p>',\\n      author_id: user.id\\n    })\\n    await testDataManager.createTestPost({\\n      title: 'Vue.js 시작하기',\\n      content: '<p>Vue.js 프레임워크 학습하기</p>',\\n      author_id: user.id\\n    })\\n    await testDataManager.createTestPost({\\n      title: 'JavaScript ES6 특징',\\n      content: '<p>최신 JavaScript 문법 정리</p>',\\n      author_id: user.id\\n    })\\n\\n    await pageHelpers.navigateAndWait('/posts')\\n  })\\n\\n  test.afterEach(async () => {\\n    await testDataManager.cleanup()\\n  })\\n\\n  test('제목으로 게시물을 검색할 수 있어야 한다', async ({ page }) => {\\n    // 검색 입력란 찾기\\n    const searchInput = page.getByPlaceholder(/검색|search/i)\\n      .or(page.locator('[data-testid=\\\"search-input\\\"]'))\\n\\n    // React 검색\\n    await searchInput.fill('React')\\n    await page.keyboard.press('Enter')\\n\\n    // 검색 결과 확인\\n    await expect(page.getByText('React 개발 가이드')).toBeVisible()\\n    await expect(page.getByText('Vue.js 시작하기')).not.toBeVisible()\\n  })\\n\\n  test('내용으로 게시물을 검색할 수 있어야 한다', async ({ page }) => {\\n    const searchInput = page.getByPlaceholder(/검색|search/i)\\n      .or(page.locator('[data-testid=\\\"search-input\\\"]'))\\n\\n    // 내용 검색\\n    await searchInput.fill('프레임워크')\\n    await page.keyboard.press('Enter')\\n\\n    // 검색 결과 확인\\n    await expect(page.getByText('Vue.js 시작하기')).toBeVisible()\\n    await expect(page.getByText('React 개발 가이드')).not.toBeVisible()\\n  })\\n\\n  test('검색 결과가 없을 때 적절한 메시지가 표시되어야 한다', async ({ page }) => {\\n    const searchInput = page.getByPlaceholder(/검색|search/i)\\n      .or(page.locator('[data-testid=\\\"search-input\\\"]'))\\n\\n    // 존재하지 않는 키워드 검색\\n    await searchInput.fill('존재하지않는키워드')\\n    await page.keyboard.press('Enter')\\n\\n    // \\\"검색 결과가 없습니다\\\" 메시지 확인\\n    await expect(page.getByText(/검색 결과가 없습니다|no results found/i)).toBeVisible()\\n  })\\n\\n  test('필터링 기능이 정상 작동해야 한다', async ({ page }) => {\\n    // 필터 드롭다운이 있다면 테스트\\n    const filterButton = page.getByRole('button', { name: /필터|filter/i })\\n    if (await filterButton.isVisible()) {\\n      await filterButton.click()\\n\\n      // 최신순 정렬 선택\\n      await page.getByRole('option', { name: /최신순|latest/i }).click()\\n\\n      // 정렬이 적용되었는지 확인 (첫 번째 게시물이 가장 최근 것인지)\\n      const firstPost = page.locator('[data-testid=\\\"post-item\\\"]').first()\\n      await expect(firstPost).toBeVisible()\\n    }\\n  })\\n})\"\n      |                                                                      ^",
+      "stack": "SyntaxError: /home/dandy02/possible/team_hub/tests/e2e/posts.e2e.spec.ts: Expecting Unicode escape sequence \\uXXXX. (325:69)\n\n  323 |\n  324 |       // 댓글 입력란 찾기\n> 325 |       const commentInput = page.getByPlaceholder(/댓글을 입력하세요|댓글 작성/i)\\n        .or(page.locator('[data-testid=\\\"comment-input\\\"]'))\\n\\n      await commentInput.fill('이것은 테스트 댓글입니다.')\\n\\n      // 댓글 작성 버튼 클릭\\n      const submitButton = page.getByRole('button', { name: /댓글 작성|작성|submit/i })\\n      await submitButton.click()\\n\\n      // 댓글이 목록에 추가되었는지 확인\\n      await expect(page.getByText('이것은 테스트 댓글입니다.')).toBeVisible()\\n\\n      // 작성자 정보 확인\\n      await expect(page.getByText(user.username)).toBeVisible()\\n    })\\n\\n    test('댓글에 답글을 작성할 수 있어야 한다', async ({ page }) => {\\n      // 테스트용 게시물과 댓글 생성\\n      const user = testDataManager.getCreatedUsers()[0]\\n      const testPost = await testDataManager.createTestPost({\\n        title: '답글 테스트 게시물',\\n        content: '<p>답글을 달 게시물</p>',\\n        author_id: user.id\\n      })\\n\\n      // 게시물 상세 페이지로 이동\\n      await pageHelpers.navigateAndWait(`/posts/${testPost.id}`)\\n\\n      // 첫 번째 댓글 작성\\n      const commentInput = page.getByPlaceholder(/댓글을 입력하세요|댓글 작성/i)\\n      await commentInput.fill('원댓글입니다.')\\n      await page.getByRole('button', { name: /댓글 작성|작성|submit/i }).click()\\n\\n      // 댓글이 생성될 때까지 대기\\n      await expect(page.getByText('원댓글입니다.')).toBeVisible()\\n\\n      // 답글 버튼 클릭\\n      const replyButton = page.getByRole('button', { name: /답글|reply/i }).first()\\n      await replyButton.click()\\n\\n      // 답글 입력란이 나타나는지 확인\\n      const replyInput = page.locator('[data-testid=\\\"reply-input\\\"]')\\n        .or(page.getByPlaceholder(/답글을 입력하세요/i))\\n      await expect(replyInput).toBeVisible()\\n\\n      // 답글 작성\\n      await replyInput.fill('이것은 답글입니다.')\\n      await page.getByRole('button', { name: /답글 작성|작성/i }).click()\\n\\n      // 답글이 들여쓰기되어 표시되는지 확인\\n      await expect(page.getByText('이것은 답글입니다.')).toBeVisible()\\n    })\\n\\n    test('본인이 작성한 댓글을 삭제할 수 있어야 한다', async ({ page }) => {\\n      // 테스트용 게시물 생성\\n      const user = testDataManager.getCreatedUsers()[0]\\n      const testPost = await testDataManager.createTestPost({\\n        title: '댓글 삭제 테스트 게시물',\\n        content: '<p>댓글을 삭제할 게시물</p>',\\n        author_id: user.id\\n      })\\n\\n      // 게시물 상세 페이지로 이동\\n      await pageHelpers.navigateAndWait(`/posts/${testPost.id}`)\\n\\n      // 댓글 작성\\n      const commentInput = page.getByPlaceholder(/댓글을 입력하세요|댓글 작성/i)\\n      await commentInput.fill('삭제할 댓글입니다.')\\n      await page.getByRole('button', { name: /댓글 작성|작성|submit/i }).click()\\n\\n      // 댓글이 생성될 때까지 대기\\n      await expect(page.getByText('삭제할 댓글입니다.')).toBeVisible()\\n\\n      // 댓글 삭제 버튼 클릭\\n      const deleteCommentButton = page.getByRole('button', { name: /삭제|delete/i }).first()\\n      await deleteCommentButton.click()\\n\\n      // 확인 다이얼로그 처리\\n      await pageHelpers.waitForModal('댓글 삭제')\\n      await page.getByRole('button', { name: /확인|삭제/i }).click()\\n\\n      // 댓글이 삭제되었는지 확인\\n      await expect(page.getByText('삭제할 댓글입니다.')).not.toBeVisible()\\n    })\\n  })\\n\\n  test.describe('게시물 반응 기능', () => {\\n    test('게시물에 좋아요를 누를 수 있어야 한다', async ({ page }) => {\\n      // 테스트용 게시물 생성\\n      const user = testDataManager.getCreatedUsers()[0]\\n      const testPost = await testDataManager.createTestPost({\\n        title: '좋아요 테스트 게시물',\\n        content: '<p>좋아요를 누를 게시물</p>',\\n        author_id: user.id\\n      })\\n\\n      // 게시물 상세 페이지로 이동\\n      await pageHelpers.navigateAndWait(`/posts/${testPost.id}`)\\n\\n      // 좋아요 버튼 찾기\\n      const likeButton = page.getByRole('button', { name: /좋아요|like/i })\\n        .or(page.locator('[data-testid=\\\"like-button\\\"]'))\\n\\n      // 초기 좋아요 수 확인\\n      const initialLikeCount = await page.locator('[data-testid=\\\"like-count\\\"]').textContent()\\n\\n      // 좋아요 버튼 클릭\\n      await likeButton.click()\\n\\n      // 좋아요 수가 증가했는지 확인\\n      await expect(page.locator('[data-testid=\\\"like-count\\\"]')).not.toHaveText(initialLikeCount || '0')\\n\\n      // 버튼 상태가 활성화되었는지 확인\\n      await expect(likeButton).toHaveAttribute('aria-pressed', 'true')\\n    })\\n\\n    test('게시물을 북마크할 수 있어야 한다', async ({ page }) => {\\n      // 테스트용 게시물 생성\\n      const user = testDataManager.getCreatedUsers()[0]\\n      const testPost = await testDataManager.createTestPost({\\n        title: '북마크 테스트 게시물',\\n        content: '<p>북마크할 게시물</p>',\\n        author_id: user.id\\n      })\\n\\n      // 게시물 상세 페이지로 이동\\n      await pageHelpers.navigateAndWait(`/posts/${testPost.id}`)\\n\\n      // 북마크 버튼 클릭\\n      const bookmarkButton = page.getByRole('button', { name: /북마크|bookmark|저장/i })\\n        .or(page.locator('[data-testid=\\\"bookmark-button\\\"]'))\\n      await bookmarkButton.click()\\n\\n      // 성공 메시지 또는 상태 변화 확인\\n      await pageHelpers.waitForToast('북마크에 추가되었습니다')\\n\\n      // 버튼 상태가 활성화되었는지 확인\\n      await expect(bookmarkButton).toHaveAttribute('aria-pressed', 'true')\\n    })\\n  })\\n\\n  test.describe('접근성 테스트', () => {\\n    test('게시물 목록 페이지 접근성 검증', async ({ page }) => {\\n      await pageHelpers.navigateAndWait('/posts')\\n      await accessibility.checkPageA11y(page)\\n    })\\n\\n    test('게시물 작성 페이지 접근성 검증', async ({ page }) => {\\n      await pageHelpers.navigateAndWait('/posts/new')\\n      await accessibility.checkPageA11y(page)\\n    })\\n\\n    test('게시물 상세 페이지 접근성 검증', async ({ page }) => {\\n      // 테스트용 게시물 생성\\n      const user = testDataManager.getCreatedUsers()[0]\\n      const testPost = await testDataManager.createTestPost({\\n        title: '접근성 테스트 게시물',\\n        content: '<p>접근성을 확인할 게시물</p>',\\n        author_id: user.id\\n      })\\n\\n      await pageHelpers.navigateAndWait(`/posts/${testPost.id}`)\\n      await accessibility.checkPageA11y(page)\\n    })\\n\\n    test('키보드 네비게이션으로 게시물을 탐색할 수 있어야 한다', async ({ page }) => {\\n      await pageHelpers.navigateAndWait('/posts')\\n\\n      // Tab 키로 네비게이션 테스트\\n      await page.keyboard.press('Tab') // 첫 번째 포커스 가능한 요소\\n      await page.keyboard.press('Tab') // 다음 요소\\n      await page.keyboard.press('Enter') // 활성화\\n\\n      // 페이지가 변경되었는지 확인 (게시물 상세 페이지로 이동)\\n      await pageHelpers.waitForPageLoad()\\n    })\\n  })\\n\\n  test.describe('성능 테스트', () => {\\n    test('게시물 목록 로딩 성능이 양호해야 한다', async ({ page }) => {\\n      const startTime = Date.now()\\n\\n      await pageHelpers.navigateAndWait('/posts')\\n      await pageHelpers.waitForLoadingComplete()\\n\\n      const loadTime = Date.now() - startTime\\n\\n      // 페이지 로딩이 3초 이내에 완료되어야 함\\n      expect(loadTime).toBeLessThan(3000)\\n\\n      // 성능 메트릭 수집\\n      const metrics = await reportHelpers.collectPerformanceMetrics()\\n      console.log('Posts page performance metrics:', metrics)\\n\\n      // TTFB가 1초 이내여야 함\\n      expect(metrics.ttfb).toBeLessThan(1000)\\n    })\\n\\n    test('대용량 게시물 렌더링 성능이 양호해야 한다', async ({ page }) => {\\n      // 대용량 콘텐츠를 가진 게시물 생성\\n      const user = testDataManager.getCreatedUsers()[0]\\n      const longContent = '<p>' + 'Lorem ipsum '.repeat(1000) + '</p>'\\n      const testPost = await testDataManager.createTestPost({\\n        title: '대용량 콘텐츠 게시물',\\n        content: longContent,\\n        author_id: user.id\\n      })\\n\\n      const startTime = Date.now()\\n      await pageHelpers.navigateAndWait(`/posts/${testPost.id}`)\\n      const loadTime = Date.now() - startTime\\n\\n      // 대용량 게시물도 5초 이내에 로딩되어야 함\\n      expect(loadTime).toBeLessThan(5000)\\n    })\\n  })\\n})\\n\\ntest.describe('게시물 검색 및 필터링', () => {\\n  let testDataManager: TestDataManager\\n  let authHelpers: AuthHelpers\\n  let pageHelpers: PageHelpers\\n\\n  test.beforeEach(async ({ page }) => {\\n    testDataManager = new TestDataManager()\\n    authHelpers = new AuthHelpers(page)\\n    pageHelpers = new PageHelpers(page)\\n\\n    // 테스트 사용자 생성 및 로그인\\n    const testUser = await testDataManager.createTestUser()\\n    await authHelpers.loginAsTestUser(testUser)\\n\\n    // 검색용 테스트 게시물들 생성\\n    const user = testDataManager.getCreatedUsers()[0]\\n    await testDataManager.createTestPost({\\n      title: 'React 개발 가이드',\\n      content: '<p>React를 이용한 웹 개발 방법</p>',\\n      author_id: user.id\\n    })\\n    await testDataManager.createTestPost({\\n      title: 'Vue.js 시작하기',\\n      content: '<p>Vue.js 프레임워크 학습하기</p>',\\n      author_id: user.id\\n    })\\n    await testDataManager.createTestPost({\\n      title: 'JavaScript ES6 특징',\\n      content: '<p>최신 JavaScript 문법 정리</p>',\\n      author_id: user.id\\n    })\\n\\n    await pageHelpers.navigateAndWait('/posts')\\n  })\\n\\n  test.afterEach(async () => {\\n    await testDataManager.cleanup()\\n  })\\n\\n  test('제목으로 게시물을 검색할 수 있어야 한다', async ({ page }) => {\\n    // 검색 입력란 찾기\\n    const searchInput = page.getByPlaceholder(/검색|search/i)\\n      .or(page.locator('[data-testid=\\\"search-input\\\"]'))\\n\\n    // React 검색\\n    await searchInput.fill('React')\\n    await page.keyboard.press('Enter')\\n\\n    // 검색 결과 확인\\n    await expect(page.getByText('React 개발 가이드')).toBeVisible()\\n    await expect(page.getByText('Vue.js 시작하기')).not.toBeVisible()\\n  })\\n\\n  test('내용으로 게시물을 검색할 수 있어야 한다', async ({ page }) => {\\n    const searchInput = page.getByPlaceholder(/검색|search/i)\\n      .or(page.locator('[data-testid=\\\"search-input\\\"]'))\\n\\n    // 내용 검색\\n    await searchInput.fill('프레임워크')\\n    await page.keyboard.press('Enter')\\n\\n    // 검색 결과 확인\\n    await expect(page.getByText('Vue.js 시작하기')).toBeVisible()\\n    await expect(page.getByText('React 개발 가이드')).not.toBeVisible()\\n  })\\n\\n  test('검색 결과가 없을 때 적절한 메시지가 표시되어야 한다', async ({ page }) => {\\n    const searchInput = page.getByPlaceholder(/검색|search/i)\\n      .or(page.locator('[data-testid=\\\"search-input\\\"]'))\\n\\n    // 존재하지 않는 키워드 검색\\n    await searchInput.fill('존재하지않는키워드')\\n    await page.keyboard.press('Enter')\\n\\n    // \\\"검색 결과가 없습니다\\\" 메시지 확인\\n    await expect(page.getByText(/검색 결과가 없습니다|no results found/i)).toBeVisible()\\n  })\\n\\n  test('필터링 기능이 정상 작동해야 한다', async ({ page }) => {\\n    // 필터 드롭다운이 있다면 테스트\\n    const filterButton = page.getByRole('button', { name: /필터|filter/i })\\n    if (await filterButton.isVisible()) {\\n      await filterButton.click()\\n\\n      // 최신순 정렬 선택\\n      await page.getByRole('option', { name: /최신순|latest/i }).click()\\n\\n      // 정렬이 적용되었는지 확인 (첫 번째 게시물이 가장 최근 것인지)\\n      const firstPost = page.locator('[data-testid=\\\"post-item\\\"]').first()\\n      await expect(firstPost).toBeVisible()\\n    }\\n  })\\n})\"\n      |                                                                      ^",
+      "location": {
+        "file": "/home/dandy02/possible/team_hub/tests/e2e/posts.e2e.spec.ts",
+        "line": 325,
+        "column": 69
+      },
+      "snippet": "\u001b[90m   at \u001b[39mposts.e2e.spec.ts:325\n\n  323 |\n  324 |       // 댓글 입력란 찾기\n> 325 |       const commentInput = page.getByPlaceholder(/댓글을 입력하세요|댓글 작성/i)\\n        .or(page.locator('[data-testid=\\\"comment-input\\\"]'))\\n\\n      await commentInput.fill('이것은 테스트 댓글입니다.')\\n\\n      // 댓글 작성 버튼 클릭\\n      const submitButton = page.getByRole('button', { name: /댓글 작성|작성|submit/i })\\n      await submitButton.click()\\n\\n      // 댓글이 목록에 추가되었는지 확인\\n      await expect(page.getByText('이것은 테스트 댓글입니다.')).toBeVisible()\\n\\n      // 작성자 정보 확인\\n      await expect(page.getByText(user.username)).toBeVisible()\\n    })\\n\\n    test('댓글에 답글을 작성할 수 있어야 한다', async ({ page }) => {\\n      // 테스트용 게시물과 댓글 생성\\n      const user = testDataManager.getCreatedUsers()[0]\\n      const testPost = await testDataManager.createTestPost({\\n        title: '답글 테스트 게시물',\\n        content: '<p>답글을 달 게시물</p>',\\n        author_id: user.id\\n      })\\n\\n      // 게시물 상세 페이지로 이동\\n      await pageHelpers.navigateAndWait(`/posts/${testPost.id}`)\\n\\n      // 첫 번째 댓글 작성\\n      const commentInput = page.getByPlaceholder(/댓글을 입력하세요|댓글 작성/i)\\n      await commentInput.fill('원댓글입니다.')\\n      await page.getByRole('button', { name: /댓글 작성|작성|submit/i }).click()\\n\\n      // 댓글이 생성될 때까지 대기\\n      await expect(page.getByText('원댓글입니다.')).toBeVisible()\\n\\n      // 답글 버튼 클릭\\n      const replyButton = page.getByRole('button', { name: /답글|reply/i }).first()\\n      await replyButton.click()\\n\\n      // 답글 입력란이 나타나는지 확인\\n      const replyInput = page.locator('[data-testid=\\\"reply-input\\\"]')\\n        .or(page.getByPlaceholder(/답글을 입력하세요/i))\\n      await expect(replyInput).toBeVisible()\\n\\n      // 답글 작성\\n      await replyInput.fill('이것은 답글입니다.')\\n      await page.getByRole('button', { name: /답글 작성|작성/i }).click()\\n\\n      // 답글이 들여쓰기되어 표시되는지 확인\\n      await expect(page.getByText('이것은 답글입니다.')).toBeVisible()\\n    })\\n\\n    test('본인이 작성한 댓글을 삭제할 수 있어야 한다', async ({ page }) => {\\n      // 테스트용 게시물 생성\\n      const user = testDataManager.getCreatedUsers()[0]\\n      const testPost = await testDataManager.createTestPost({\\n        title: '댓글 삭제 테스트 게시물',\\n        content: '<p>댓글을 삭제할 게시물</p>',\\n        author_id: user.id\\n      })\\n\\n      // 게시물 상세 페이지로 이동\\n      await pageHelpers.navigateAndWait(`/posts/${testPost.id}`)\\n\\n      // 댓글 작성\\n      const commentInput = page.getByPlaceholder(/댓글을 입력하세요|댓글 작성/i)\\n      await commentInput.fill('삭제할 댓글입니다.')\\n      await page.getByRole('button', { name: /댓글 작성|작성|submit/i }).click()\\n\\n      // 댓글이 생성될 때까지 대기\\n      await expect(page.getByText('삭제할 댓글입니다.')).toBeVisible()\\n\\n      // 댓글 삭제 버튼 클릭\\n      const deleteCommentButton = page.getByRole('button', { name: /삭제|delete/i }).first()\\n      await deleteCommentButton.click()\\n\\n      // 확인 다이얼로그 처리\\n      await pageHelpers.waitForModal('댓글 삭제')\\n      await page.getByRole('button', { name: /확인|삭제/i }).click()\\n\\n      // 댓글이 삭제되었는지 확인\\n      await expect(page.getByText('삭제할 댓글입니다.')).not.toBeVisible()\\n    })\\n  })\\n\\n  test.describe('게시물 반응 기능', () => {\\n    test('게시물에 좋아요를 누를 수 있어야 한다', async ({ page }) => {\\n      // 테스트용 게시물 생성\\n      const user = testDataManager.getCreatedUsers()[0]\\n      const testPost = await testDataManager.createTestPost({\\n        title: '좋아요 테스트 게시물',\\n        content: '<p>좋아요를 누를 게시물</p>',\\n        author_id: user.id\\n      })\\n\\n      // 게시물 상세 페이지로 이동\\n      await pageHelpers.navigateAndWait(`/posts/${testPost.id}`)\\n\\n      // 좋아요 버튼 찾기\\n      const likeButton = page.getByRole('button', { name: /좋아요|like/i })\\n        .or(page.locator('[data-testid=\\\"like-button\\\"]'))\\n\\n      // 초기 좋아요 수 확인\\n      const initialLikeCount = await page.locator('[data-testid=\\\"like-count\\\"]').textContent()\\n\\n      // 좋아요 버튼 클릭\\n      await likeButton.click()\\n\\n      // 좋아요 수가 증가했는지 확인\\n      await expect(page.locator('[data-testid=\\\"like-count\\\"]')).not.toHaveText(initialLikeCount || '0')\\n\\n      // 버튼 상태가 활성화되었는지 확인\\n      await expect(likeButton).toHaveAttribute('aria-pressed', 'true')\\n    })\\n\\n    test('게시물을 북마크할 수 있어야 한다', async ({ page }) => {\\n      // 테스트용 게시물 생성\\n      const user = testDataManager.getCreatedUsers()[0]\\n      const testPost = await testDataManager.createTestPost({\\n        title: '북마크 테스트 게시물',\\n        content: '<p>북마크할 게시물</p>',\\n        author_id: user.id\\n      })\\n\\n      // 게시물 상세 페이지로 이동\\n      await pageHelpers.navigateAndWait(`/posts/${testPost.id}`)\\n\\n      // 북마크 버튼 클릭\\n      const bookmarkButton = page.getByRole('button', { name: /북마크|bookmark|저장/i })\\n        .or(page.locator('[data-testid=\\\"bookmark-button\\\"]'))\\n      await bookmarkButton.click()\\n\\n      // 성공 메시지 또는 상태 변화 확인\\n      await pageHelpers.waitForToast('북마크에 추가되었습니다')\\n\\n      // 버튼 상태가 활성화되었는지 확인\\n      await expect(bookmarkButton).toHaveAttribute('aria-pressed', 'true')\\n    })\\n  })\\n\\n  test.describe('접근성 테스트', () => {\\n    test('게시물 목록 페이지 접근성 검증', async ({ page }) => {\\n      await pageHelpers.navigateAndWait('/posts')\\n      await accessibility.checkPageA11y(page)\\n    })\\n\\n    test('게시물 작성 페이지 접근성 검증', async ({ page }) => {\\n      await pageHelpers.navigateAndWait('/posts/new')\\n      await accessibility.checkPageA11y(page)\\n    })\\n\\n    test('게시물 상세 페이지 접근성 검증', async ({ page }) => {\\n      // 테스트용 게시물 생성\\n      const user = testDataManager.getCreatedUsers()[0]\\n      const testPost = await testDataManager.createTestPost({\\n        title: '접근성 테스트 게시물',\\n        content: '<p>접근성을 확인할 게시물</p>',\\n        author_id: user.id\\n      })\\n\\n      await pageHelpers.navigateAndWait(`/posts/${testPost.id}`)\\n      await accessibility.checkPageA11y(page)\\n    })\\n\\n    test('키보드 네비게이션으로 게시물을 탐색할 수 있어야 한다', async ({ page }) => {\\n      await pageHelpers.navigateAndWait('/posts')\\n\\n      // Tab 키로 네비게이션 테스트\\n      await page.keyboard.press('Tab') // 첫 번째 포커스 가능한 요소\\n      await page.keyboard.press('Tab') // 다음 요소\\n      await page.keyboard.press('Enter') // 활성화\\n\\n      // 페이지가 변경되었는지 확인 (게시물 상세 페이지로 이동)\\n      await pageHelpers.waitForPageLoad()\\n    })\\n  })\\n\\n  test.describe('성능 테스트', () => {\\n    test('게시물 목록 로딩 성능이 양호해야 한다', async ({ page }) => {\\n      const startTime = Date.now()\\n\\n      await pageHelpers.navigateAndWait('/posts')\\n      await pageHelpers.waitForLoadingComplete()\\n\\n      const loadTime = Date.now() - startTime\\n\\n      // 페이지 로딩이 3초 이내에 완료되어야 함\\n      expect(loadTime).toBeLessThan(3000)\\n\\n      // 성능 메트릭 수집\\n      const metrics = await reportHelpers.collectPerformanceMetrics()\\n      console.log('Posts page performance metrics:', metrics)\\n\\n      // TTFB가 1초 이내여야 함\\n      expect(metrics.ttfb).toBeLessThan(1000)\\n    })\\n\\n    test('대용량 게시물 렌더링 성능이 양호해야 한다', async ({ page }) => {\\n      // 대용량 콘텐츠를 가진 게시물 생성\\n      const user = testDataManager.getCreatedUsers()[0]\\n      const longContent = '<p>' + 'Lorem ipsum '.repeat(1000) + '</p>'\\n      const testPost = await testDataManager.createTestPost({\\n        title: '대용량 콘텐츠 게시물',\\n        content: longContent,\\n        author_id: user.id\\n      })\\n\\n      const startTime = Date.now()\\n      await pageHelpers.navigateAndWait(`/posts/${testPost.id}`)\\n      const loadTime = Date.now() - startTime\\n\\n      // 대용량 게시물도 5초 이내에 로딩되어야 함\\n      expect(loadTime).toBeLessThan(5000)\\n    })\\n  })\\n})\\n\\ntest.describe('게시물 검색 및 필터링', () => {\\n  let testDataManager: TestDataManager\\n  let authHelpers: AuthHelpers\\n  let pageHelpers: PageHelpers\\n\\n  test.beforeEach(async ({ page }) => {\\n    testDataManager = new TestDataManager()\\n    authHelpers = new AuthHelpers(page)\\n    pageHelpers = new PageHelpers(page)\\n\\n    // 테스트 사용자 생성 및 로그인\\n    const testUser = await testDataManager.createTestUser()\\n    await authHelpers.loginAsTestUser(testUser)\\n\\n    // 검색용 테스트 게시물들 생성\\n    const user = testDataManager.getCreatedUsers()[0]\\n    await testDataManager.createTestPost({\\n      title: 'React 개발 가이드',\\n      content: '<p>React를 이용한 웹 개발 방법</p>',\\n      author_id: user.id\\n    })\\n    await testDataManager.createTestPost({\\n      title: 'Vue.js 시작하기',\\n      content: '<p>Vue.js 프레임워크 학습하기</p>',\\n      author_id: user.id\\n    })\\n    await testDataManager.createTestPost({\\n      title: 'JavaScript ES6 특징',\\n      content: '<p>최신 JavaScript 문법 정리</p>',\\n      author_id: user.id\\n    })\\n\\n    await pageHelpers.navigateAndWait('/posts')\\n  })\\n\\n  test.afterEach(async () => {\\n    await testDataManager.cleanup()\\n  })\\n\\n  test('제목으로 게시물을 검색할 수 있어야 한다', async ({ page }) => {\\n    // 검색 입력란 찾기\\n    const searchInput = page.getByPlaceholder(/검색|search/i)\\n      .or(page.locator('[data-testid=\\\"search-input\\\"]'))\\n\\n    // React 검색\\n    await searchInput.fill('React')\\n    await page.keyboard.press('Enter')\\n\\n    // 검색 결과 확인\\n    await expect(page.getByText('React 개발 가이드')).toBeVisible()\\n    await expect(page.getByText('Vue.js 시작하기')).not.toBeVisible()\\n  })\\n\\n  test('내용으로 게시물을 검색할 수 있어야 한다', async ({ page }) => {\\n    const searchInput = page.getByPlaceholder(/검색|search/i)\\n      .or(page.locator('[data-testid=\\\"search-input\\\"]'))\\n\\n    // 내용 검색\\n    await searchInput.fill('프레임워크')\\n    await page.keyboard.press('Enter')\\n\\n    // 검색 결과 확인\\n    await expect(page.getByText('Vue.js 시작하기')).toBeVisible()\\n    await expect(page.getByText('React 개발 가이드')).not.toBeVisible()\\n  })\\n\\n  test('검색 결과가 없을 때 적절한 메시지가 표시되어야 한다', async ({ page }) => {\\n    const searchInput = page.getByPlaceholder(/검색|search/i)\\n      .or(page.locator('[data-testid=\\\"search-input\\\"]'))\\n\\n    // 존재하지 않는 키워드 검색\\n    await searchInput.fill('존재하지않는키워드')\\n    await page.keyboard.press('Enter')\\n\\n    // \\\"검색 결과가 없습니다\\\" 메시지 확인\\n    await expect(page.getByText(/검색 결과가 없습니다|no results found/i)).toBeVisible()\\n  })\\n\\n  test('필터링 기능이 정상 작동해야 한다', async ({ page }) => {\\n    // 필터 드롭다운이 있다면 테스트\\n    const filterButton = page.getByRole('button', { name: /필터|filter/i })\\n    if (await filterButton.isVisible()) {\\n      await filterButton.click()\\n\\n      // 최신순 정렬 선택\\n      await page.getByRole('option', { name: /최신순|latest/i }).click()\\n\\n      // 정렬이 적용되었는지 확인 (첫 번째 게시물이 가장 최근 것인지)\\n      const firstPost = page.locator('[data-testid=\\\"post-item\\\"]').first()\\n      await expect(firstPost).toBeVisible()\\n    }\\n  })\\n})\"\n      |                                                                     ^"
+    },
+    {
+      "message": "Error: Cannot find module 'axe-playwright'\nRequire stack:\n- /home/dandy02/possible/team_hub/tests/utils/e2e-utils.ts\n- /home/dandy02/possible/team_hub/tests/e2e/realtime-features.e2e.spec.ts\n- /home/dandy02/possible/team_hub/node_modules/playwright/lib/transform/transform.js\n- /home/dandy02/possible/team_hub/node_modules/playwright/lib/common/configLoader.js\n- /home/dandy02/possible/team_hub/node_modules/playwright/lib/program.js\n- /home/dandy02/possible/team_hub/node_modules/@playwright/test/cli.js",
+      "stack": "Error: Cannot find module 'axe-playwright'\nRequire stack:\n- /home/dandy02/possible/team_hub/tests/utils/e2e-utils.ts\n- /home/dandy02/possible/team_hub/tests/e2e/realtime-features.e2e.spec.ts\n- /home/dandy02/possible/team_hub/node_modules/playwright/lib/transform/transform.js\n- /home/dandy02/possible/team_hub/node_modules/playwright/lib/common/configLoader.js\n- /home/dandy02/possible/team_hub/node_modules/playwright/lib/program.js\n- /home/dandy02/possible/team_hub/node_modules/@playwright/test/cli.js\n    at Object.<anonymous> (/home/dandy02/possible/team_hub/tests/utils/e2e-utils.ts:4:1)\n    at Object.<anonymous> (/home/dandy02/possible/team_hub/tests/e2e/realtime-features.e2e.spec.ts:2:1)",
+      "location": {
+        "file": "/home/dandy02/possible/team_hub/tests/utils/e2e-utils.ts",
+        "column": 1,
+        "line": 4
+      },
+      "snippet": "\u001b[90m   at \u001b[39m../utils/e2e-utils.ts:4\n\n  2 | import { createClient } from '@supabase/supabase-js'\n  3 | import { WebVitalsCollector, PerformanceMetrics } from './web-vitals-collector'\n> 4 | import { AxeResults, injectAxe, checkA11y, getViolations } from 'axe-playwright'\n    | ^\n  5 |\n  6 | // 테스트용 Supabase 클라이언트\n  7 | const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://localhost:54321'"
     }
   ],
-  "errors": [],
   "stats": {
-    "startTime": "2025-09-22T14:06:24.850Z",
-    "duration": 31235.742,
-    "expected": 2,
+    "startTime": "2025-10-27T02:58:27.276Z",
+    "duration": 809.2350000000001,
+    "expected": 0,
     "skipped": 0,
-    "unexpected": 1,
+    "unexpected": 0,
     "flaky": 0
   }
 }

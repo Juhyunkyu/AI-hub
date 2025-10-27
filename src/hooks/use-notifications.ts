@@ -6,6 +6,7 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { RealtimeChannel } from "@supabase/supabase-js";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/query-keys";
+import { channelRegistry } from "@/lib/realtime/channel-registry";
 
 interface UnreadCount {
   room_id: string;
@@ -146,133 +147,180 @@ export function useNotifications() {
     return room?.unreadCount || 0;
   }, [unreadQuery.data]);
 
-  // 안전한 채널 정리 함수
-  const cleanupChannel = useCallback((channel: RealtimeChannel) => {
-    try {
-      if (channel && typeof channel.unsubscribe === 'function') {
-        // 연결 상태 확인 후 정리
-        const status = channel?.state;
-        if (status && status !== 'closed' && status !== 'leaving') {
-          channel.unsubscribe();
-        }
-        supabase.removeChannel(channel);
-      }
-    } catch (error) {
-      // 정리 중 오류 발생해도 조용히 처리
-      if (process.env.NODE_ENV === 'development') {
-        console.warn('Channel cleanup warning:', error);
-      }
+  // ✅ 채널 레지스트리 기반 정리 함수
+  const cleanup = useCallback(async () => {
+    if (realtimeChannel && user) {
+      const channelName = `global:user:${user.id}:rooms`;
+      await channelRegistry.releaseChannel(channelName);
+      setRealtimeChannel(null);
     }
-  }, []);
+    setChannelStatus('disconnected');
+  }, [realtimeChannel, user]);
 
-  // 실시간 구독 설정 - WebSocket 연결 상태 추적 강화
+  // ✅ 실시간 구독 설정 - Channel Registry 통합
   useEffect(() => {
     if (!user) {
-      // 기존 채널 정리
-      if (realtimeChannel) {
-        cleanupChannel(realtimeChannel);
-        setRealtimeChannel(null);
-      }
-      setChannelStatus('disconnected');
+      cleanup();
       return;
     }
 
-    // 이미 같은 사용자의 채널이 연결되어 있으면 재사용
-    if (realtimeChannel && channelStatus === 'connected') {
-      return;
-    }
+    const subscribeToNotifications = async () => {
+      try {
+        // ✅ 채널 레지스트리로 중복 구독 방지
+        const channelName = `global:user:${user.id}:rooms`;
 
-    // 기존 채널 정리
-    if (realtimeChannel) {
-      cleanupChannel(realtimeChannel);
-    }
-
-    setChannelStatus('connecting');
-
-    // 새 채널 생성 및 구독
-    const channel = supabase
-      .channel(`user_notifications:${user.id}`, {
-        config: {
-          broadcast: { self: false }, // 자신의 브로드캐스트는 받지 않음
-          presence: { key: user.id } // 사용자별 고유 키
-        }
-      })
-      // ✅ 새 메시지 알림 (Nav 바 카운트 업데이트)
-      .on('broadcast', { event: 'new_message_notification' }, (payload) => {
-        const { room_id, sender_id, message_preview } = payload.payload;
-
-        // 자신의 메시지는 무시
-        if (sender_id === user.id) return;
-
-        if (process.env.NODE_ENV === 'development') {
-          console.log(`🔔 [Nav Notification] New message from ${sender_id} in room ${room_id}`);
-        }
-
-        // 즉시 카운트 증가 (Optimistic Update)
-        queryClient.setQueryData(queryKeys.chat.unreadCount(), (prev: any) => {
-          if (!prev) return prev;
-
-          const roomCounts = Array.isArray(prev.roomCounts) ? prev.roomCounts : [];
-          const existingRoom = roomCounts.find((r: any) => r?.room_id === room_id);
-
-          let newRoomCounts;
-          if (existingRoom) {
-            // 기존 방의 카운트 증가
-            newRoomCounts = roomCounts.map((r: any) =>
-              r?.room_id === room_id
-                ? { ...r, unreadCount: (r.unreadCount || 0) + 1 }
-                : r
-            );
-          } else {
-            // 새로운 방 추가
-            newRoomCounts = [...roomCounts, { room_id, unreadCount: 1 }];
+        // 기존 채널 정리
+        if (realtimeChannel) {
+          if (process.env.NODE_ENV === 'development') {
+            console.log(`🧹 [use-notifications] Releasing existing channel for user: ${user.id}`);
           }
+          await channelRegistry.releaseChannel(channelName);
+          setRealtimeChannel(null);
+        }
 
-          const total = newRoomCounts.reduce((sum: number, r: any) => sum + (r?.unreadCount || 0), 0);
+        setChannelStatus('connecting');
 
-          return {
-            ...(prev || {}),
-            hasUnreadMessages: total > 0,
-            totalUnreadCount: total,
-            roomCounts: newRoomCounts
-          };
+        // Realtime 인증 설정
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.access_token) {
+          await supabase.realtime.setAuth(session.access_token);
+          if (process.env.NODE_ENV === 'development') {
+            console.log(`✅ [use-notifications] Realtime auth set for user: ${user.id}`);
+          }
+        }
+
+        // ✅ 채널 레지스트리에서 채널 가져오기 (중복 방지)
+        const channelInfo = channelRegistry.getChannelInfo(channelName);
+        const isExistingChannel = channelInfo.exists;
+
+        const channel = await channelRegistry.getOrCreateChannel(channelName, {
+          broadcast: { self: false },
+          presence: { key: user.id }
         });
 
-        // 서버와 동기화 확인을 위한 백그라운드 새로고침
-        scheduleInvalidateUnread(1000);
-      })
-      // 읽음 상태 변경 시 (읽음 처리 broadcast)
-      .on('broadcast', { event: 'message_read_notification' }, (payload) => {
-        const { room_id } = payload.payload;
-
         if (process.env.NODE_ENV === 'development') {
-          console.log(`✅ [Nav Notification] Messages read in room ${room_id}`);
+          console.log(`🎧 [use-notifications] Registering event listeners for ${isExistingChannel ? 'existing' : 'new'} channel`);
         }
 
-        // 읽음 상태 변경 시 빠른 무효화
-        scheduleInvalidateUnread(150);
-      })
-      .subscribe(async (status) => {
-        if (status === 'SUBSCRIBED') {
+        // ✅ 항상 이 훅의 이벤트 리스너 등록 (각 훅은 독립적으로 이벤트 처리)
+        channel
+          // ✅ 새 메시지 알림 (Nav 바 카운트 업데이트)
+          .on('broadcast', { event: 'new_message' }, (payload) => {
+            if (process.env.NODE_ENV === 'development') {
+              console.log(`🔔 [use-notifications] Received broadcast:`, payload);
+            }
+
+            const { room_id, sender_id, message_preview } = payload.payload;
+
+            // 자신의 메시지는 무시
+            if (sender_id === user.id) {
+              if (process.env.NODE_ENV === 'development') {
+                console.log(`⚠️ [use-notifications] Ignoring own message from ${sender_id}`);
+              }
+              return;
+            }
+
+            if (process.env.NODE_ENV === 'development') {
+              console.log(`🔔 [use-notifications] Processing notification:`, { room_id, sender_id, message_preview });
+            }
+
+            // 즉시 카운트 증가 (Optimistic Update)
+            queryClient.setQueryData(queryKeys.chat.unreadCount(), (prev: any) => {
+              if (!prev) return prev;
+
+              const roomCounts = Array.isArray(prev.roomCounts) ? prev.roomCounts : [];
+              const existingRoom = roomCounts.find((r: any) => r?.room_id === room_id);
+
+              let newRoomCounts;
+              if (existingRoom) {
+                // 기존 방의 카운트 증가
+                newRoomCounts = roomCounts.map((r: any) =>
+                  r?.room_id === room_id
+                    ? { ...r, unreadCount: (r.unreadCount || 0) + 1 }
+                    : r
+                );
+              } else {
+                // 새로운 방 추가
+                newRoomCounts = [...roomCounts, { room_id, unreadCount: 1 }];
+              }
+
+              const total = newRoomCounts.reduce((sum: number, r: any) => sum + (r?.unreadCount || 0), 0);
+
+              const updatedData = {
+                ...(prev || {}),
+                hasUnreadMessages: total > 0,
+                totalUnreadCount: total,
+                roomCounts: newRoomCounts
+              };
+
+              if (process.env.NODE_ENV === 'development') {
+                console.log(`✅ [use-notifications] Updated unread count:`, updatedData);
+              }
+
+              return updatedData;
+            });
+
+            // 서버와 동기화 확인을 위한 백그라운드 새로고침
+            scheduleInvalidateUnread(1000);
+          })
+          // 읽음 상태 변경 시 (읽음 처리 broadcast)
+          .on('broadcast', { event: 'message_read_notification' }, (payload) => {
+            const { room_id } = payload.payload;
+
+            if (process.env.NODE_ENV === 'development') {
+              console.log(`✅ [Nav Notification] Messages read in room ${room_id}`);
+            }
+
+            // 읽음 상태 변경 시 빠른 무효화
+            scheduleInvalidateUnread(150);
+          });
+
+        // ✅ 새 채널일 때만 subscribe (이미 구독된 채널에 subscribe 호출 시 timeout 발생)
+        if (!isExistingChannel) {
+          channel.subscribe(async (status, err) => {
+            if (status === 'SUBSCRIBED') {
+              setChannelStatus('connected');
+              if (process.env.NODE_ENV === 'development') {
+                console.log(`✅ [use-notifications] Subscribed for user: ${user.id}`);
+              }
+            } else if (status === 'CHANNEL_ERROR') {
+              setChannelStatus('disconnected');
+              if (process.env.NODE_ENV === 'development') {
+                console.error('❌ [use-notifications] Channel error:', err);
+              }
+            } else if (status === 'TIMED_OUT') {
+              setChannelStatus('disconnected');
+              if (process.env.NODE_ENV === 'development') {
+                console.error('⏰ [use-notifications] Connection timed out');
+              }
+            } else if (status === 'CLOSED') {
+              setChannelStatus('disconnected');
+              if (process.env.NODE_ENV === 'development') {
+                console.warn('🔌 [use-notifications] Connection closed');
+              }
+            }
+          });
+        } else {
+          // ✅ 기존 채널 재사용 - 이미 구독됨, 상태만 업데이트
           setChannelStatus('connected');
-        } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
-          setChannelStatus('disconnected');
+          if (process.env.NODE_ENV === 'development') {
+            console.log(`♻️ [use-notifications] Reusing existing channel (already subscribed)`);
+          }
         }
-      });
 
-    setRealtimeChannel(channel);
+        setRealtimeChannel(channel);
 
-    // 정리 함수 - React 19 최적화
-    return () => {
-      // 대기 중인 타임아웃 정리
-      if (loadTimeoutRef.current) {
-        clearTimeout(loadTimeoutRef.current);
-        loadTimeoutRef.current = null;
+      } catch (error) {
+        setChannelStatus('disconnected');
+        console.error('❌ [use-notifications] Failed to subscribe:', error);
       }
-      cleanupChannel(channel);
-      setChannelStatus('disconnected');
     };
-  }, [user, cleanupChannel, scheduleInvalidateUnread]);
+
+    subscribeToNotifications();
+
+    // cleanup 함수 직접 반환
+    return () => cleanup();
+  }, [user]); // ✅ user만 dependency로 설정
 
   // 사용자 변경 시 상태 초기화 (쿼리는 enabled 플래그로 제어)
   useEffect(() => {

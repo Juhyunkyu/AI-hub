@@ -122,13 +122,12 @@ export function useGlobalChatRoomsSubscription({
           presence: { key: user.id }
         });
 
-        // ✅ 새로 생성된 채널에만 이벤트 리스너 등록 (중복 방지)
-        if (!isExistingChannel) {
-          if (process.env.NODE_ENV === 'development') {
-            console.log(`🎧 [Global Rooms] Registering event listeners for new channel`);
-          }
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`🎧 [Global Rooms] Registering event listeners for ${isExistingChannel ? 'existing' : 'new'} channel`);
+        }
 
-          channel
+        // ✅ 항상 이 훅의 이벤트 리스너 등록 (각 훅은 독립적으로 이벤트 처리)
+        channel
           // 채팅방 초대 이벤트
           .on('broadcast', { event: 'room_joined' }, (payload) => {
             const { user_id, room_id } = payload.payload;
@@ -188,8 +187,11 @@ export function useGlobalChatRoomsSubscription({
                 }
               });
             }
-          })
-          .subscribe((status, err) => {
+          });
+
+        // ✅ 새 채널일 때만 subscribe (이미 구독된 채널에 subscribe 호출 시 timeout 발생)
+        if (!isExistingChannel) {
+          channel.subscribe((status, err) => {
             if (status === 'SUBSCRIBED') {
               setIsConnected(true);
               setConnectionState('connected');
@@ -220,12 +222,12 @@ export function useGlobalChatRoomsSubscription({
             }
           });
         } else {
-          // ✅ 기존 채널 재사용 - 리스너 등록 없이 상태만 업데이트
+          // ✅ 기존 채널 재사용 - 이미 구독됨, 상태만 업데이트
           setIsConnected(true);
           setConnectionState('connected');
           setError(null);
           if (process.env.NODE_ENV === 'development') {
-            console.log(`♻️ [Global Rooms] Reusing existing channel, skipping listener registration`);
+            console.log(`♻️ [Global Rooms] Reusing existing channel (already subscribed)`);
           }
         }
 
