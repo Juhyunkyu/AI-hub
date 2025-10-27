@@ -5,6 +5,7 @@ import { useAuthStore } from "@/stores/auth";
 import { ChatMessage, ChatRoomWithParticipants } from "@/types/chat";
 import { toast } from "sonner";
 import { useRealtimeChat, useTypingIndicator } from "./use-realtime-chat";
+import { useGlobalChatRoomsSubscription } from "./use-global-chat-rooms-subscription";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 // Supabase 클라이언트 (Broadcast용)
@@ -83,6 +84,9 @@ export function useChatHook() {
   // React 19 + Context7 Pattern: 중복 메시지 처리 방지 (batching 대응)
   const processingMessagesRef = useRef<Set<string>>(new Set());
   const processedMessagesRef = useRef<Set<string>>(new Set());
+
+  // ✅ Broadcast 채널 캐시 (중복 구독 방지)
+  const broadcastChannelCacheRef = useRef<Map<string, RealtimeChannel>>(new Map());
 
   // 실시간 메시지 핸들러들 (React 19 최적화)
   const handleNewRealtimeMessage = useCallback((message: ChatMessage) => {
@@ -304,6 +308,37 @@ export function useChatHook() {
     roomId: currentRoom?.id || null
   });
 
+  // ✅ Broadcast 채널 재사용 헬퍼 함수 (중복 구독 방지)
+  const getOrCreateBroadcastChannel = useCallback((userId: string): RealtimeChannel => {
+    const channelName = `global:user:${userId}:rooms`;
+
+    if (!broadcastChannelCacheRef.current.has(channelName)) {
+      const channel = supabase.channel(channelName);
+      broadcastChannelCacheRef.current.set(channelName, channel);
+
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`📡 Created broadcast channel: ${channelName}`);
+      }
+    }
+
+    return broadcastChannelCacheRef.current.get(channelName)!;
+  }, []);
+
+  // ✅ Broadcast 채널 정리 함수
+  const cleanupBroadcastChannels = useCallback(() => {
+    broadcastChannelCacheRef.current.forEach((channel, channelName) => {
+      try {
+        supabase.removeChannel(channel);
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`🧹 Removed broadcast channel: ${channelName}`);
+        }
+      } catch (error) {
+        console.warn(`Failed to remove channel ${channelName}:`, error);
+      }
+    });
+    broadcastChannelCacheRef.current.clear();
+  }, []);
+
   // 채팅방 목록 로드 (정렬된 채팅방 배열을 반환)
   const loadRooms = useCallback(async (): Promise<ChatRoomWithParticipants[]> => {
     if (!user) return [];
@@ -327,6 +362,35 @@ export function useChatHook() {
       setLoading(false);
     }
   }, [user]);
+
+  // ✅ Optimistic Update로 화면 깜빡임 없이 채팅방 리스트 업데이트
+  const handleRoomsUpdate = useCallback((update?: any) => {
+    if (!update) {
+      // payload가 없으면 전체 새로고침 (room_joined, room_left)
+      loadRooms();
+      return;
+    }
+
+    if (update.type === 'new_message' && update.room_id && update.last_message) {
+      // ✅ Optimistic Update: 화면 깜빡임 없이 마지막 메시지만 업데이트
+      setRooms(prev => {
+        const updatedRooms = prev.map(room =>
+          room.id === update.room_id
+            ? { ...room, last_message: update.last_message as any }
+            : room
+        );
+        return sortRoomsByLastMessage(updatedRooms);
+      });
+    } else {
+      // 다른 타입은 전체 새로고침
+      loadRooms();
+    }
+  }, [loadRooms]);
+
+  // ✅ 전역 채팅방 실시간 구독 (새 메시지 시 리스트 자동 업데이트)
+  useGlobalChatRoomsSubscription({
+    onRoomsChanged: handleRoomsUpdate // Optimistic Update 사용
+  });
 
   // 메시지 로드
   const loadMessages = useCallback(
@@ -459,6 +523,7 @@ export function useChatHook() {
 
           // ✅ Broadcast로 실시간 전송 (클라이언트에서 전송)
           try {
+            // 1. 채팅방 내 메시지 broadcast
             const channel = supabase.channel(`room:${roomId}:messages`);
             await channel.send({
               type: 'broadcast',
@@ -466,7 +531,43 @@ export function useChatHook() {
               payload: serverMessage
             });
             if (process.env.NODE_ENV === 'development') {
-              console.log(`📡 Broadcast 전송 성공 (텍스트): ${serverMessage.id}`);
+              console.log(`📡 Broadcast 전송 성공 (채팅방 내): ${serverMessage.id}`);
+            }
+
+            // 2. 채팅방 리스트 업데이트를 위한 global broadcast
+            // 현재 방의 참여자 찾기
+            const targetRoom = rooms.find(r => r.id === roomId);
+            if (targetRoom?.participants) {
+              // 자신을 제외한 모든 참여자에게 전송
+              const broadcastPromises = targetRoom.participants
+                .filter(p => p.user_id !== user.id)
+                .map(async (participant) => {
+                  try {
+                    // ✅ 채널 재사용 (중복 구독 방지)
+                    const globalChannel = getOrCreateBroadcastChannel(participant.user_id);
+                    await globalChannel.send({
+                      type: 'broadcast',
+                      event: 'new_message',
+                      payload: {
+                        room_id: roomId,
+                        sender_id: user.id,
+                        sender_username: user.username || 'Unknown',
+                        content: serverMessage.content || '',
+                        message_type: serverMessage.message_type || 'text'
+                      }
+                    });
+
+                    // ✅ Nav 알림은 서버에서 전송 (API route에서 처리)
+                  } catch (error) {
+                    console.warn(`Failed to send broadcast to user ${participant.user_id}:`, error);
+                  }
+                });
+
+              await Promise.all(broadcastPromises);
+
+              if (process.env.NODE_ENV === 'development') {
+                console.log(`📡 All broadcasts 전송 완료 (${targetRoom.participants.length - 1}명)`);
+              }
             }
           } catch (broadcastError) {
             console.warn('Broadcast 전송 실패 (메시지는 저장됨):', broadcastError);
@@ -506,7 +607,7 @@ export function useChatHook() {
         toast.error("메시지 전송에 실패했습니다");
       }
     },
-    [user]
+    [user, rooms, getOrCreateBroadcastChannel] // getOrCreateBroadcastChannel 추가
   );
 
   // 초기 로드
@@ -515,6 +616,13 @@ export function useChatHook() {
       loadRooms();
     }
   }, [user, loadRooms]);
+
+  // ✅ Cleanup: 컴포넌트 언마운트 시 broadcast 채널 정리
+  useEffect(() => {
+    return () => {
+      cleanupBroadcastChannels();
+    };
+  }, [cleanupBroadcastChannels]);
 
   // ✅ Admin Client DELETE 이벤트 수신 (커스텀 이벤트 - Hard Delete)
   useEffect(() => {

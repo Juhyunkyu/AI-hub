@@ -197,35 +197,61 @@ export function useNotifications() {
           presence: { key: user.id } // 사용자별 고유 키
         }
       })
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'chat_messages'
-        },
-        (payload) => {
-          // Supabase 최적화: 새 메시지 실시간 처리
-          if (payload.new && payload.new.sender_id !== user.id) {
-            // ✅ 현재 보고 있는 채팅방의 메시지는 즉시 읽음 처리되므로
-            // unread 카운트 갱신 약간 지연 (markAsRead 완료 후 갱신)
-            scheduleInvalidateUnread(500);
+      // ✅ 새 메시지 알림 (Nav 바 카운트 업데이트)
+      .on('broadcast', { event: 'new_message_notification' }, (payload) => {
+        const { room_id, sender_id, message_preview } = payload.payload;
+
+        // 자신의 메시지는 무시
+        if (sender_id === user.id) return;
+
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`🔔 [Nav Notification] New message from ${sender_id} in room ${room_id}`);
+        }
+
+        // 즉시 카운트 증가 (Optimistic Update)
+        queryClient.setQueryData(queryKeys.chat.unreadCount(), (prev: any) => {
+          if (!prev) return prev;
+
+          const roomCounts = Array.isArray(prev.roomCounts) ? prev.roomCounts : [];
+          const existingRoom = roomCounts.find((r: any) => r?.room_id === room_id);
+
+          let newRoomCounts;
+          if (existingRoom) {
+            // 기존 방의 카운트 증가
+            newRoomCounts = roomCounts.map((r: any) =>
+              r?.room_id === room_id
+                ? { ...r, unreadCount: (r.unreadCount || 0) + 1 }
+                : r
+            );
+          } else {
+            // 새로운 방 추가
+            newRoomCounts = [...roomCounts, { room_id, unreadCount: 1 }];
           }
+
+          const total = newRoomCounts.reduce((sum: number, r: any) => sum + (r?.unreadCount || 0), 0);
+
+          return {
+            ...(prev || {}),
+            hasUnreadMessages: total > 0,
+            totalUnreadCount: total,
+            roomCounts: newRoomCounts
+          };
+        });
+
+        // 서버와 동기화 확인을 위한 백그라운드 새로고침
+        scheduleInvalidateUnread(1000);
+      })
+      // 읽음 상태 변경 시 (읽음 처리 broadcast)
+      .on('broadcast', { event: 'message_read_notification' }, (payload) => {
+        const { room_id } = payload.payload;
+
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`✅ [Nav Notification] Messages read in room ${room_id}`);
         }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'message_reads',
-          filter: `user_id=eq.${user.id}`
-        },
-        (payload) => {
-          // 읽음 상태 변경 시 빠른 무효화
-          scheduleInvalidateUnread(150);
-        }
-      )
+
+        // 읽음 상태 변경 시 빠른 무효화
+        scheduleInvalidateUnread(150);
+      })
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
           setChannelStatus('connected');

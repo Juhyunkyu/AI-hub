@@ -25,11 +25,24 @@ import { useEffect, useCallback, useRef, useState } from "react";
 import { RealtimeChannel } from "@supabase/supabase-js";
 import { useAuthStore } from "@/stores/auth";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { channelRegistry } from "@/lib/realtime/channel-registry";
 
 const supabase = createSupabaseBrowserClient();
 
+interface RoomUpdatePayload {
+  type: 'new_message' | 'room_joined' | 'room_left';
+  room_id?: string;
+  last_message?: {
+    content: string;
+    sender_id: string;
+    sender_username: string;
+    message_type: string;
+    created_at: string;
+  };
+}
+
 interface GlobalChatRoomsSubscriptionProps {
-  onRoomsChanged?: () => void; // 채팅방 목록 변경 시 호출되는 콜백
+  onRoomsChanged?: (update?: RoomUpdatePayload) => void; // 채팅방 목록 변경 시 호출되는 콜백
 }
 
 interface GlobalChatRoomsSubscriptionReturn {
@@ -55,16 +68,17 @@ export function useGlobalChatRoomsSubscription({
     onRoomsChangedRef.current = onRoomsChanged;
   }, [onRoomsChanged]);
 
-  // 정리 함수
-  const cleanup = useCallback(() => {
+  // 정리 함수 - 채널 레지스트리 사용
+  const cleanup = useCallback(async () => {
     if (channelRef.current) {
-      supabase.removeChannel(channelRef.current);
+      const channelName = `global:user:${user?.id}:rooms`;
+      await channelRegistry.releaseChannel(channelName);
       channelRef.current = null;
     }
     setIsConnected(false);
     setConnectionState('disconnected');
     setError(null);
-  }, []);
+  }, [user?.id]);
 
   // 전역 채팅방 Broadcast 구독
   useEffect(() => {
@@ -75,6 +89,18 @@ export function useGlobalChatRoomsSubscription({
 
     const subscribeToGlobalRooms = async () => {
       try {
+        // ✅ 채널 레지스트리로 중복 구독 방지
+        const channelName = `global:user:${user.id}:rooms`;
+
+        // 기존 채널 정리
+        if (channelRef.current) {
+          if (process.env.NODE_ENV === 'development') {
+            console.log(`🧹 [Global Rooms] Releasing existing channel for user: ${user.id}`);
+          }
+          await channelRegistry.releaseChannel(channelName);
+          channelRef.current = null;
+        }
+
         setConnectionState('connecting');
         setError(null);
 
@@ -87,9 +113,22 @@ export function useGlobalChatRoomsSubscription({
           }
         }
 
-        // ✅ Broadcast 방식: 타이핑 인디케이터와 동일한 패턴
-        const channel = supabase
-          .channel(`global:user:${user.id}:rooms`)
+        // ✅ 채널 레지스트리에서 채널 가져오기 (중복 방지)
+        const channelInfo = channelRegistry.getChannelInfo(channelName);
+        const isExistingChannel = channelInfo.exists;
+
+        const channel = await channelRegistry.getOrCreateChannel(channelName, {
+          broadcast: { self: false },
+          presence: { key: user.id }
+        });
+
+        // ✅ 새로 생성된 채널에만 이벤트 리스너 등록 (중복 방지)
+        if (!isExistingChannel) {
+          if (process.env.NODE_ENV === 'development') {
+            console.log(`🎧 [Global Rooms] Registering event listeners for new channel`);
+          }
+
+          channel
           // 채팅방 초대 이벤트
           .on('broadcast', { event: 'room_joined' }, (payload) => {
             const { user_id, room_id } = payload.payload;
@@ -100,9 +139,9 @@ export function useGlobalChatRoomsSubscription({
                 console.log(`📥 [Global Rooms] Room joined:`, { user_id, room_id });
               }
 
-              // 채팅방 목록 새로고침
+              // 채팅방 목록 새로고침 (전체 API 호출 필요)
               if (onRoomsChangedRef.current) {
-                onRoomsChangedRef.current();
+                onRoomsChangedRef.current({ type: 'room_joined', room_id });
               }
             }
           })
@@ -116,9 +155,9 @@ export function useGlobalChatRoomsSubscription({
                 console.log(`📤 [Global Rooms] Room left:`, { user_id, room_id });
               }
 
-              // 채팅방 목록 새로고침
+              // 채팅방 목록 새로고침 (전체 API 호출 필요)
               if (onRoomsChangedRef.current) {
-                onRoomsChangedRef.current();
+                onRoomsChangedRef.current({ type: 'room_left', room_id });
               }
             }
           })
@@ -135,9 +174,19 @@ export function useGlobalChatRoomsSubscription({
               });
             }
 
-            // 채팅방 목록 새로고침 (마지막 메시지 및 읽지 않음 카운트 업데이트)
+            // ✅ Optimistic Update: payload를 전달하여 화면 깜빡임 없이 업데이트
             if (onRoomsChangedRef.current) {
-              onRoomsChangedRef.current();
+              onRoomsChangedRef.current({
+                type: 'new_message',
+                room_id,
+                last_message: {
+                  content,
+                  sender_id,
+                  sender_username,
+                  message_type,
+                  created_at: new Date().toISOString()
+                }
+              });
             }
           })
           .subscribe((status, err) => {
@@ -170,6 +219,15 @@ export function useGlobalChatRoomsSubscription({
               }
             }
           });
+        } else {
+          // ✅ 기존 채널 재사용 - 리스너 등록 없이 상태만 업데이트
+          setIsConnected(true);
+          setConnectionState('connected');
+          setError(null);
+          if (process.env.NODE_ENV === 'development') {
+            console.log(`♻️ [Global Rooms] Reusing existing channel, skipping listener registration`);
+          }
+        }
 
         channelRef.current = channel;
 
@@ -184,7 +242,7 @@ export function useGlobalChatRoomsSubscription({
 
     // cleanup 함수 직접 반환
     return () => cleanup();
-  }, [user, cleanup]);
+  }, [user]); // ✅ user만 dependency로 설정
 
   return {
     isConnected,

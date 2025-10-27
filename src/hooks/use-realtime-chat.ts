@@ -1,13 +1,25 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
-import { RealtimeChannel, RealtimePostgresChangesPayload } from "@supabase/supabase-js";
-import { ChatMessage } from "@/types/chat";
+import { RealtimeChannel } from "@supabase/supabase-js";
+import type { ChatMessage } from "@/types/chat";
 import { useAuthStore } from "@/stores/auth";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { channelRegistry } from "@/lib/realtime/channel-registry";
 
 // 기존 프로젝트의 Supabase 클라이언트 사용 (중복 인스턴스 방지)
 const supabase = createSupabaseBrowserClient();
+
+// Broadcast payload 타입 정의
+interface MessageChangePayload {
+  eventType: 'INSERT' | 'UPDATE' | 'DELETE';
+  new: ChatMessage;
+  old: Partial<ChatMessage>;
+  schema: string;
+  table: string;
+  commit_timestamp: string;
+  errors: null;
+}
 
 interface RealtimeChatHookProps {
   roomId: string | null;
@@ -39,7 +51,7 @@ export function useRealtimeChat({
 
   // 채널 레퍼런스 관리
   const channelRef = useRef<RealtimeChannel | null>(null);
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout>();
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | undefined>();
   const retryCountRef = useRef(0);
 
   // ✅ 100% Broadcast: WebSocket 상태 추적 (재연결 감지용)
@@ -51,11 +63,12 @@ export function useRealtimeChat({
   // DELETE 이벤트 중복 방지를 위한 캐시
   const processedDeletesRef = useRef<Set<string>>(new Set());
 
-  // 연결 정리 함수 (메모리 누수 방지 강화)
-  const cleanup = useCallback(() => {
+  // 연결 정리 함수 (메모리 누수 방지 강화) - 채널 레지스트리 사용
+  const cleanup = useCallback(async (roomId?: string | null) => {
     // 채널 정리
-    if (channelRef.current) {
-      supabase.removeChannel(channelRef.current);
+    if (channelRef.current && roomId) {
+      const channelName = `room:${roomId}:messages`;
+      await channelRegistry.releaseChannel(channelName);
       channelRef.current = null;
     }
 
@@ -82,7 +95,7 @@ export function useRealtimeChat({
 
   // 메시지 변경 핸들러
   const handleMessageChange = useCallback((
-    payload: RealtimePostgresChangesPayload<ChatMessage>
+    payload: MessageChangePayload
   ) => {
     const { eventType, new: newRecord, old: oldRecord } = payload;
 
@@ -168,11 +181,13 @@ export function useRealtimeChat({
         console.warn(`⚠️ No access token available for realtime auth`);
       }
 
+      // ✅ 채널 레지스트리로 중복 구독 방지
+      const channelName = `room:${roomId}:messages`;
+
       // 같은 roomId면 재구독 금지
       // @ts-ignore - topic is internal
       const currentTopic = (channelRef.current && (channelRef.current as any).topic) as string | undefined;
-      const nextTopic = `room:${roomId}:messages`;
-      if (currentTopic === nextTopic) {
+      if (currentTopic === channelName) {
         if (process.env.NODE_ENV === 'development') {
           console.log('🔁 Reuse existing realtime channel for same room');
         }
@@ -182,120 +197,142 @@ export function useRealtimeChat({
         return;
       }
 
-      // ✅ 100% Broadcast: postgres_changes 제거, Broadcast만 사용
-      const nextChannel = supabase
-        .channel(nextTopic, {
-          config: {
-            broadcast: { self: false }, // 자신의 메시지는 받지 않음
-            presence: { key: user.id }
-          }
-        })
-        // Broadcast 리스너: 새 메시지
-        .on('broadcast', { event: 'new_message' }, (payload) => {
-          const message = payload.payload;
-          if (process.env.NODE_ENV === 'development') {
-            console.log(`📡 Broadcast new_message received: ${message.id}`);
-          }
-
-          // postgres_changes와 동일한 형식으로 변환
-          handleMessageChange({
-            eventType: 'INSERT',
-            new: message,
-            old: {},
-            schema: 'public',
-            table: 'chat_messages',
-            commit_timestamp: new Date().toISOString(),
-            errors: null
-          } as any);
-        })
-        // Broadcast 리스너: 메시지 업데이트
-        .on('broadcast', { event: 'update_message' }, (payload) => {
-          const message = payload.payload;
-          if (process.env.NODE_ENV === 'development') {
-            console.log(`📡 Broadcast update_message received: ${message.id}`);
-          }
-
-          handleMessageChange({
-            eventType: 'UPDATE',
-            new: message,
-            old: {},
-            schema: 'public',
-            table: 'chat_messages',
-            commit_timestamp: new Date().toISOString(),
-            errors: null
-          } as any);
-        })
-        // Broadcast 리스너: 메시지 삭제
-        .on('broadcast', { event: 'delete_message' }, (payload) => {
-          const { message_id } = payload.payload;
-          if (process.env.NODE_ENV === 'development') {
-            console.log(`📡 Broadcast delete_message received: ${message_id}`);
-          }
-
-          handleMessageChange({
-            eventType: 'DELETE',
-            new: {},
-            old: { id: message_id },
-            schema: 'public',
-            table: 'chat_messages',
-            commit_timestamp: new Date().toISOString(),
-            errors: null
-          } as any);
-        })
-        .subscribe((status, err) => {
-          if (status === 'SUBSCRIBED') {
-            const wasDisconnected = previousStatusRef.current === 'disconnected' || previousStatusRef.current === 'error';
-
-            setIsConnected(true);
-            setConnectionState('connected');
-            setError(null);
-
-            // ✅ 100% Broadcast: 재연결 감지 및 동기화 트리거
-            // 조건: (1) 이전에 연결 끊김 OR (2) 재시도 카운트 > 0
-            if ((wasDisconnected || retryCountRef.current > 0) && onSyncNeeded) {
-              if (process.env.NODE_ENV === 'development') {
-                console.log(`🔄 Broadcast reconnected (${previousStatusRef.current} → connected), syncing messages for room: ${roomId}`);
-              }
-              onSyncNeeded(roomId);
-            }
-
-            previousStatusRef.current = 'connected';
-            retryCountRef.current = 0;
-            if (process.env.NODE_ENV === 'development') {
-              console.log(`✅ Broadcast channel SUBSCRIBED for room: ${roomId}`);
-            }
-          } else if (status === 'CHANNEL_ERROR') {
-            previousStatusRef.current = 'error';
-            setIsConnected(false);
-            setConnectionState('error');
-            setError(err?.message || '채널 연결 오류');
-            if (process.env.NODE_ENV === 'development') {
-              console.error('❌ Broadcast channel error:', { roomId, err });
-            }
-          } else if (status === 'TIMED_OUT') {
-            previousStatusRef.current = 'error';
-            setIsConnected(false);
-            setConnectionState('error');
-            setError('연결 시간 초과');
-            if (process.env.NODE_ENV === 'development') {
-              console.error('⏰ Broadcast connection timed out:', { roomId });
-            }
-          } else if (status === 'CLOSED') {
-            previousStatusRef.current = 'disconnected';
-            setIsConnected(false);
-            setConnectionState('disconnected');
-            if (process.env.NODE_ENV === 'development') {
-              console.warn('🔌 Broadcast connection closed:', { roomId });
-            }
-          }
-        });
-
-      // 스왑: 새 채널 설정 후 이전 채널 정리
-      const prev = channelRef.current;
-      channelRef.current = nextChannel;
-      if (prev) {
-        supabase.removeChannel(prev);
+      // 기존 채널 정리
+      if (channelRef.current) {
+        const prevTopic = currentTopic;
+        if (prevTopic) {
+          await channelRegistry.releaseChannel(prevTopic);
+        }
+        channelRef.current = null;
       }
+
+      // ✅ 채널 레지스트리에서 채널 가져오기 (중복 방지)
+      const channelInfo = channelRegistry.getChannelInfo(channelName);
+      const isExistingChannel = channelInfo.exists;
+
+      const nextChannel = await channelRegistry.getOrCreateChannel(channelName, {
+        broadcast: { self: false }, // 자신의 메시지는 받지 않음
+        presence: { key: user.id }
+      });
+
+      // ✅ 새로 생성된 채널에만 이벤트 리스너 등록 (중복 방지)
+      if (!isExistingChannel) {
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`🎧 [Room ${roomId}] Registering event listeners for new channel`);
+        }
+
+        nextChannel
+          // Broadcast 리스너: 새 메시지
+          .on('broadcast', { event: 'new_message' }, (payload) => {
+            const message = payload.payload;
+            if (process.env.NODE_ENV === 'development') {
+              console.log(`📡 Broadcast new_message received: ${message.id}`);
+            }
+
+            // 메시지 변경 핸들러 형식으로 변환
+            handleMessageChange({
+              eventType: 'INSERT',
+              new: message,
+              old: {},
+              schema: 'public',
+              table: 'chat_messages',
+              commit_timestamp: new Date().toISOString(),
+              errors: null
+            } as any);
+          })
+          // Broadcast 리스너: 메시지 업데이트
+          .on('broadcast', { event: 'update_message' }, (payload) => {
+            const message = payload.payload;
+            if (process.env.NODE_ENV === 'development') {
+              console.log(`📡 Broadcast update_message received: ${message.id}`);
+            }
+
+            handleMessageChange({
+              eventType: 'UPDATE',
+              new: message,
+              old: {},
+              schema: 'public',
+              table: 'chat_messages',
+              commit_timestamp: new Date().toISOString(),
+              errors: null
+            } as any);
+          })
+          // Broadcast 리스너: 메시지 삭제
+          .on('broadcast', { event: 'delete_message' }, (payload) => {
+            const { message_id } = payload.payload;
+            if (process.env.NODE_ENV === 'development') {
+              console.log(`📡 Broadcast delete_message received: ${message_id}`);
+            }
+
+            handleMessageChange({
+              eventType: 'DELETE',
+              new: {},
+              old: { id: message_id },
+              schema: 'public',
+              table: 'chat_messages',
+              commit_timestamp: new Date().toISOString(),
+              errors: null
+            } as any);
+          })
+          .subscribe((status, err) => {
+            if (status === 'SUBSCRIBED') {
+              const wasDisconnected = previousStatusRef.current === 'disconnected' || previousStatusRef.current === 'error';
+
+              setIsConnected(true);
+              setConnectionState('connected');
+              setError(null);
+
+              // ✅ 100% Broadcast: 재연결 감지 및 동기화 트리거
+              // 조건: (1) 이전에 연결 끊김 OR (2) 재시도 카운트 > 0
+              if ((wasDisconnected || retryCountRef.current > 0) && onSyncNeeded) {
+                if (process.env.NODE_ENV === 'development') {
+                  console.log(`🔄 Broadcast reconnected (${previousStatusRef.current} → connected), syncing messages for room: ${roomId}`);
+                }
+                onSyncNeeded(roomId);
+              }
+
+              previousStatusRef.current = 'connected';
+              retryCountRef.current = 0;
+              if (process.env.NODE_ENV === 'development') {
+                console.log(`✅ Broadcast channel SUBSCRIBED for room: ${roomId}`);
+              }
+            } else if (status === 'CHANNEL_ERROR') {
+              previousStatusRef.current = 'error';
+              setIsConnected(false);
+              setConnectionState('error');
+              setError(err?.message || '채널 연결 오류');
+              if (process.env.NODE_ENV === 'development') {
+                console.error('❌ Broadcast channel error:', { roomId, err });
+              }
+            } else if (status === 'TIMED_OUT') {
+              previousStatusRef.current = 'error';
+              setIsConnected(false);
+              setConnectionState('error');
+              setError('연결 시간 초과');
+              if (process.env.NODE_ENV === 'development') {
+                console.error('⏰ Broadcast connection timed out:', { roomId });
+              }
+            } else if (status === 'CLOSED') {
+              previousStatusRef.current = 'disconnected';
+              setIsConnected(false);
+              setConnectionState('disconnected');
+              if (process.env.NODE_ENV === 'development') {
+                console.warn('🔌 Broadcast connection closed:', { roomId });
+              }
+            }
+          });
+      } else {
+        // ✅ 기존 채널 재사용 - 리스너 등록 없이 상태만 업데이트
+        setIsConnected(true);
+        setConnectionState('connected');
+        setError(null);
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`♻️ [Room ${roomId}] Reusing existing channel, skipping listener registration`);
+        }
+      }
+
+      // 새 채널 설정
+      channelRef.current = nextChannel;
 
     } catch (error) {
       setConnectionState('error');
@@ -325,10 +362,10 @@ export function useRealtimeChat({
     if (roomId && user) {
       subscribeToRoom(roomId);
     } else {
-      cleanup();
+      cleanup(roomId);
     }
 
-    return cleanup;
+    return () => cleanup(roomId);
   }, [roomId, user, subscribeToRoom, cleanup]);
 
   // 연결 오류 시 자동 재연결
@@ -340,8 +377,8 @@ export function useRealtimeChat({
 
   // 컴포넌트 언마운트 시 정리
   useEffect(() => {
-    return cleanup;
-  }, [cleanup]);
+    return () => cleanup(roomId);
+  }, [cleanup, roomId]);
 
   return {
     isConnected,

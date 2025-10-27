@@ -323,8 +323,6 @@ export async function POST(request: NextRequest) {
       });
 
     // ✅ Broadcast는 클라이언트에서 전송 (서버에서는 메시지 데이터만 반환)
-    // 클라이언트(use-chat.ts, chat-layout.tsx)가 API 응답 후 Broadcast 전송
-
     return NextResponse.json({ message });
   } catch (error) {
     console.error("API error:", error);
