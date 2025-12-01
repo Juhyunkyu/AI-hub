@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useEffect, useCallback, useRef } from "react";
 import { useAuthStore } from "@/stores/auth";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
-import { RealtimeChannel } from "@supabase/supabase-js";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/query-keys";
-// ❌ 채널 레지스트리 제거 - 중복 이벤트 리스너 문제로 인해 독립 채널 사용
+
+// ✅ 실시간 구독 제거됨 - use-chat.ts의 handleRoomsUpdate에서 카운트 갱신 트리거
+// 이전에는 use-global-chat-rooms-subscription.ts와 중복 구독으로 카운트가 2배로 증가하는 문제 있었음
 
 interface UnreadCount {
   room_id: string;
@@ -22,8 +22,6 @@ interface NotificationState {
   loading: boolean;
   error: string | null;
 }
-
-const supabase = createSupabaseBrowserClient();
 
 export function useNotifications() {
   const { user } = useAuthStore();
@@ -55,14 +53,7 @@ export function useNotifications() {
     })
   });
 
-  // 실시간 구독 채널 상태 관리
-  const [realtimeChannel, setRealtimeChannel] = useState<RealtimeChannel | null>(null);
-  const [channelStatus, setChannelStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected');
-
-  // React 19 최적화: 디바운싱을 위한 타임아웃 참조
-  const loadTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-  // 쿼리 무효화(디바운스)
+  // 쿼리 무효화(디바운스) - 외부에서 호출 가능하도록 유지
   const invalidateUnreadRef = useRef<NodeJS.Timeout | null>(null);
   const scheduleInvalidateUnread = useCallback((delayMs: number) => {
     if (invalidateUnreadRef.current) {
@@ -147,188 +138,14 @@ export function useNotifications() {
     return room?.unreadCount || 0;
   }, [unreadQuery.data]);
 
-  // ✅ 독립 채널 정리 함수 (채널 레지스트리 사용 안 함)
-  const cleanup = useCallback(async () => {
-    if (realtimeChannel) {
-      try {
-        await supabase.removeChannel(realtimeChannel);
-      } catch (err) {
-        // 이미 제거된 채널인 경우 무시
-      }
-      setRealtimeChannel(null);
-    }
-    setChannelStatus('disconnected');
-  }, [realtimeChannel]);
-
-  // ✅ 실시간 구독 설정 - 독립 채널 (채널 레지스트리 사용 안 함)
-  useEffect(() => {
-    if (!user) {
-      cleanup();
-      return;
-    }
-
-    let isMounted = true;
-    let channel: RealtimeChannel | null = null;
-
-    const subscribeToNotifications = async () => {
-      try {
-        // ✅ 독립 채널 이름 - 다른 훅과 충돌 방지
-        const channelName = `notifications:user:${user.id}`;
-
-        // 기존 채널 정리
-        if (realtimeChannel) {
-          try {
-            await supabase.removeChannel(realtimeChannel);
-          } catch (err) {
-            // 무시
-          }
-          setRealtimeChannel(null);
-        }
-
-        setChannelStatus('connecting');
-
-        // Realtime 인증 설정
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.access_token) {
-          await supabase.realtime.setAuth(session.access_token);
-        }
-
-        // ✅ 독립 채널 생성 (채널 레지스트리 사용 안 함)
-        channel = supabase.channel(channelName, {
-          config: {
-            broadcast: { self: false },
-            presence: { key: user.id }
-          }
-        });
-
-        if (process.env.NODE_ENV === 'development') {
-          console.log(`🎧 [use-notifications] Creating new independent channel: ${channelName}`);
-        }
-
-        // ✅ 이벤트 리스너 등록
-        channel
-          // ✅ 새 메시지 알림 (Nav 바 카운트 업데이트)
-          .on('broadcast', { event: 'new_message' }, (payload) => {
-            if (!isMounted) return;
-
-            const { room_id, sender_id, message_preview } = payload.payload;
-
-            // 자신의 메시지는 무시
-            if (sender_id === user.id) {
-              return;
-            }
-
-            if (process.env.NODE_ENV === 'development') {
-              console.log(`🔔 [use-notifications] Processing notification:`, { room_id, sender_id, message_preview });
-            }
-
-            // 즉시 카운트 증가 (Optimistic Update)
-            queryClient.setQueryData(queryKeys.chat.unreadCount(), (prev: any) => {
-              if (!prev) return prev;
-
-              const roomCounts = Array.isArray(prev.roomCounts) ? prev.roomCounts : [];
-              const existingRoom = roomCounts.find((r: any) => r?.room_id === room_id);
-
-              let newRoomCounts;
-              if (existingRoom) {
-                // 기존 방의 카운트 증가
-                newRoomCounts = roomCounts.map((r: any) =>
-                  r?.room_id === room_id
-                    ? { ...r, unreadCount: (r.unreadCount || 0) + 1 }
-                    : r
-                );
-              } else {
-                // 새로운 방 추가
-                newRoomCounts = [...roomCounts, { room_id, unreadCount: 1 }];
-              }
-
-              const total = newRoomCounts.reduce((sum: number, r: any) => sum + (r?.unreadCount || 0), 0);
-
-              const updatedData = {
-                ...(prev || {}),
-                hasUnreadMessages: total > 0,
-                totalUnreadCount: total,
-                roomCounts: newRoomCounts
-              };
-
-              if (process.env.NODE_ENV === 'development') {
-                console.log(`✅ [use-notifications] Updated unread count:`, updatedData);
-              }
-
-              return updatedData;
-            });
-
-            // 서버와 동기화 확인을 위한 백그라운드 새로고침
-            scheduleInvalidateUnread(1000);
-          })
-          // 읽음 상태 변경 시 (읽음 처리 broadcast)
-          .on('broadcast', { event: 'message_read_notification' }, (payload) => {
-            if (!isMounted) return;
-
-            const { room_id } = payload.payload;
-
-            if (process.env.NODE_ENV === 'development') {
-              console.log(`✅ [Nav Notification] Messages read in room ${room_id}`);
-            }
-
-            // 읽음 상태 변경 시 빠른 무효화
-            scheduleInvalidateUnread(150);
-          })
-          .subscribe((status, err) => {
-            if (!isMounted) return;
-
-            if (status === 'SUBSCRIBED') {
-              setChannelStatus('connected');
-              if (process.env.NODE_ENV === 'development') {
-                console.log(`✅ [use-notifications] Subscribed for user: ${user.id}`);
-              }
-            } else if (status === 'CHANNEL_ERROR') {
-              setChannelStatus('disconnected');
-              if (process.env.NODE_ENV === 'development') {
-                console.error('❌ [use-notifications] Channel error:', err);
-              }
-            } else if (status === 'TIMED_OUT') {
-              setChannelStatus('disconnected');
-              if (process.env.NODE_ENV === 'development') {
-                console.error('⏰ [use-notifications] Connection timed out');
-              }
-            } else if (status === 'CLOSED') {
-              setChannelStatus('disconnected');
-              if (process.env.NODE_ENV === 'development') {
-                console.warn('🔌 [use-notifications] Connection closed');
-              }
-            }
-          });
-
-        if (isMounted) {
-          setRealtimeChannel(channel);
-        }
-
-      } catch (error) {
-        if (isMounted) {
-          setChannelStatus('disconnected');
-        }
-        console.error('❌ [use-notifications] Failed to subscribe:', error);
-      }
-    };
-
-    subscribeToNotifications();
-
-    // cleanup 함수
-    return () => {
-      isMounted = false;
-      if (channel) {
-        supabase.removeChannel(channel).catch(() => {});
-      }
-    };
-  }, [user, queryClient, scheduleInvalidateUnread]); // ✅ 필요한 dependency 추가
-
-  // 사용자 변경 시 상태 초기화 (쿼리는 enabled 플래그로 제어)
-  useEffect(() => {
-    if (!user) {
-      setChannelStatus('disconnected');
-    }
-  }, [user]);
+  // ✅ 실시간 구독 제거됨 - 중복 카운트 증가 문제 해결
+  //
+  // 카운트 업데이트 흐름:
+  // 1. use-chat.ts sendMessage → broadcast to global-rooms channel
+  // 2. use-global-chat-rooms-subscription.ts → onRoomsChanged 호출
+  // 3. handleRoomsUpdate → queryClient.invalidateQueries 호출 (use-chat.ts에서)
+  // 4. TanStack Query → /api/chat/unread 서버 조회
+  // 5. 정확한 카운트로 UI 업데이트
 
   return {
     hasUnreadMessages: !!unreadQuery.data?.hasUnreadMessages,

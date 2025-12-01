@@ -5,7 +5,7 @@ import { RealtimeChannel } from "@supabase/supabase-js";
 import type { ChatMessage } from "@/types/chat";
 import { useAuthStore } from "@/stores/auth";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
-import { channelRegistry } from "@/lib/realtime/channel-registry";
+// ❌ channelRegistry 제거 - 중복 이벤트 리스너 문제로 독립 채널 사용
 
 // 기존 프로젝트의 Supabase 클라이언트 사용 (중복 인스턴스 방지)
 const supabase = createSupabaseBrowserClient();
@@ -63,12 +63,15 @@ export function useRealtimeChat({
   // DELETE 이벤트 중복 방지를 위한 캐시
   const processedDeletesRef = useRef<Set<string>>(new Set());
 
-  // 연결 정리 함수 (메모리 누수 방지 강화) - 채널 레지스트리 사용
+  // 연결 정리 함수 (메모리 누수 방지 강화) - 독립 채널 사용
   const cleanup = useCallback(async (roomId?: string | null) => {
-    // 채널 정리
-    if (channelRef.current && roomId) {
-      const channelName = `room:${roomId}:messages`;
-      await channelRegistry.releaseChannel(channelName);
+    // 채널 정리 - 독립 채널이므로 직접 제거
+    if (channelRef.current) {
+      try {
+        await supabase.removeChannel(channelRef.current);
+      } catch (err) {
+        // 이미 제거된 채널인 경우 무시
+      }
       channelRef.current = null;
     }
 
@@ -115,11 +118,13 @@ export function useRealtimeChat({
 
           processedMessagesRef.current.add(messageId);
 
-          // 메모리 관리: 1000개 제한
+          // ✅ 메모리 관리: 1000개 제한 (최적화: O(1) 복잡도)
           if (processedMessagesRef.current.size > 1000) {
-            const messagesArray = Array.from(processedMessagesRef.current);
-            const firstMessage = messagesArray[0];
-            processedMessagesRef.current.delete(firstMessage);
+            // Set.prototype.values().next()로 첫 번째 요소만 O(1)로 가져옴
+            const firstId = processedMessagesRef.current.values().next().value;
+            if (firstId) {
+              processedMessagesRef.current.delete(firstId);
+            }
           }
 
           if (process.env.NODE_ENV === 'development') {
@@ -197,11 +202,12 @@ export function useRealtimeChat({
         return;
       }
 
-      // 기존 채널 정리
+      // 기존 채널 정리 - 독립 채널이므로 직접 제거
       if (channelRef.current) {
-        const prevTopic = currentTopic;
-        if (prevTopic) {
-          await channelRegistry.releaseChannel(prevTopic);
+        try {
+          await supabase.removeChannel(channelRef.current);
+        } catch (err) {
+          // 이미 제거된 채널인 경우 무시
         }
         channelRef.current = null;
       }
@@ -221,57 +227,106 @@ export function useRealtimeChat({
       }
 
       nextChannel
-        // Broadcast 리스너: 새 메시지
+        // Broadcast 리스너: 새 메시지 (✅ payload 검증 추가)
         .on('broadcast', { event: 'new_message' }, (payload) => {
-          const message = payload.payload;
-          if (process.env.NODE_ENV === 'development') {
-            console.log(`📡 Broadcast new_message received: ${message.id}`);
-          }
+          try {
+            const message = payload?.payload;
 
-          // 메시지 변경 핸들러 형식으로 변환
-          handleMessageChange({
-            eventType: 'INSERT',
-            new: message,
-            old: {},
-            schema: 'public',
-            table: 'chat_messages',
-            commit_timestamp: new Date().toISOString(),
-            errors: null
-          } as any);
+            // ✅ 필수 필드 검증 - 크래시 방지
+            if (!message || typeof message !== 'object') {
+              console.warn('⚠️ Invalid new_message payload: not an object', payload);
+              return;
+            }
+
+            if (!message.id || !message.room_id || !message.sender_id) {
+              console.warn('⚠️ Invalid new_message payload: missing required fields', message);
+              return;
+            }
+
+            if (process.env.NODE_ENV === 'development') {
+              console.log(`📡 Broadcast new_message received: ${message.id}`);
+            }
+
+            // 메시지 변경 핸들러 형식으로 변환
+            handleMessageChange({
+              eventType: 'INSERT',
+              new: message as ChatMessage,
+              old: {},
+              schema: 'public',
+              table: 'chat_messages',
+              commit_timestamp: new Date().toISOString(),
+              errors: null
+            });
+          } catch (error) {
+            console.error('❌ Error processing new_message:', error);
+          }
         })
-        // Broadcast 리스너: 메시지 업데이트
+        // Broadcast 리스너: 메시지 업데이트 (✅ payload 검증 추가)
         .on('broadcast', { event: 'update_message' }, (payload) => {
-          const message = payload.payload;
-          if (process.env.NODE_ENV === 'development') {
-            console.log(`📡 Broadcast update_message received: ${message.id}`);
-          }
+          try {
+            const message = payload?.payload;
 
-          handleMessageChange({
-            eventType: 'UPDATE',
-            new: message,
-            old: {},
-            schema: 'public',
-            table: 'chat_messages',
-            commit_timestamp: new Date().toISOString(),
-            errors: null
-          } as any);
+            // ✅ 필수 필드 검증 - 크래시 방지
+            if (!message || typeof message !== 'object') {
+              console.warn('⚠️ Invalid update_message payload: not an object', payload);
+              return;
+            }
+
+            if (!message.id) {
+              console.warn('⚠️ Invalid update_message payload: missing id', message);
+              return;
+            }
+
+            if (process.env.NODE_ENV === 'development') {
+              console.log(`📡 Broadcast update_message received: ${message.id}`);
+            }
+
+            handleMessageChange({
+              eventType: 'UPDATE',
+              new: message as ChatMessage,
+              old: {},
+              schema: 'public',
+              table: 'chat_messages',
+              commit_timestamp: new Date().toISOString(),
+              errors: null
+            });
+          } catch (error) {
+            console.error('❌ Error processing update_message:', error);
+          }
         })
-        // Broadcast 리스너: 메시지 삭제
+        // Broadcast 리스너: 메시지 삭제 (✅ payload 검증 추가)
         .on('broadcast', { event: 'delete_message' }, (payload) => {
-          const { message_id } = payload.payload;
-          if (process.env.NODE_ENV === 'development') {
-            console.log(`📡 Broadcast delete_message received: ${message_id}`);
-          }
+          try {
+            const data = payload?.payload;
 
-          handleMessageChange({
-            eventType: 'DELETE',
-            new: {},
-            old: { id: message_id },
-            schema: 'public',
-            table: 'chat_messages',
-            commit_timestamp: new Date().toISOString(),
-            errors: null
-          } as any);
+            // ✅ 필수 필드 검증 - 크래시 방지
+            if (!data || typeof data !== 'object') {
+              console.warn('⚠️ Invalid delete_message payload: not an object', payload);
+              return;
+            }
+
+            const message_id = data.message_id;
+            if (!message_id || typeof message_id !== 'string') {
+              console.warn('⚠️ Invalid delete_message payload: missing or invalid message_id', data);
+              return;
+            }
+
+            if (process.env.NODE_ENV === 'development') {
+              console.log(`📡 Broadcast delete_message received: ${message_id}`);
+            }
+
+            handleMessageChange({
+              eventType: 'DELETE',
+              new: {} as ChatMessage,
+              old: { id: message_id },
+              schema: 'public',
+              table: 'chat_messages',
+              commit_timestamp: new Date().toISOString(),
+              errors: null
+            });
+          } catch (error) {
+            console.error('❌ Error processing delete_message:', error);
+          }
         })
         .subscribe((status, err) => {
           if (status === 'SUBSCRIBED') {

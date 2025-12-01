@@ -7,6 +7,8 @@ import { toast } from "sonner";
 import { useRealtimeChat, useTypingIndicator } from "./use-realtime-chat";
 import { useGlobalChatRoomsSubscription } from "./use-global-chat-rooms-subscription";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/lib/query-keys";
 
 // Supabase 클라이언트 (Broadcast용)
 const supabase = createSupabaseBrowserClient();
@@ -74,6 +76,7 @@ const getMessageType = (file?: File): "text" | "file" | "image" => {
 
 export function useChatHook() {
   const { user } = useAuthStore();
+  const queryClient = useQueryClient();
   const [rooms, setRooms] = useState<ChatRoomWithParticipants[]>([]);
   const [currentRoom, setCurrentRoom] =
     useState<ChatRoomWithParticipants | null>(null);
@@ -87,6 +90,10 @@ export function useChatHook() {
 
   // ✅ Broadcast 채널 캐시 (중복 구독 방지)
   const broadcastChannelCacheRef = useRef<Map<string, RealtimeChannel>>(new Map());
+
+  // ✅ syncMessages 경쟁 조건 방지용 refs
+  const syncLockRef = useRef<boolean>(false);
+  const syncVersionRef = useRef<number>(0);
 
   // 실시간 메시지 핸들러들 (React 19 최적화)
   const handleNewRealtimeMessage = useCallback((message: ChatMessage) => {
@@ -110,10 +117,14 @@ export function useChatHook() {
     processingMessagesRef.current.add(message.id);
     processedMessagesRef.current.add(message.id);
 
-    // 메모리 관리: 1000개 제한
+    // ✅ 메모리 관리: 1000개 제한 (최적화: O(1) 복잡도)
     if (processedMessagesRef.current.size > 1000) {
-      const messagesArray = Array.from(processedMessagesRef.current);
-      processedMessagesRef.current.delete(messagesArray[0]);
+      // Set.prototype.values().next()로 첫 번째 요소만 O(1)로 가져옴
+      // 기존: Array.from() → O(n) 메모리 할당 + O(n) 복사
+      const firstId = processedMessagesRef.current.values().next().value;
+      if (firstId) {
+        processedMessagesRef.current.delete(firstId);
+      }
     }
 
     setMessages(prev => {
@@ -231,12 +242,24 @@ export function useChatHook() {
     setMessages(prev => prev.filter(m => m.id !== messageId));
   }, []);
 
-  // ✅ 재연결 시 메시지 동기화 함수
+  // ✅ 재연결 시 메시지 동기화 함수 (경쟁 조건 방지)
   const syncMessages = useCallback(async (roomId: string) => {
     // 현재 방이 아니거나 메시지가 없으면 동기화 불필요
     if (!currentRoom || currentRoom.id !== roomId || messages.length === 0) {
       return;
     }
+
+    // ✅ 경쟁 조건 방지: 이미 동기화 중이면 스킵
+    if (syncLockRef.current) {
+      if (process.env.NODE_ENV === 'development') {
+        console.log('⏭️ Sync already in progress, skipping');
+      }
+      return;
+    }
+
+    // 락 설정 및 버전 증가
+    syncLockRef.current = true;
+    const currentVersion = ++syncVersionRef.current;
 
     try {
       // 마지막 메시지의 타임스탬프를 기준으로 이후 메시지만 가져오기
@@ -244,12 +267,20 @@ export function useChatHook() {
       const since = lastMessage.created_at;
 
       if (process.env.NODE_ENV === 'development') {
-        console.log(`🔄 Syncing messages since: ${since}`);
+        console.log(`🔄 Syncing messages since: ${since} (version: ${currentVersion})`);
       }
 
       const response = await fetch(
         `/api/chat/messages?room_id=${roomId}&since=${encodeURIComponent(since)}&limit=50`
       );
+
+      // ✅ 경쟁 조건 방지: 내 요청이 최신인 경우만 결과 적용
+      if (currentVersion !== syncVersionRef.current) {
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`⏭️ Stale sync response ignored (version: ${currentVersion}, current: ${syncVersionRef.current})`);
+        }
+        return;
+      }
 
       if (response.ok) {
         const { messages: newMessages } = await response.json();
@@ -281,6 +312,9 @@ export function useChatHook() {
       }
     } catch (error) {
       console.error('Failed to sync messages:', error);
+    } finally {
+      // ✅ 락 해제 (항상 실행)
+      syncLockRef.current = false;
     }
   }, [currentRoom, messages]);
 
@@ -309,8 +343,9 @@ export function useChatHook() {
   });
 
   // ✅ Broadcast 채널 재사용 헬퍼 함수 (중복 구독 방지)
+  // 채널 이름: global-rooms:user:${userId} (use-global-chat-rooms-subscription.ts와 일치)
   const getOrCreateBroadcastChannel = useCallback((userId: string): RealtimeChannel => {
-    const channelName = `global:user:${userId}:rooms`;
+    const channelName = `global-rooms:user:${userId}`;
 
     if (!broadcastChannelCacheRef.current.has(channelName)) {
       const channel = supabase.channel(channelName);
@@ -365,6 +400,7 @@ export function useChatHook() {
   }, [user]);
 
   // ✅ Optimistic Update로 화면 깜빡임 없이 채팅방 리스트 업데이트
+  // + Nav 알림 카운트 업데이트 트리거 (use-notifications.ts의 실시간 구독 제거로 인해 여기서 처리)
   const handleRoomsUpdate = useCallback((update?: any) => {
     if (!update) {
       // payload가 없으면 전체 새로고침 (room_joined, room_left)
@@ -382,11 +418,19 @@ export function useChatHook() {
         );
         return sortRoomsByLastMessage(updatedRooms);
       });
+
+      // ✅ Nav 알림 카운트 업데이트 트리거 (300ms 후 서버 조회)
+      // use-notifications.ts의 실시간 구독을 제거했으므로 여기서 카운트 갱신을 트리거
+      queryClient.invalidateQueries({ queryKey: queryKeys.chat.unreadCount() });
+
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`📊 [handleRoomsUpdate] Triggered unread count refresh for room: ${update.room_id}`);
+      }
     } else {
       // 다른 타입은 전체 새로고침
       loadRooms();
     }
-  }, [loadRooms]);
+  }, [loadRooms, queryClient]);
 
   // ✅ 전역 채팅방 실시간 구독 (새 메시지 시 리스트 자동 업데이트)
   useGlobalChatRoomsSubscription({
@@ -544,7 +588,7 @@ export function useChatHook() {
                 .filter(p => p.user_id !== user.id)
                 .map(async (participant) => {
                   try {
-                    // ✅ Global Rooms 채널로 'new_message' broadcast (채팅 리스트 & Nav 알림 통합)
+                    // ✅ 1. Global Rooms 채널로 broadcast (채팅 리스트 업데이트용)
                     const globalChannel = getOrCreateBroadcastChannel(participant.user_id);
                     await globalChannel.send({
                       type: 'broadcast',
@@ -557,6 +601,10 @@ export function useChatHook() {
                         message_type: serverMessage.message_type || 'text'
                       }
                     });
+
+                    // ✅ notifications 채널 broadcast 제거
+                    // global-rooms 채널의 new_message 이벤트를 use-notifications.ts에서도 구독하도록 통합
+                    // 중복 카운트 증가 문제 해결
                   } catch (error) {
                     console.warn(`Failed to send broadcast to user ${participant.user_id}:`, error);
                   }
@@ -565,7 +613,7 @@ export function useChatHook() {
               await Promise.all(broadcastPromises);
 
               if (process.env.NODE_ENV === 'development') {
-                console.log(`📡 All broadcasts 전송 완료 (${targetRoom.participants.length - 1}명)`);
+                console.log(`📡 All broadcasts 전송 완료 (${targetRoom.participants.length - 1}명, global-rooms + notifications)`);
               }
             }
           } catch (broadcastError) {
