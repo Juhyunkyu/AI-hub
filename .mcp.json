@@ -1,0 +1,72 @@
+{
+  "mcpServers": {
+    "supabase": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@supabase/mcp-server-supabase@latest",
+        "--project-ref=vzrtznpmbanzjbfyjkcb"
+      ],
+      "env": {
+        "SUPABASE_ACCESS_TOKEN": "sbp_ad9dd5d9aff04cdc2cb7eb1b82f2aad5f7263bfd"
+      }
+    },
+    "playwright": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "@playwright/mcp@latest"
+      ],
+      "env": {}
+    },
+    "Context7": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@smithery/cli@latest",
+        "run",
+        "@upstash/context7-mcp",
+        "--key",
+        "535e1678-eebc-475a-9a10-eed49134a748",
+        "--profile",
+        "rolling-lion-ZgulO4"
+      ],
+      "env": {}
+    },
+    "sequential-thinking": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-sequential-thinking"
+      ],
+      "env": {}
+    },
+    "YouTube Transcript Server": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@smithery/cli@latest",
+        "run",
+        "@sinco-lab/mcp-youtube-transcript",
+        "--key",
+        "535e1678-eebc-475a-9a10-eed49134a748",
+        "--profile",
+        "rolling-lion-ZgulO4"
+      ],
+      "env": {}
+    },
+    "ide": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-vscode"
+      ],
+      "env": {}
+    }
+  }
+}

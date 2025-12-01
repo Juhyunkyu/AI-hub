@@ -17,7 +17,7 @@
  *
  * 패턴:
  * - 타이핑 인디케이터와 동일한 Broadcast 패턴 사용
- * - 채널: `global:user:${user.id}:rooms`
+ * - 채널: `global-rooms:user:${user.id}` (독립 채널)
  * - 이벤트: room_joined, room_left, new_message
  */
 
@@ -25,7 +25,7 @@ import { useEffect, useCallback, useRef, useState } from "react";
 import { RealtimeChannel } from "@supabase/supabase-js";
 import { useAuthStore } from "@/stores/auth";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
-import { channelRegistry } from "@/lib/realtime/channel-registry";
+// ❌ 채널 레지스트리 제거 - 중복 이벤트 리스너 문제로 인해 독립 채널 사용
 
 const supabase = createSupabaseBrowserClient();
 
@@ -68,36 +68,43 @@ export function useGlobalChatRoomsSubscription({
     onRoomsChangedRef.current = onRoomsChanged;
   }, [onRoomsChanged]);
 
-  // 정리 함수 - 채널 레지스트리 사용
+  // 정리 함수 - 독립 채널 (채널 레지스트리 사용 안 함)
   const cleanup = useCallback(async () => {
     if (channelRef.current) {
-      const channelName = `global:user:${user?.id}:rooms`;
-      await channelRegistry.releaseChannel(channelName);
+      try {
+        await supabase.removeChannel(channelRef.current);
+      } catch (err) {
+        // 이미 제거된 채널인 경우 무시
+      }
       channelRef.current = null;
     }
     setIsConnected(false);
     setConnectionState('disconnected');
     setError(null);
-  }, [user?.id]);
+  }, []);
 
-  // 전역 채팅방 Broadcast 구독
+  // 전역 채팅방 Broadcast 구독 - 독립 채널 (채널 레지스트리 사용 안 함)
   useEffect(() => {
     if (!user) {
       cleanup();
       return;
     }
 
+    let isMounted = true;
+    let channel: RealtimeChannel | null = null;
+
     const subscribeToGlobalRooms = async () => {
       try {
-        // ✅ 채널 레지스트리로 중복 구독 방지
-        const channelName = `global:user:${user.id}:rooms`;
+        // ✅ 독립 채널 이름 - 다른 훅과 충돌 방지
+        const channelName = `global-rooms:user:${user.id}`;
 
         // 기존 채널 정리
         if (channelRef.current) {
-          if (process.env.NODE_ENV === 'development') {
-            console.log(`🧹 [Global Rooms] Releasing existing channel for user: ${user.id}`);
+          try {
+            await supabase.removeChannel(channelRef.current);
+          } catch (err) {
+            // 무시
           }
-          await channelRegistry.releaseChannel(channelName);
           channelRef.current = null;
         }
 
@@ -108,28 +115,26 @@ export function useGlobalChatRoomsSubscription({
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.access_token) {
           await supabase.realtime.setAuth(session.access_token);
-          if (process.env.NODE_ENV === 'development') {
-            console.log(`✅ [Global Rooms] Realtime auth set for user: ${user.id}`);
-          }
         }
 
-        // ✅ 채널 레지스트리에서 채널 가져오기 (중복 방지)
-        const channelInfo = channelRegistry.getChannelInfo(channelName);
-        const isExistingChannel = channelInfo.exists;
-
-        const channel = await channelRegistry.getOrCreateChannel(channelName, {
-          broadcast: { self: false },
-          presence: { key: user.id }
+        // ✅ 독립 채널 생성 (채널 레지스트리 사용 안 함)
+        channel = supabase.channel(channelName, {
+          config: {
+            broadcast: { self: false },
+            presence: { key: user.id }
+          }
         });
 
         if (process.env.NODE_ENV === 'development') {
-          console.log(`🎧 [Global Rooms] Registering event listeners for ${isExistingChannel ? 'existing' : 'new'} channel`);
+          console.log(`🎧 [Global Rooms] Creating new independent channel: ${channelName}`);
         }
 
-        // ✅ 항상 이 훅의 이벤트 리스너 등록 (각 훅은 독립적으로 이벤트 처리)
+        // ✅ 이벤트 리스너 등록
         channel
           // 채팅방 초대 이벤트
           .on('broadcast', { event: 'room_joined' }, (payload) => {
+            if (!isMounted) return;
+
             const { user_id, room_id } = payload.payload;
 
             // 현재 사용자에게 온 이벤트만 처리
@@ -146,6 +151,8 @@ export function useGlobalChatRoomsSubscription({
           })
           // 채팅방 나가기 이벤트
           .on('broadcast', { event: 'room_left' }, (payload) => {
+            if (!isMounted) return;
+
             const { user_id, room_id } = payload.payload;
 
             // 현재 사용자에게 온 이벤트만 처리
@@ -162,6 +169,8 @@ export function useGlobalChatRoomsSubscription({
           })
           // ✅ 새 메시지 이벤트 - 채팅 리스트 실시간 업데이트
           .on('broadcast', { event: 'new_message' }, (payload) => {
+            if (!isMounted) return;
+
             const { room_id, sender_id, content, message_type, sender_username } = payload.payload;
 
             if (process.env.NODE_ENV === 'development') {
@@ -187,11 +196,10 @@ export function useGlobalChatRoomsSubscription({
                 }
               });
             }
-          });
+          })
+          .subscribe((status, err) => {
+            if (!isMounted) return;
 
-        // ✅ 새 채널일 때만 subscribe (이미 구독된 채널에 subscribe 호출 시 timeout 발생)
-        if (!isExistingChannel) {
-          channel.subscribe((status, err) => {
             if (status === 'SUBSCRIBED') {
               setIsConnected(true);
               setConnectionState('connected');
@@ -221,30 +229,30 @@ export function useGlobalChatRoomsSubscription({
               }
             }
           });
-        } else {
-          // ✅ 기존 채널 재사용 - 이미 구독됨, 상태만 업데이트
-          setIsConnected(true);
-          setConnectionState('connected');
-          setError(null);
-          if (process.env.NODE_ENV === 'development') {
-            console.log(`♻️ [Global Rooms] Reusing existing channel (already subscribed)`);
-          }
+
+        if (isMounted) {
+          channelRef.current = channel;
         }
 
-        channelRef.current = channel;
-
       } catch (error) {
-        setConnectionState('error');
-        setError(error instanceof Error ? error.message : '알 수 없는 오류');
+        if (isMounted) {
+          setConnectionState('error');
+          setError(error instanceof Error ? error.message : '알 수 없는 오류');
+        }
         console.error('❌ [Global Rooms] Failed to subscribe:', error);
       }
     };
 
     subscribeToGlobalRooms();
 
-    // cleanup 함수 직접 반환
-    return () => cleanup();
-  }, [user]); // ✅ user만 dependency로 설정
+    // cleanup 함수
+    return () => {
+      isMounted = false;
+      if (channel) {
+        supabase.removeChannel(channel).catch(() => {});
+      }
+    };
+  }, [user, cleanup]); // ✅ 필요한 dependency 추가
 
   return {
     isConnected,

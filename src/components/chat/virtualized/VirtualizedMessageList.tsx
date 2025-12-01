@@ -172,34 +172,22 @@ export const VirtualizedMessageList = forwardRef<
 
   /**
    * 스크롤을 맨 아래로 이동
+   * DOM 직접 스크롤 방식 사용 (TanStack Virtual scrollToIndex의 동적 크기 측정 문제 회피)
    */
   const scrollToBottomImpl = useCallback((behavior: ScrollBehavior = "smooth") => {
-    if (!virtualizer || itemCount === 0) return;
+    if (!parentRef.current || itemCount === 0) return;
 
-    try {
-      // 마지막 아이템으로 스크롤 (타이핑 인디케이터 또는 마지막 메시지)
-      const lastIndex = itemCount - 1;
-
-      // TanStack Virtual의 동적 크기 제한으로 인해 auto behavior 사용
-      virtualizer.scrollToIndex(lastIndex, {
-        align: 'end',
-        behavior: "auto" // smooth 대신 auto 사용하여 경고 제거
-      });
-    } catch (error) {
-      // 가상화 스크롤 실패 시 DOM 직접 조작으로 폴백
+    // DOM 직접 스크롤 - 가상화 리스트의 동적 크기 측정 문제 회피
+    // requestAnimationFrame으로 렌더링 완료 후 스크롤
+    requestAnimationFrame(() => {
       if (parentRef.current) {
-        // 렌더링 완료를 위한 짧은 지연 후 재시도
-        requestAnimationFrame(() => {
-          if (parentRef.current) {
-            parentRef.current.scrollTo({
-              top: parentRef.current.scrollHeight,
-              behavior: behavior === "smooth" ? "smooth" : "auto"
-            });
-          }
+        parentRef.current.scrollTo({
+          top: parentRef.current.scrollHeight,
+          behavior: behavior === "smooth" ? "smooth" : "auto"
         });
       }
-    }
-  }, [virtualizer, itemCount]);
+    });
+  }, [itemCount]);
 
   /**
    * 특정 인덱스로 스크롤

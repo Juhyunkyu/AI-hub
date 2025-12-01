@@ -6,7 +6,7 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { RealtimeChannel } from "@supabase/supabase-js";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/query-keys";
-import { channelRegistry } from "@/lib/realtime/channel-registry";
+// ❌ 채널 레지스트리 제거 - 중복 이벤트 리스너 문제로 인해 독립 채널 사용
 
 interface UnreadCount {
   room_id: string;
@@ -147,34 +147,41 @@ export function useNotifications() {
     return room?.unreadCount || 0;
   }, [unreadQuery.data]);
 
-  // ✅ 채널 레지스트리 기반 정리 함수
+  // ✅ 독립 채널 정리 함수 (채널 레지스트리 사용 안 함)
   const cleanup = useCallback(async () => {
-    if (realtimeChannel && user) {
-      const channelName = `global:user:${user.id}:rooms`;
-      await channelRegistry.releaseChannel(channelName);
+    if (realtimeChannel) {
+      try {
+        await supabase.removeChannel(realtimeChannel);
+      } catch (err) {
+        // 이미 제거된 채널인 경우 무시
+      }
       setRealtimeChannel(null);
     }
     setChannelStatus('disconnected');
-  }, [realtimeChannel, user]);
+  }, [realtimeChannel]);
 
-  // ✅ 실시간 구독 설정 - Channel Registry 통합
+  // ✅ 실시간 구독 설정 - 독립 채널 (채널 레지스트리 사용 안 함)
   useEffect(() => {
     if (!user) {
       cleanup();
       return;
     }
 
+    let isMounted = true;
+    let channel: RealtimeChannel | null = null;
+
     const subscribeToNotifications = async () => {
       try {
-        // ✅ 채널 레지스트리로 중복 구독 방지
-        const channelName = `global:user:${user.id}:rooms`;
+        // ✅ 독립 채널 이름 - 다른 훅과 충돌 방지
+        const channelName = `notifications:user:${user.id}`;
 
         // 기존 채널 정리
         if (realtimeChannel) {
-          if (process.env.NODE_ENV === 'development') {
-            console.log(`🧹 [use-notifications] Releasing existing channel for user: ${user.id}`);
+          try {
+            await supabase.removeChannel(realtimeChannel);
+          } catch (err) {
+            // 무시
           }
-          await channelRegistry.releaseChannel(channelName);
           setRealtimeChannel(null);
         }
 
@@ -184,39 +191,30 @@ export function useNotifications() {
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.access_token) {
           await supabase.realtime.setAuth(session.access_token);
-          if (process.env.NODE_ENV === 'development') {
-            console.log(`✅ [use-notifications] Realtime auth set for user: ${user.id}`);
-          }
         }
 
-        // ✅ 채널 레지스트리에서 채널 가져오기 (중복 방지)
-        const channelInfo = channelRegistry.getChannelInfo(channelName);
-        const isExistingChannel = channelInfo.exists;
-
-        const channel = await channelRegistry.getOrCreateChannel(channelName, {
-          broadcast: { self: false },
-          presence: { key: user.id }
+        // ✅ 독립 채널 생성 (채널 레지스트리 사용 안 함)
+        channel = supabase.channel(channelName, {
+          config: {
+            broadcast: { self: false },
+            presence: { key: user.id }
+          }
         });
 
         if (process.env.NODE_ENV === 'development') {
-          console.log(`🎧 [use-notifications] Registering event listeners for ${isExistingChannel ? 'existing' : 'new'} channel`);
+          console.log(`🎧 [use-notifications] Creating new independent channel: ${channelName}`);
         }
 
-        // ✅ 항상 이 훅의 이벤트 리스너 등록 (각 훅은 독립적으로 이벤트 처리)
+        // ✅ 이벤트 리스너 등록
         channel
           // ✅ 새 메시지 알림 (Nav 바 카운트 업데이트)
           .on('broadcast', { event: 'new_message' }, (payload) => {
-            if (process.env.NODE_ENV === 'development') {
-              console.log(`🔔 [use-notifications] Received broadcast:`, payload);
-            }
+            if (!isMounted) return;
 
             const { room_id, sender_id, message_preview } = payload.payload;
 
             // 자신의 메시지는 무시
             if (sender_id === user.id) {
-              if (process.env.NODE_ENV === 'development') {
-                console.log(`⚠️ [use-notifications] Ignoring own message from ${sender_id}`);
-              }
               return;
             }
 
@@ -265,6 +263,8 @@ export function useNotifications() {
           })
           // 읽음 상태 변경 시 (읽음 처리 broadcast)
           .on('broadcast', { event: 'message_read_notification' }, (payload) => {
+            if (!isMounted) return;
+
             const { room_id } = payload.payload;
 
             if (process.env.NODE_ENV === 'development') {
@@ -273,11 +273,10 @@ export function useNotifications() {
 
             // 읽음 상태 변경 시 빠른 무효화
             scheduleInvalidateUnread(150);
-          });
+          })
+          .subscribe((status, err) => {
+            if (!isMounted) return;
 
-        // ✅ 새 채널일 때만 subscribe (이미 구독된 채널에 subscribe 호출 시 timeout 발생)
-        if (!isExistingChannel) {
-          channel.subscribe(async (status, err) => {
             if (status === 'SUBSCRIBED') {
               setChannelStatus('connected');
               if (process.env.NODE_ENV === 'development') {
@@ -300,27 +299,29 @@ export function useNotifications() {
               }
             }
           });
-        } else {
-          // ✅ 기존 채널 재사용 - 이미 구독됨, 상태만 업데이트
-          setChannelStatus('connected');
-          if (process.env.NODE_ENV === 'development') {
-            console.log(`♻️ [use-notifications] Reusing existing channel (already subscribed)`);
-          }
+
+        if (isMounted) {
+          setRealtimeChannel(channel);
         }
 
-        setRealtimeChannel(channel);
-
       } catch (error) {
-        setChannelStatus('disconnected');
+        if (isMounted) {
+          setChannelStatus('disconnected');
+        }
         console.error('❌ [use-notifications] Failed to subscribe:', error);
       }
     };
 
     subscribeToNotifications();
 
-    // cleanup 함수 직접 반환
-    return () => cleanup();
-  }, [user]); // ✅ user만 dependency로 설정
+    // cleanup 함수
+    return () => {
+      isMounted = false;
+      if (channel) {
+        supabase.removeChannel(channel).catch(() => {});
+      }
+    };
+  }, [user, queryClient, scheduleInvalidateUnread]); // ✅ 필요한 dependency 추가
 
   // 사용자 변경 시 상태 초기화 (쿼리는 enabled 플래그로 제어)
   useEffect(() => {
