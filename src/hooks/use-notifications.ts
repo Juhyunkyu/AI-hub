@@ -1,12 +1,19 @@
 "use client";
 
 import { useEffect, useCallback, useRef } from "react";
+import { RealtimeChannel } from "@supabase/supabase-js";
 import { useAuthStore } from "@/stores/auth";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/query-keys";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
-// ✅ 실시간 구독 제거됨 - use-chat.ts의 handleRoomsUpdate에서 카운트 갱신 트리거
-// 이전에는 use-global-chat-rooms-subscription.ts와 중복 구독으로 카운트가 2배로 증가하는 문제 있었음
+const supabase = createSupabaseBrowserClient();
+
+// ✅ Nav바 전용 최소 실시간 구독 (전역 페이지에서 알림 업데이트용)
+// - /chat 페이지에서는 use-global-chat-rooms-subscription.ts가 동작
+// - 다른 페이지에서는 이 훅의 구독이 Nav바 알림을 업데이트
+// - Optimistic Update 없음 → 중복 카운트 문제 방지
+// - invalidateQueries만 호출 → 서버 데이터 기반 정확한 카운트
 
 interface UnreadCount {
   room_id: string;
@@ -138,14 +145,90 @@ export function useNotifications() {
     return room?.unreadCount || 0;
   }, [unreadQuery.data]);
 
-  // ✅ 실시간 구독 제거됨 - 중복 카운트 증가 문제 해결
-  //
-  // 카운트 업데이트 흐름:
-  // 1. use-chat.ts sendMessage → broadcast to global-rooms channel
-  // 2. use-global-chat-rooms-subscription.ts → onRoomsChanged 호출
-  // 3. handleRoomsUpdate → queryClient.invalidateQueries 호출 (use-chat.ts에서)
-  // 4. TanStack Query → /api/chat/unread 서버 조회
-  // 5. 정확한 카운트로 UI 업데이트
+  // ✅ Nav바 전용 실시간 구독 (전역 페이지에서 알림 업데이트)
+  // - 채널명: notifications:user:${userId} (독립 채널)
+  // - /chat 페이지의 global-rooms 채널과 별도로 동작
+  // - Optimistic Update 없음 → 서버 데이터 기반 정확한 카운트
+  const channelRef = useRef<RealtimeChannel | null>(null);
+
+  useEffect(() => {
+    if (!user) {
+      // 사용자 없으면 채널 정리
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current).catch(() => {});
+        channelRef.current = null;
+      }
+      return;
+    }
+
+    let isMounted = true;
+
+    const subscribeToNotifications = async () => {
+      // 기존 채널 정리
+      if (channelRef.current) {
+        try {
+          await supabase.removeChannel(channelRef.current);
+        } catch {
+          // 무시
+        }
+        channelRef.current = null;
+      }
+
+      // Realtime 인증 설정
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        await supabase.realtime.setAuth(session.access_token);
+      }
+
+      // ✅ Nav바 전용 독립 채널 (global-rooms와 같은 이벤트 수신)
+      const channelName = `notifications:user:${user.id}`;
+      const channel = supabase.channel(channelName, {
+        config: {
+          broadcast: { self: false },
+          presence: { key: user.id }
+        }
+      });
+
+      channel
+        .on('broadcast', { event: 'new_message' }, () => {
+          if (!isMounted) return;
+
+          // ✅ Optimistic Update 없음 - invalidateQueries만 호출
+          // 서버에서 정확한 카운트를 가져와서 중복 문제 방지
+          if (process.env.NODE_ENV === 'development') {
+            console.log('🔔 [Notifications] New message received, invalidating unread count');
+          }
+          scheduleInvalidateUnread(100); // 짧은 딜레이로 debounce
+        })
+        .on('broadcast', { event: 'room_joined' }, () => {
+          if (!isMounted) return;
+          scheduleInvalidateUnread(100);
+        })
+        .on('broadcast', { event: 'room_left' }, () => {
+          if (!isMounted) return;
+          scheduleInvalidateUnread(100);
+        })
+        .subscribe((status) => {
+          if (process.env.NODE_ENV === 'development') {
+            console.log(`🔔 [Notifications] Channel status: ${status}`);
+          }
+        });
+
+      if (isMounted) {
+        channelRef.current = channel;
+      }
+    };
+
+    subscribeToNotifications();
+
+    return () => {
+      isMounted = false;
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current).catch(() => {});
+        channelRef.current = null;
+      }
+    };
+  }, [user, scheduleInvalidateUnread]);
 
   return {
     hasUnreadMessages: !!unreadQuery.data?.hasUnreadMessages,

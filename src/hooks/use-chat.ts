@@ -602,9 +602,17 @@ export function useChatHook() {
                       }
                     });
 
-                    // ✅ notifications 채널 broadcast 제거
-                    // global-rooms 채널의 new_message 이벤트를 use-notifications.ts에서도 구독하도록 통합
-                    // 중복 카운트 증가 문제 해결
+                    // ✅ 2. Notifications 채널로 broadcast (Nav바 알림 업데이트용)
+                    // /chat 페이지 외부에서도 Nav바 알림이 실시간으로 업데이트되도록
+                    const notificationsChannel = supabase.channel(`notifications:user:${participant.user_id}`);
+                    await notificationsChannel.send({
+                      type: 'broadcast',
+                      event: 'new_message',
+                      payload: {
+                        room_id: roomId,
+                        sender_id: user.id
+                      }
+                    });
                   } catch (error) {
                     console.warn(`Failed to send broadcast to user ${participant.user_id}:`, error);
                   }
